@@ -210,7 +210,7 @@ final class ApplicationController extends Controller
                 'domain_reach' => $this->domainReach($application),
                 'uptime' => app(AppUptime::class)->for($application),
                 'domain_check_href' => route('servers.applications.domains.check', [$server, $application]),
-                'dns_targets' => ServerAddresses::targets($server->public_addresses),
+                'dns_targets' => ServerAddresses::targetsFor($server),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),

@@ -19,9 +19,11 @@ use App\Jobs\PollRepositories;
 use App\Jobs\PruneRemovedApplications;
 use App\Jobs\ReadServerAddresses;
 use App\Jobs\ResumeCloudTasks;
+use App\Jobs\SyncServerTunnel;
 use App\Models\InstanceSetting;
 use App\Models\MoveCode;
 use App\Models\Server;
+use App\Models\ServerTunnel;
 use App\Models\StripeEvent;
 use App\Services\Address\AddressChange;
 use App\Services\Address\AddressReading;
@@ -146,12 +148,19 @@ Schedule::call(function (): void {
 Schedule::call(function (): void {
     $host = app(InstallationAddress::class)->host();
 
-    if (Edition::current()->isCloud() || CloudflareConnection::token() === null || InstallationAddress::certificate($host) !== CertificateSource::Public) {
+    if (Edition::current()->isCloud() || CloudflareConnection::token() === null || InstallationAddress::certificate($host) !== CertificateSource::Public || ServerTunnel::thisMachineOpen()) {
         return;
     }
 
     app(PointAddress::class)->point($host);
 })->everyTenMinutes()->name('coresmith:point-address')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    ServerTunnel::query()
+        ->where('state', ServerTunnel::OPEN)
+        ->with('server')
+        ->each(fn(ServerTunnel $tunnel) => $tunnel->server === null ? null : SyncServerTunnel::dispatch($tunnel->server));
+})->hourlyAt(25)->name('coresmith:sync-server-tunnels')->withoutOverlapping();
 
 Schedule::call(function (): void {
     $host = app(InstallationAddress::class)->host();

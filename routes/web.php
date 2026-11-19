@@ -40,6 +40,7 @@ use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerRuntimeController;
 use App\Http\Controllers\ServerTabsController;
 use App\Http\Controllers\ServerTakeoverController;
+use App\Http\Controllers\ServerTunnelController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SharedRedisController;
 use App\Http\Controllers\SshKeyController;
@@ -138,6 +139,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.under-the-hood');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
+    Route::post('servers/{server}/tunnel', [ServerTunnelController::class, 'store'])
+        ->middleware('throttle:6,1,server-tunnel')
+        ->name('servers.tunnel.store');
+    Route::delete('servers/{server}/tunnel', [ServerTunnelController::class, 'destroy'])
+        ->middleware('throttle:6,1,server-tunnel')
+        ->name('servers.tunnel.destroy');
     Route::post('servers/{server}/ssh-check', [ThisMachineSshController::class, 'store'])
         ->middleware('throttle:6,1,ssh-check')
         ->name('servers.ssh-check');

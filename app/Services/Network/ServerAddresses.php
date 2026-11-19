@@ -9,10 +9,13 @@ declare(strict_types=1);
 namespace App\Services\Network;
 
 use App\Models\Server;
+use App\Models\ServerTunnel;
 use App\Services\SSH\SSHConnection;
 
 final class ServerAddresses
 {
+    public const TUNNEL_NOTE = 'Proxy on. Coresmith adds this record itself when its Cloudflare token covers the domain.';
+
     public function read(SSHConnection $connection): ServerNetworkReading
     {
         return ServerNetworkReading::parse($connection->execute(RemoteReachProbe::script(), timeout: RemoteReachProbe::SECONDS + 10)->output);
@@ -28,6 +31,20 @@ final class ServerAddresses
             'ipv6' => $reading->stable,
             'checked_at' => now()->toIso8601String(),
         ]])->save();
+    }
+
+    /**
+     * @return list<array{type: string, value: string, closed: bool, note?: string}>
+     */
+    public static function targetsFor(Server $server): array
+    {
+        $tunnel = $server->tunnel()->first();
+
+        if ($tunnel?->state === ServerTunnel::OPEN && $tunnel->target() !== null) {
+            return [['type' => 'CNAME', 'value' => $tunnel->target(), 'closed' => false, 'note' => self::TUNNEL_NOTE]];
+        }
+
+        return self::targets($server->public_addresses);
     }
 
     /**

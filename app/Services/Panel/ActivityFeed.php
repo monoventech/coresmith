@@ -299,6 +299,8 @@ final class ActivityFeed
             'monitor_recovered' => [$this->text($this->recovered($properties['kind'] ?? null) . ' back to normal on '), $this->mono($server?->name), $this->text(is_numeric($properties['minutes'] ?? null) ? ' after ' . $this->span((int) $properties['minutes']) : '')],
             'provisioning_failed' => [$this->text('Provisioning stopped on '), $this->mono($server?->name), $this->text(' at phase ' . (int) ($properties['phase'] ?? 1) . ', ' . ($properties['name'] ?? 'Provisioning'))],
             'firewall_rule_changed' => [$this->text('Firewall ' . ($properties['action'] ?? 'changed') . ' port ' . ($properties['port'] ?? '') . ' on '), $this->mono($server?->name)],
+            'tunnel_opened' => [$this->text('Visitors reach '), $this->mono($server?->name), $this->text(' through Cloudflare now, over IPv4 and IPv6')],
+            'tunnel_closed' => [$this->text('Visitors reach '), $this->mono($server?->name), $this->text(' directly again, not through Cloudflare')],
             'server_unreachable' => [$this->mono($server?->name), $this->text(' stopped answering over SSH')],
             'server_reachable' => [$this->mono($server?->name), $this->text(' answering again' . $this->after($properties['seconds'] ?? null))],
             'ssh_host_key_changed' => [$this->mono($server?->name), $this->text(' presented a different host key, operations paused')],
