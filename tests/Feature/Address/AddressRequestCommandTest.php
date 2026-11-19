@@ -72,7 +72,7 @@ test('a domain the internet cannot reach is refused with what to fix, and no swi
     addressRequestNetwork(new DirectReach('151.226.169.196', false, false));
 
     expect(Artisan::call('coresmith:address-request', ['host' => 'coresmith.example.com']))->toBe(1)
-        ->and(Artisan::output())->toBe("coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, this server needs IPv6 instead.\n")
+        ->and(Artisan::output())->toBe("coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server's page.\n")
         ->and(AddressChange::current())->toBeNull()
         ->and(file_exists(AddressRequest::file()))->toBeFalse();
 });
