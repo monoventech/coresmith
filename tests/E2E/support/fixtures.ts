@@ -312,7 +312,7 @@ export async function refuseClipboard(page: Page) {
 }
 
 export function cloudInvitation(testInfo: TestInfo): string {
-    return own(testInfo, 'e2eCloudInvite', '').padEnd(40, '0')
+    return own(testInfo, 'e2eCloudInvite', '').padEnd(20, '0')
 }
 
 export async function clipboardText(page: Page): Promise<string> {
