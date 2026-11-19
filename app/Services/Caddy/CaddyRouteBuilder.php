@@ -20,6 +20,14 @@ final class CaddyRouteBuilder
 {
     public const APPS_ROOT = '/var/coresmith/apps';
 
+    public const REVALIDATE_PAGES = [
+        'handler' => 'headers',
+        'response' => [
+            'require' => ['headers' => ['Cache-Control' => null, 'Content-Type' => ['text/html*']]],
+            'set' => ['Cache-Control' => ['no-cache']],
+        ],
+    ];
+
     private const SECURITY_HEADERS = [
         'X-Frame-Options' => 'SAMEORIGIN',
         'X-Content-Type-Options' => 'nosniff',
@@ -242,6 +250,7 @@ final class CaddyRouteBuilder
                 'handle' => [
                     ...($route->servesFiles() ? [['handler' => 'vars', 'root' => $this->documentRoot($application)]] : []),
                     ...$this->securityHeaders(),
+                    ...(in_array($route, [Route::FileServer, Route::SinglePage], true) ? [self::REVALIDATE_PAGES] : []),
                     ['handler' => 'encode', 'encodings' => ['gzip' => (object) [], 'zstd' => (object) []], 'prefer' => ['gzip', 'zstd']],
                 ],
             ],

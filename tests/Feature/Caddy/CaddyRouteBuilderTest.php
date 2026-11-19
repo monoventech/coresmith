@@ -203,3 +203,28 @@ test('an app with no domain cannot be routed', function () {
 
     (new RouteConfigValidator)->validate(['@id' => 'x'], $app);
 })->throws(InvalidRouteConfigException::class);
+
+test('a static site or single-page app has browsers check its pages again on every visit, unless the page sets its own caching', function (array $attributes) {
+    $handlers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp($attributes))));
+
+    expect($handlers->filter(fn(array $handler): bool => $handler === CaddyRouteBuilder::REVALIDATE_PAGES)->count())->toBe(1)
+        ->and(CaddyRouteBuilder::REVALIDATE_PAGES['response']['require']['headers'])->toBe(['Cache-Control' => null, 'Content-Type' => ['text/html*']])
+        ->and(CaddyRouteBuilder::REVALIDATE_PAGES['response']['set'])->toBe(['Cache-Control' => ['no-cache']]);
+})->with([
+    'static site' => [['type' => ApplicationType::Static, 'web_directory' => '/dist']],
+    'single-page app' => [['type' => ApplicationType::Js, 'framework' => 'svelte', 'js_runtime' => 'node', 'node_version' => '24.11.1', 'base_port' => 8100, 'web_directory' => '/dist']],
+]);
+
+test('apps that answer with their own server keep their own page caching', function (ApplicationType $type) {
+    $handlers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp(['type' => $type]))));
+
+    expect($handlers->contains(CaddyRouteBuilder::REVALIDATE_PAGES))->toBeFalse();
+})->with([ApplicationType::Php, ApplicationType::Js, ApplicationType::Ruby]);
+
+test('the page caching default reaches caddy before the files are served', function () {
+    $handlers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Static]))));
+
+    expect($handlers->search(CaddyRouteBuilder::REVALIDATE_PAGES))->toBeLessThan($handlers->search(fn(array $handler): bool => $handler['handler'] === 'file_server'))
+        ->and(json_encode(CaddyRouteBuilder::REVALIDATE_PAGES, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES))
+        ->toBe('{"handler":"headers","response":{"require":{"headers":{"Cache-Control":null,"Content-Type":["text/html*"]}},"set":{"Cache-Control":["no-cache"]}}}');
+});
