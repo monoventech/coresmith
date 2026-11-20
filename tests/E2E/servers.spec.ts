@@ -100,7 +100,7 @@ test.describe('a server', () => {
         await tabComesIntoViewAsStripNarrows(page, page.url(), 'Server sections', 'Activity')
     })
 
-    test('the apps tab lists each app with its domain and last deploy, and leaves the machinery to its own page', async ({
+    test('the apps tab lists each app with its domain and last deploy, and no machinery', async ({
         page
     }, testInfo) => {
         await gotoServer(page, 'forge-01')
@@ -115,7 +115,7 @@ test.describe('a server', () => {
             await expect(page.getByTestId('applications-table')).toContainText('Last deploy')
         }
 
-        await expect(page.getByRole('link', { name: 'What Coresmith runs here' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'What Coresmith runs here' })).toHaveCount(0)
 
         await applicationRow(page, 'ledger').click()
         await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
@@ -181,7 +181,7 @@ test.describe('a server', () => {
 
         await gotoServer(page, name)
 
-        await page.getByRole('button', { name: 'Rename' }).click()
+        await page.getByRole('button', { name: 'Rename', exact: true }).click()
         await expect(dialog(page)).toContainText('Rename server')
         await dialog(page).getByRole('textbox', { name: 'Server name' }).fill(renamed)
         await dialog(page).getByRole('button', { name: 'Save' }).click()
@@ -196,7 +196,7 @@ test.describe('a server', () => {
 
         await gotoServer(page, name)
 
-        await page.getByRole('button', { name: 'Detach' }).click()
+        await page.getByRole('button', { name: 'Detach', exact: true }).click()
         await expect(dialog(page)).toContainText(`Detach ${name}?`)
         await expect(dialog(page)).toContainText('Coresmith takes its key off this server and stops managing it.')
         await dialog(page).getByRole('button', { name: 'Detach server' }).click()
@@ -248,12 +248,24 @@ test.describe('hardening', () => {
             /^Checked (today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
         )
 
-        for (const key of ['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts', 'http3']) {
+        for (const key of [
+            'ssh',
+            'fail2ban',
+            'kernel',
+            'patches',
+            'maintenance',
+            'controls',
+            'unknown_hosts',
+            'http3'
+        ]) {
             await expect(page.getByTestId(`protection-${key}`)).toHaveAttribute('data-state', 'on')
         }
 
         await expect(page.getByTestId('protection-fail2ban')).toContainText(
             'An address that fails to sign in 5 times in 10 minutes is blocked for an hour.'
+        )
+        await expect(page.getByTestId('protection-maintenance')).toContainText(
+            /Last ran .+, and freed 393\.2\sMB\. System logs take up 96\sMB\./
         )
         await expect(card.getByRole('button')).toHaveCount(0)
         await expect(card).not.toContainText(/Caddy|systemd|fail2ban|sysctl|admin API/)
@@ -367,17 +379,6 @@ test.describe('hardening', () => {
         await expect(page.getByTestId('protection-kernel').getByRole('button')).toHaveCount(0)
     })
 
-    test('the tab leads to what Coresmith runs on the server, for whoever signs in over SSH', async ({ page }) => {
-        await gotoServerTab(page, 'forge-01', 'Hardening')
-        await page.getByTestId('under-the-hood-link').click()
-
-        await expect(page.getByRole('heading', { level: 1, name: 'What Coresmith runs here' })).toBeVisible()
-        await expect(page.getByTestId('machinery-apps')).toContainText('coresmith-app-atlas')
-        await expect(page.getByTestId('machinery-apps')).toContainText('8000–8009')
-        await expect(page.getByTestId('machinery-isolation').getByRole('listitem')).toHaveCount(9)
-        await expect(page.getByTestId('machinery-files')).toContainText('/etc/fail2ban/jail.d/coresmith-ssh.conf')
-    })
-
     test.describe('accessibility', () => {
         test.use({ reducedMotion: 'reduce' })
 
@@ -396,15 +397,6 @@ test.describe('hardening', () => {
                 await expect(page.getByTestId('protection-controls')).toHaveAttribute('data-state', 'off')
 
                 expect(await blockingViolations(page), `protections in ${theme}`).toEqual([])
-            })
-
-            test(`what Coresmith runs here has no serious or critical violations in ${theme}`, async ({ page }) => {
-                await useTheme(page, theme)
-                await gotoServerTab(page, 'forge-01', 'Hardening')
-                await page.getByTestId('under-the-hood-link').click()
-                await expect(page.getByTestId('machinery-files')).toBeVisible()
-
-                expect(await blockingViolations(page), `what Coresmith runs in ${theme}`).toEqual([])
             })
         }
     })

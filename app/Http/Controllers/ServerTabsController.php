@@ -13,7 +13,6 @@ use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ProtectionRows;
 use App\Services\Panel\ServerPresenter;
-use App\Services\Panel\UnderTheHood;
 use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\PasswordLogins;
 use App\Services\Server\SecurityHardening;
@@ -70,20 +69,6 @@ final class ServerTabsController extends Controller
                 'user' => (string) $server->ssh_user,
                 'people' => $hardening->signInPeople($server),
             ],
-        ]);
-    }
-
-    public function underTheHood(Request $request, Server $server, UnderTheHood $machinery): Response|RedirectResponse
-    {
-        if ($server->trashed()) {
-            return $this->destroyedServer($server);
-        }
-
-        $this->authorize('view', $server);
-
-        return Inertia::render('servers/UnderTheHood', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'hardening' => route('servers.hardening', $server)],
-            ...$machinery->for($server, $request->user()),
         ]);
     }
 

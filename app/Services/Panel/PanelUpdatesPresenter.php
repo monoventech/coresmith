@@ -277,10 +277,12 @@ final class PanelUpdatesPresenter
             return null;
         }
 
+        $changelog = explode("\n\n\n", str_replace(["\r\n", "\r"], "\n", trim($summary)))[0];
+
         return implode("\n", array_map(fn(string $line): string => match (true) {
             str_starts_with($line, '### ') => substr($line, 4),
             preg_match('/^- (?:[a-z]+(?:\([^)]*\))?!?: )?(.+)$/', $line, $matches) === 1 => '• ' . Str::ucfirst($matches[1]),
             default => $line,
-        }, preg_split('/\r\n|\n|\r/', trim($summary)) ?: []));
+        }, explode("\n", rtrim($changelog))));
     }
 }

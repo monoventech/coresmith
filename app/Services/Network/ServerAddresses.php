@@ -30,6 +30,7 @@ final class ServerAddresses
             'ipv4' => $reading->direct?->address ?? $before['ipv4'] ?? null,
             'ipv4_open' => $reading->direct?->http ?? $before['ipv4_open'] ?? null,
             'ipv6' => $reading->stable,
+            'private' => $reading->private,
             'checked_at' => now()->toIso8601String(),
         ]])->save();
     }

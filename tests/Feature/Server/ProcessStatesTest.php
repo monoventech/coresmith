@@ -167,6 +167,28 @@ test('the server page lists processes with trouble first: a failed one, then one
         ->assertInertia(fn(AssertableInertia $page) => $page->where('processes.0.process', 'scheduler')->where('processes', fn($processes) => count($processes) === 4));
 });
 
+test('a process systemd is starting again after a crash reads as restarting before any running one, with no start time, from its first reading', function () {
+    $team = Team::factory()->owned()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
+    Application::factory()->for($team)->for($server)->create(['slug' => 'blog', 'name' => 'blog']);
+    Application::factory()->for($team)->for($server)->create(['slug' => 'shop', 'name' => 'shop']);
+
+    app(ProcessStates::class)->record($server, ProcessStates::parse(implode("\n\n", [
+        processStatesBlock('coresmith-app-blog-web'),
+        processStatesBlock('coresmith-app-shop-web', active: 'activating', sub: 'auto-restart', restarts: 44241, memory: '[not set]'),
+    ])));
+
+    $rows = app(ServerProcesses::class)->for($server, User::query()->findOrFail($team->owner_id));
+
+    expect(array_map(fn(array $row): string => "{$row['app']} {$row['state']['label']}", $rows))->toBe([
+        'shop Crashed, restarting',
+        'blog Running',
+    ])
+        ->and($rows[0]['state']['tone'])->toBe('warning')
+        ->and($rows[0]['since'])->toBeNull()
+        ->and($rows[1]['since'])->not->toBeNull();
+});
+
 test("someone who sees only some of a server's apps sees only those apps' processes", function () {
     $team = Team::factory()->owned()->create();
     $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);

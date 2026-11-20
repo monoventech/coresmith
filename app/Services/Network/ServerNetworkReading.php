@@ -8,16 +8,24 @@ declare(strict_types=1);
 
 namespace App\Services\Network;
 
+use Symfony\Component\HttpFoundation\IpUtils;
+
 final readonly class ServerNetworkReading implements LocalAddresses, StableAddresses
 {
+    public const PRIVATE_RANGES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];
+
+    public const SKIPPED_INTERFACES = '/^(lo|docker|br-|veth|virbr|cni|flannel|cali|coresmith-door)/';
+
     /**
      * @param  list<string>  $stable
      * @param  list<string>  $addresses
+     * @param  list<string>  $private
      */
     public function __construct(
         public array $stable,
         public array $addresses,
         public ?DirectReach $direct,
+        public array $private = [],
     ) {}
 
     public static function parse(string $output): self
@@ -48,7 +56,33 @@ final readonly class ServerNetworkReading implements LocalAddresses, StableAddre
             ProcStableAddresses::parse(implode("\n", $sections['inet6'] ?? [])),
             array_values(array_unique($addresses)),
             self::direct(trim(implode("\n", $sections['direct'] ?? []))),
+            self::private($sections['private'] ?? []),
         );
+    }
+
+    /**
+     * @param  list<string>  $lines
+     * @return list<string>
+     */
+    private static function private(array $lines): array
+    {
+        $kept = [];
+
+        foreach ($lines as $line) {
+            $parts = preg_split('/\s+/', trim($line)) ?: [];
+
+            if (count($parts) !== 2 || preg_match(self::SKIPPED_INTERFACES, $parts[0]) === 1) {
+                continue;
+            }
+
+            $address = explode('/', $parts[1])[0];
+
+            if (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false && IpUtils::checkIp($address, self::PRIVATE_RANGES)) {
+                $kept[] = $parts[1];
+            }
+        }
+
+        return array_values(array_unique($kept));
     }
 
     public function ipv6(): array

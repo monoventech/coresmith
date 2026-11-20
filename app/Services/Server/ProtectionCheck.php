@@ -11,6 +11,7 @@ namespace App\Services\Server;
 use App\Models\Server;
 use App\Services\Caddy\CaddyApiClient;
 use App\Services\SSH\SSHConnection;
+use Carbon\CarbonImmutable;
 use RuntimeException;
 
 final class ProtectionCheck
@@ -30,7 +31,7 @@ final class ProtectionCheck
     public function __construct(private readonly SecurityHardening $hardening) {}
 
     /**
-     * @return array{ssh: string|null, fail2ban: string, kernel: string, kernel_off: list<string>, patches: string, controls: string, http3: string}
+     * @return array<string, mixed>
      */
     public function read(SSHConnection $connection): array
     {
@@ -68,6 +69,14 @@ final class ProtectionCheck
             ]),
         ];
 
+        $lines[] = "echo '== maintenance'";
+        $lines[] = '[ -f ' . SecurityHardening::JOURNAL_CAP . ' ] && echo capped || echo uncapped';
+        $lines[] = 'systemctl is-enabled coresmith-maintenance.timer 2>/dev/null || echo missing';
+        $lines[] = 'systemctl show coresmith-maintenance.service -p ExecMainExitTimestamp -p ExecMainStatus 2>/dev/null || true';
+        $lines[] = 'systemctl show coresmith-maintenance.timer -p LastTriggerUSec 2>/dev/null || true';
+        $lines[] = 'journalctl --disk-usage 2>/dev/null || true';
+        $lines[] = "journalctl -u coresmith-maintenance.service -o cat --no-pager -n 50 2>/dev/null | grep '^coresmith-freed ' | tail -n 1 || true";
+
         if (!$server->runs_coresmith) {
             $lines[] = "echo '== ssh'";
             $lines[] = 'sshd -T 2>/dev/null || true';
@@ -83,7 +92,7 @@ final class ProtectionCheck
     }
 
     /**
-     * @return array{ssh: string|null, fail2ban: string, kernel: string, kernel_off: list<string>, patches: string, controls: string, http3: string}
+     * @return array<string, mixed>
      */
     public function parse(Server $server, string $output): array
     {
@@ -101,9 +110,50 @@ final class ProtectionCheck
             'kernel' => $kernelOff === [] ? 'on' : 'off',
             'kernel_off' => $kernelOff,
             'patches' => $this->patches($server, $sections['patches'] ?? []) ? 'on' : 'off',
+            ...$this->maintenance($sections['maintenance'] ?? []),
             'controls' => in_array('socket', $sections['controls'], true) && !in_array('tcp', $sections['controls'], true) ? 'on' : 'off',
             'http3' => in_array('udp-closed', $sections['web'] ?? [], true) ? 'off' : 'on',
         ];
+    }
+
+    /**
+     * @param  list<string>  $lines
+     * @return array{maintenance: string, maintenance_ran: string|null, maintenance_failed: bool, maintenance_freed: int|null, journal: string|null}
+     */
+    private function maintenance(array $lines): array
+    {
+        $values = [];
+        $freed = null;
+        $journal = null;
+
+        foreach ($lines as $line) {
+            if (preg_match('/^(ExecMainExitTimestamp|ExecMainStatus|LastTriggerUSec)=(.*)$/', $line, $match) === 1) {
+                $values[$match[1]] = trim($match[2]);
+            } elseif (preg_match('/^coresmith-freed (-?\d+)$/', $line, $match) === 1) {
+                $freed = (int) $match[1];
+            } elseif (preg_match('/take up ([\d.]+[BKMGT]?) /', $line, $match) === 1) {
+                $journal = $match[1];
+            }
+        }
+
+        $exited = self::systemdTime($values['ExecMainExitTimestamp'] ?? null);
+
+        return [
+            'maintenance' => in_array('capped', $lines, true) && in_array('enabled', $lines, true) ? 'on' : 'off',
+            'maintenance_ran' => $exited ?? self::systemdTime($values['LastTriggerUSec'] ?? null),
+            'maintenance_failed' => $exited !== null && (int) ($values['ExecMainStatus'] ?? 0) !== 0,
+            'maintenance_freed' => $freed,
+            'journal' => $journal,
+        ];
+    }
+
+    private static function systemdTime(?string $value): ?string
+    {
+        if ($value === null || $value === '' || $value === 'n/a') {
+            return null;
+        }
+
+        return rescue(fn(): string => CarbonImmutable::parse((string) preg_replace('/^[A-Za-z]{3} /', '', $value))->utc()->toIso8601String(), null, report: false);
     }
 
     /**

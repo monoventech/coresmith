@@ -141,7 +141,7 @@ Schedule::call(function (): void {
         ->each(function (Server $server): void {
             $checked = $server->public_addresses['checked_at'] ?? null;
 
-            if (!is_string($checked) || now()->subWeek()->gt($checked)) {
+            if (!is_string($checked) || !array_key_exists('private', (array) $server->public_addresses) || now()->subWeek()->gt($checked)) {
                 ReadServerAddresses::dispatch($server);
             }
         });

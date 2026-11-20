@@ -56,6 +56,15 @@ test('release notes reach the card as plain lines, without markdown or commit pr
         ->assertInertia(fn($page) => $page->where('updates.available.summary', "Added\n• A server's page says what each number is (#42)\n\nFixed\n• This machine keeps its SSH rules (#41)\n• A line with no prefix\n\nInstalls set up before 0.5.0: run the installer once."));
 });
 
+test('the card keeps the changelog and leaves the release notes after it to the Release notes link', function () {
+    updatesFeed(['latest' => '0.1.1', 'summary' => "### Changed\n- Servers take tags (#159)\n\n\n\n## What's new\n\n- **Tags on servers.** Servers take tags the way apps do.\n\n## Upgrading\n\n- The update adds one column.", 'changelog_url' => 'https://github.com/monoven/coresmith/releases/tag/v0.1.1', 'released_at' => '2026-10-17']);
+    updatesChecked();
+
+    $this->actingAs($this->owner)
+        ->get(route('settings.general'))
+        ->assertInertia(fn($page) => $page->where('updates.available.summary', "Changed\n• Servers take tags (#159)"));
+});
+
 test('the card is told what is installed, what is available and what it may do', function () {
     updatesChecked();
 

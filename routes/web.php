@@ -138,9 +138,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('servers/{server}/activity', [ServerTabsController::class, 'activity'])
         ->withTrashed()
         ->name('servers.activity');
-    Route::get('servers/{server}/under-the-hood', [ServerTabsController::class, 'underTheHood'])
-        ->withTrashed()
-        ->name('servers.under-the-hood');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
     Route::post('servers/{server}/tunnel', [ServerTunnelController::class, 'store'])

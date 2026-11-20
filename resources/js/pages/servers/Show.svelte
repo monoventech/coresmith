@@ -135,11 +135,6 @@
             <p class="m-0 text-[12.5px] text-muted-foreground">
                 This server runs {stackText}, each app walled off from the others with its own environment and database
                 credentials.
-                <Link
-                    href={route('servers.under-the-hood', server.key)}
-                    class="whitespace-nowrap text-foreground underline underline-offset-2"
-                    >What Coresmith runs here</Link
-                >
             </p>
         </div>
     </div>

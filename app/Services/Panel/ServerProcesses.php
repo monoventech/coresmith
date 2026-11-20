@@ -43,7 +43,7 @@ final class ServerProcesses
                     'state' => $state,
                     'memory' => $process->memory_bytes === null ? null : Formats::size(intdiv($process->memory_bytes, 1048576)),
                     'restarts' => $restarts,
-                    'since' => $state['key'] === 'running' || $state['key'] === 'restarting' ? Formats::when($process->started_at) : null,
+                    'since' => $process->active_state === 'active' ? Formats::when($process->started_at) : null,
                     'rank' => match ($state['key']) {
                         'failed' => 0,
                         'restarting' => 1,
@@ -70,6 +70,7 @@ final class ServerProcesses
         return match (true) {
             $process->active_state === 'failed' => ['key' => 'failed', 'label' => 'Failed', 'tone' => 'destructive'],
             $restarts > self::RESTARTS_WARNING => ['key' => 'restarting', 'label' => "Restarted {$restarts} times today", 'tone' => 'warning'],
+            $process->sub_state === 'auto-restart' => ['key' => 'restarting', 'label' => 'Crashed, restarting', 'tone' => 'warning'],
             in_array($process->active_state, ['activating', 'reloading'], true) => ['key' => 'starting', 'label' => 'Starting', 'tone' => 'accent'],
             $process->active_state === 'active' => ['key' => 'running', 'label' => 'Running', 'tone' => 'success'],
             $application->power_state === PowerState::Sleeping => ['key' => 'asleep', 'label' => 'Asleep', 'tone' => 'default'],
