@@ -40,9 +40,10 @@ final class OffsiteBackupController extends Controller
             'region' => ['required', 'string', 'regex:/^[a-z0-9-]{2,32}$/'],
             'bucket' => ['required', 'string', 'regex:/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/'],
             'prefix' => ['nullable', 'string', 'max:200', "regex:/^[A-Za-z0-9!_.*'()\\/-]{0,200}$/", 'not_regex:/\.\./', 'not_regex:/^\//'],
-            'access_key_id' => ['required', 'string', 'max:128'],
+            'access_key_id' => [$existing instanceof BackupDestination ? 'nullable' : 'required', 'string', 'max:128'],
             'secret_access_key' => [$existing instanceof BackupDestination ? 'nullable' : 'required', 'string', 'max:256'],
             'path_style' => ['nullable', 'boolean'],
+            'frequency' => ['nullable', 'in:' . BackupDestination::DAILY . ',' . BackupDestination::HOURLY],
         ], [
             'endpoint.*' => self::ENDPOINT,
             'region.*' => self::REGION,
@@ -55,21 +56,25 @@ final class OffsiteBackupController extends Controller
             'secret_access_key.string' => 'Enter the secret access key.',
             'secret_access_key.max' => 'A secret access key is at most 256 characters.',
             'path_style.boolean' => 'Turn path-style addressing on or off.',
+            'frequency.in' => 'Choose every night or every hour.',
         ]);
+
+        $frequency = $validated['frequency'] ?? $existing?->frequency ?? BackupDestination::DAILY;
 
         $team->backupDestination()->updateOrCreate([], array_filter([
             'endpoint' => isset($validated['endpoint']) ? rtrim($validated['endpoint'], '/') : null,
             'region' => $validated['region'],
             'bucket' => $validated['bucket'],
             'prefix' => isset($validated['prefix']) ? trim($validated['prefix'], '/') : null,
-            'access_key_id' => $validated['access_key_id'],
+            'access_key_id' => $validated['access_key_id'] ?? null,
             'secret_access_key' => $validated['secret_access_key'] ?? null,
             'path_style' => $request->boolean('path_style'),
-        ], fn(mixed $value, string $key): bool => $key !== 'secret_access_key' || $value !== null, ARRAY_FILTER_USE_BOTH));
+            'frequency' => $frequency,
+        ], fn(mixed $value, string $key): bool => !in_array($key, ['access_key_id', 'secret_access_key'], true) || $value !== null, ARRAY_FILTER_USE_BOTH));
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['bucket' => $validated['bucket']])->log('offsite_backups_configured');
 
-        return back()->with('success', 'Saved. Databases go to S3 every night at 02:30.');
+        return back()->with('success', $frequency === BackupDestination::HOURLY ? 'Saved. Databases go to S3 every hour.' : 'Saved. Databases go to S3 every night at 02:30.');
     }
 
     public function destroy(Request $request): RedirectResponse

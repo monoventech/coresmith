@@ -54,6 +54,7 @@ test('an owner sets a destination and its keys stay sealed', function () {
     $raw = json_encode(DB::table('backup_destinations')->where('team_id', $team->getKey())->first());
 
     expect($destination?->bucket)->toBe('lab-backups')
+        ->and($destination?->frequency)->toBe('daily')
         ->and($destination?->access_key_id)->toBe('AKIAEXAMPLE0000000000')
         ->and($destination?->secret_access_key)->toBe('an-e2e-secret-access-key')
         ->and($raw)->not->toContain('AKIAEXAMPLE0000000000')
@@ -73,6 +74,7 @@ test('an owner sets a destination and its keys stay sealed', function () {
         'bucket' => 'lab-backups',
         'prefix' => 'nightly',
         'path_style' => false,
+        'frequency' => 'daily',
         'last_run' => null,
         'failing' => 0,
     ])->and(json_encode($props))->not->toContain('AKIAEXAMPLE0000000000')
@@ -92,6 +94,21 @@ test('a blank secret keeps the saved one', function () {
     expect($destination?->access_key_id)->toBe('AKIANEWKEY0000000000')
         ->and($destination?->secret_access_key)->toBe('the-original-secret-key')
         ->and(BackupDestination::query()->count())->toBe(1);
+});
+
+test('changing only how often keeps the saved keys', function () {
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+    $this->actingAs(offsiteSettingsOwner($team));
+    $this->put(route('settings.offsite-backups.update'), offsiteSettingsForm())->assertSessionHasNoErrors();
+
+    $this->put(route('settings.offsite-backups.update'), offsiteSettingsForm(['access_key_id' => '', 'secret_access_key' => '', 'frequency' => 'hourly']))
+        ->assertSessionHasNoErrors();
+
+    $destination = $team->fresh()->backupDestination;
+
+    expect($destination?->frequency)->toBe('hourly')
+        ->and($destination?->access_key_id)->toBe('AKIAEXAMPLE0000000000')
+        ->and($destination?->secret_access_key)->toBe('an-e2e-secret-access-key');
 });
 
 test('the first destination needs its secret', function () {
@@ -124,7 +141,21 @@ test('a destination that cannot work is refused with what to fix', function (arr
     'no access key' => [['access_key_id' => ''], 'access_key_id', 'Enter the access key ID.'],
     'an access key too long' => [['access_key_id' => str_repeat('A', 129)], 'access_key_id', 'An access key ID is at most 128 characters.'],
     'a secret too long' => [['secret_access_key' => str_repeat('s', 257)], 'secret_access_key', 'A secret access key is at most 256 characters.'],
+    'a schedule that is not offered' => [['frequency' => 'weekly'], 'frequency', 'Choose every night or every hour.'],
 ]);
+
+test('an owner sends databases every hour instead of every night, and the team tab says so', function () {
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+    $this->actingAs(offsiteSettingsOwner($team));
+
+    $this->from(route('teams.index'))->put(route('settings.offsite-backups.update'), offsiteSettingsForm(['frequency' => 'hourly']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved. Databases go to S3 every hour.');
+
+    expect($team->fresh()->backupDestination?->frequency)->toBe('hourly');
+
+    $this->get(route('teams.index'))->assertInertia(fn($page) => $page->where('offsite.frequency', 'hourly'));
+});
 
 test('pro cannot send backups to s3', function () {
     $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();

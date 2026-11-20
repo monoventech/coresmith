@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 final class OffsiteBackupsCommand extends Command
 {
-    protected $signature = 'coresmith:backup-databases';
+    protected $signature = 'coresmith:backup-databases {--hourly : Back up the teams that send backups every hour}';
 
     protected $description = 'Back up every MySQL and PostgreSQL database of teams that send backups to S3';
 
@@ -29,7 +29,7 @@ final class OffsiteBackupsCommand extends Command
         $queued = 0;
         $timestamp = now()->format('YmdHis');
 
-        BackupDestination::query()->with('team')->lazyById()->each(function (BackupDestination $destination) use ($billing, $timestamp, &$queued): void {
+        BackupDestination::query()->where('frequency', $this->option('hourly') ? BackupDestination::HOURLY : BackupDestination::DAILY)->with('team')->lazyById()->each(function (BackupDestination $destination) use ($billing, $timestamp, &$queued): void {
             $team = $destination->team;
 
             if ($team === null || !$billing->status($team)->allows(PlanFeature::OffsiteBackups)) {

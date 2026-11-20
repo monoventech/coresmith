@@ -16,6 +16,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BackupDestination extends Model
 {
+    public const DAILY = 'daily';
+
+    public const HOURLY = 'hourly';
+
     use HasFactory, HasUlids;
 
     protected $guarded = ['id'];
