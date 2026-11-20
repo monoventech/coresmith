@@ -49,6 +49,7 @@ final class ProtectionRows
                     'fix' => 'Turn them back on',
                     'failed' => "Coresmith couldn't turn them back on: ",
                 ]),
+                $this->maintenance($reading, $meta),
                 $this->managed('http3', 'Browsers can use HTTP/3', $reading, $meta, [
                     'on' => 'The firewall lets HTTP/3 through.',
                     'off' => 'The firewall blocks HTTP/3, so browsers try it first and fall back to HTTP/2.',
@@ -96,6 +97,54 @@ final class ProtectionRows
             ($reading[$key] ?? null) === 'off' => ['state' => 'off', 'detail' => $copy['off'], 'fix' => $copy['fix']],
             default => ['state' => 'pending', 'detail' => self::PENDING, 'fix' => null],
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $reading
+     * @param  array<string, mixed>  $meta
+     * @return array{key: string, label: string, state: string, detail: string, fix: string|null}
+     */
+    private function maintenance(array $reading, array $meta): array
+    {
+        $row = $this->managed('maintenance', 'Old packages and logs cleared weekly', $reading, $meta, [
+            'on' => "Runs every Sunday morning. It hasn't run yet.",
+            'off' => 'Old packages and system logs build up on this server.',
+            'fix' => 'Set it up',
+            'failed' => "Coresmith couldn't set it up: ",
+        ]);
+        $ran = $reading['maintenance_ran'] ?? null;
+
+        if ($row['state'] !== 'on' || !is_string($ran)) {
+            return $row;
+        }
+
+        if (($reading['maintenance_failed'] ?? false) === true) {
+            return [...$row, 'state' => 'off', 'detail' => "The last clean-up didn't finish. Coresmith runs it again next Sunday.", 'fix' => 'Run it now'];
+        }
+
+        $freed = $reading['maintenance_freed'] ?? null;
+        $journal = self::journalSize($reading['journal'] ?? null);
+
+        $when = Formats::when(CarbonImmutable::parse($ran));
+
+        return [...$row, 'detail' => 'Last ran ' . ($when === 'now' ? 'a moment ago' : $when)
+            . match (true) {
+                !is_int($freed) => '.',
+                $freed > 0 => ', and freed ' . Formats::bytes($freed) . '.',
+                default => '. There was nothing to clear.',
+            }
+            . ($journal === null ? '' : " System logs take up {$journal}.")];
+    }
+
+    private static function journalSize(mixed $size): ?string
+    {
+        if (!is_string($size) || preg_match('/^([\d.]+)([BKMGT]?)$/', $size, $match) !== 1) {
+            return null;
+        }
+
+        $power = ['' => 0, 'B' => 0, 'K' => 1, 'M' => 2, 'G' => 3, 'T' => 4][$match[2]];
+
+        return Formats::bytes((int) round((float) $match[1] * 1024 ** $power));
     }
 
     /**
@@ -160,6 +209,7 @@ final class ProtectionRows
             'ssh' => 'Turning off password login…',
             'controls', 'unknown_hosts' => 'Closing them now…',
             'http3' => 'Opening it…',
+            'maintenance' => 'Setting it up and running it once…',
             default => 'Turning it back on…',
         }, 'fix' => null];
     }

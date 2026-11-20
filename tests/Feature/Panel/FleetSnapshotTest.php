@@ -149,6 +149,19 @@ test("the server page's meta line names each figure: cores, RAM, disk and the sy
         ->and($fleet->meta($loaded))->toBe('27 GB RAM · 0 apps · up 5 days');
 });
 
+test("the server page's meta line adds a private address the server reported, unless it's the address Coresmith signs in to", function () {
+    $team = Team::factory()->create();
+    fleetServer($team, ['name' => 'hal-web', 'region' => 'fsn1', 'ip_address' => '88.99.12.121', 'booted_at' => null, 'public_addresses' => ['private' => ['10.0.0.2/32', '10.8.0.1/24']]]);
+    fleetServer($team, ['name' => 'home', 'region' => null, 'ip_address' => '192.168.0.248', 'booted_at' => null, 'public_addresses' => ['private' => ['192.168.0.248/24']]]);
+
+    $fleet = new FleetSnapshot($team);
+    [$hetzner, $home] = [$fleet->servers()->firstWhere('name', 'hal-web'), $fleet->servers()->firstWhere('name', 'home')];
+
+    expect($fleet->meta($hetzner, long: true))->toBe('fsn1 · 88.99.12.121 · private 10.0.0.2')
+        ->and($fleet->meta($hetzner))->not->toContain('private')
+        ->and($fleet->meta($home, long: true))->toBe('192.168.0.248');
+});
+
 test('the meta line drops what it does not know and counts a single app', function () {
     $team = Team::factory()->create();
     $server = fleetServer($team, ['region' => null, 'meta' => null, 'booted_at' => null]);

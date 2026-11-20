@@ -17,6 +17,7 @@ final class ProtectionReading
             'fail2ban' => ['active', 'jail'],
             'kernel' => self::kernel(),
             'patches' => ["UNATTENDED='1'", 'installed', 'enabled'],
+            'maintenance' => ['capped', 'enabled', 'ExecMainExitTimestamp=', 'ExecMainStatus=0', 'Archived and active journals take up 24.0M in the file system.'],
             'ssh' => ['passwordauthentication no', 'kbdinteractiveauthentication no', 'permitrootlogin without-password'],
             'web' => ['udp-open'],
             'controls' => ['socket', 'no-tcp'],

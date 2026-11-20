@@ -160,8 +160,18 @@ final class FleetSnapshot
             $long && $disk > 0 ? Formats::size($disk * 1024) . ' disk' : null,
             $long ? $this->system($server) : null,
             $long ? $server->ip_address : $count . ' ' . ($count === 1 ? 'app' : 'apps'),
+            $long ? $this->privateAddress($server) : null,
             Formats::uptime($server->booted_at),
         ])));
+    }
+
+    private function privateAddress(Server $server): ?string
+    {
+        $address = collect((array) (((array) $server->public_addresses)['private'] ?? []))
+            ->map(fn(mixed $cidr): string => explode('/', (string) $cidr)[0])
+            ->first(fn(string $ip): bool => $ip !== '' && $ip !== $server->ip_address);
+
+        return $address === null ? null : "private {$address}";
     }
 
     private function system(Server $server): ?string

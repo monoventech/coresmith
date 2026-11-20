@@ -98,6 +98,27 @@ test('opening HTTP/3 lets UDP 443 through the firewall without touching packages
         ->and(((array) $server->fresh()->meta)['protections']['http3'])->toBe('on');
 });
 
+test('setting up the weekly clean-up caps system logs, installs its timer and runs it once, without updating packages first', function () {
+    [, $owner, $server] = protectionFixture(attributes: ['meta' => ['disk_gb' => 80]]);
+    $transport = new FakeSSHTransport;
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport->respondTo('== fail2ban', ProtectionReading::output()));
+
+    $this->actingAs($owner)->post(route('servers.protections.restore', [$server, 'maintenance']))
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Setting it up.');
+
+    app()->call([new RestoreProtection($server, 'maintenance'), 'handle']);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('systemctl enable --now coresmith-maintenance.timer')
+        ->toContain('systemctl restart systemd-journald')
+        ->toContain('systemctl start coresmith-maintenance.service')
+        ->and(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'apt-get update')))->toBeFalse()
+        ->and(collect($transport->uploads())->keys()->all())->toContain('/etc/systemd/journald.conf.d/coresmith.conf', '/etc/systemd/system/coresmith-maintenance.timer', '/etc/systemd/system/coresmith-maintenance.service', '/usr/local/sbin/coresmith-maintenance')
+        ->and(((array) $server->fresh()->meta)['protections']['maintenance'])->toBe('on');
+});
+
 test('a fix that failed keeps why, for the hardening tab', function () {
     [, , $server] = protectionFixture();
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)
