@@ -181,7 +181,7 @@ test.describe('a server', () => {
 
         await gotoServer(page, name)
 
-        await page.getByRole('button', { name: 'Rename' }).click()
+        await page.getByRole('button', { name: 'Rename', exact: true }).click()
         await expect(dialog(page)).toContainText('Rename server')
         await dialog(page).getByRole('textbox', { name: 'Server name' }).fill(renamed)
         await dialog(page).getByRole('button', { name: 'Save' }).click()
@@ -196,7 +196,7 @@ test.describe('a server', () => {
 
         await gotoServer(page, name)
 
-        await page.getByRole('button', { name: 'Detach' }).click()
+        await page.getByRole('button', { name: 'Detach', exact: true }).click()
         await expect(dialog(page)).toContainText(`Detach ${name}?`)
         await expect(dialog(page)).toContainText('Coresmith takes its key off this server and stops managing it.')
         await dialog(page).getByRole('button', { name: 'Detach server' }).click()
