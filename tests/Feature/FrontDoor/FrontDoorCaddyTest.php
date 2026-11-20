@@ -34,7 +34,7 @@ function frontDoorCaddyClient(): CaddyApiClient
     return new CaddyApiClient(new CaddyRouteBuilder, new RouteConfigValidator);
 }
 
-test("the door route sends certificate checks to port 80 and everything else to the home server's HTTPS by name", function () {
+test("the door route sends certificate checks to port 80 and everything else to the home server's HTTPS by name, with the visitor's host", function () {
     $frontDoor = frontDoorCaddyRow();
 
     expect((new CaddyRouteBuilder)->door($frontDoor, ['beelink.example.com', 'notes.example.com']))->toBe([
@@ -52,6 +52,7 @@ test("the door route sends certificate checks to port 80 and everything else to 
                     'handle' => [[
                         'handler' => 'reverse_proxy',
                         'upstreams' => [['dial' => '10.205.2.2:443']],
+                        'headers' => ['request' => ['set' => ['Host' => ['{http.request.host}']]]],
                         'transport' => ['protocol' => 'http', 'tls' => ['insecure_skip_verify' => true, 'server_name' => '{http.request.host}']],
                     ]],
                 ],

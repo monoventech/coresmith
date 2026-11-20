@@ -68,6 +68,7 @@ final class CaddyRouteBuilder
                         'handle' => [[
                             'handler' => 'reverse_proxy',
                             'upstreams' => [['dial' => "{$home}:443"]],
+                            'headers' => ['request' => ['set' => ['Host' => ['{http.request.host}']]]],
                             'transport' => ['protocol' => 'http', 'tls' => ['insecure_skip_verify' => true, 'server_name' => '{http.request.host}']],
                         ]],
                     ],
