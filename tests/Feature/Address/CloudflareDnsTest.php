@@ -45,7 +45,7 @@ test('a token Cloudflare turns down, or one that sees no zone, is refused with w
     'no zone in sight' => [[cloudflareDnsAnswer(['status' => 'active'])], [], "That token can't see any of your zones. In Cloudflare, add your domain's zone under the token's Zone Resources, then try again."],
 ]);
 
-test("an account-owned token is checked against the account it belongs to, found from the zones it sees", function () {
+test('an account-owned token is checked against the account it belongs to, found from the zones it sees', function () {
     Http::fake([
         CLOUDFLARE_DNS_API . '/user/tokens/verify' => Http::response(cloudflareDnsRefusal('Invalid API Token', 1000), 401),
         CLOUDFLARE_DNS_API . '/zones?per_page=1' => Http::response(cloudflareDnsAnswer([['id' => 'z1', 'name' => 'coresmith.io', 'account' => ['id' => 'acc1']]])),
