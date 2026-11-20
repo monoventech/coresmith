@@ -214,6 +214,15 @@ test('a refused copy is recorded with what to check, and the backup stays', func
         ->and(BackupCopy::status())->toMatchArray(['ok' => false, 'error' => 'The bucket refused the copy: 403. Check the bucket name, region and keys.']);
 });
 
+test('a copy runs where long uploads are allowed, and its upload ends before the job does', function () {
+    $job = new CopyCoresmithBackup('/var/backups/coresmith-20261120-040000.tar.gz');
+    $supervisor = collect(config('horizon.defaults'))->first(fn(array $settings): bool => in_array($job->queue, $settings['queue'] ?? [], true));
+
+    expect($job->queue)->toBe('server-tasks')
+        ->and(OffsiteBackups::UPLOAD_SECONDS + 60)->toBeLessThanOrEqual($job->timeout)
+        ->and($job->timeout)->toBeLessThan($supervisor['timeout'] ?? 0);
+});
+
 test('a backup queues its copy only when a destination is set', function () {
     $this->app->useStoragePath($this->copyRoot);
     coresmithCopyProbe($this->copyRoot);

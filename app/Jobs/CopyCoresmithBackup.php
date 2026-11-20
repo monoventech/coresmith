@@ -29,9 +29,12 @@ final class CopyCoresmithBackup implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 1800;
+    public int $timeout = 1260;
 
-    public function __construct(public readonly string $archive) {}
+    public function __construct(public readonly string $archive)
+    {
+        $this->onQueue('server-tasks');
+    }
 
     public function handle(OffsiteBackups $offsite): void
     {
@@ -62,7 +65,7 @@ final class CopyCoresmithBackup implements ShouldQueue
 
     private function databaseOnly(): string
     {
-        $work = sys_get_temp_dir() . '/coresmith-copy-' . Str::lower(Str::random(12));
+        $work = dirname($this->archive) . '/copy-' . Str::lower(Str::random(12));
         File::ensureDirectoryExists($work, 0700);
 
         try {
