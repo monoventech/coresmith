@@ -98,16 +98,15 @@ test('a domain on a server whose IPv4 address answers is told to add an A record
         ->and($report->problems)->toBe(["notes.example.net doesn't point anywhere yet. Add an A record pointing at 203.0.113.7, then check again."]);
 });
 
-test('a domain on a home server nobody reaches over IPv4 is told why, with both fixes and its stable IPv6 address', function () {
+test('a domain on a home server nobody reaches over IPv4 is told to turn on IPv4 through Cloudflare, with port forwarding for an address of its own', function () {
     $application = appReachApp();
     appReachDns([]);
     appReachSsh(appReachServerOutput(ipv4Open: false));
 
     $report = app(AppDomainReach::class)->check($application)['notes.example.net'];
 
-    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and this server's IPv4 address, 203.0.113.7, doesn't answer on ports 80 and 443 from the internet. Add an AAAA record pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8 and turn on Cloudflare's proxy for notes.example.net, so visitors without IPv6 reach it too. Add the A record only if you can forward ports 80 and 443 to 192.168.0.248. Then check again."])
+    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and this server's IPv4 address, 203.0.113.7, doesn't answer on ports 80 and 443 from the internet. Turn on IPv4 through Cloudflare on the server's page, then check again. If 203.0.113.7 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."])
         ->and($report->records)->toBe([
-            ['type' => 'AAAA', 'name' => 'notes.example.net', 'value' => appReachIpv6(), 'note' => "Best fix, with Cloudflare's proxy on"],
             ['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7', 'note' => 'Only if the address is yours and you can forward ports 80 and 443'],
         ]);
 });
