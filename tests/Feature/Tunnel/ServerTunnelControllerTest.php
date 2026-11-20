@@ -170,10 +170,11 @@ test('a server the internet reaches on IPv4 has no tunnel card, unless a tunnel 
 
     $this->actingAs($owner)->get(route('servers.show', $server))->assertInertia(fn($page) => $page->where('tunnel', null));
 
-    ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPEN, 'hosts' => ['beelink.coresmith.io'], 'checked_at' => now()]);
+    ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPEN, 'hosts' => ['beelink.coresmith.io', 'monoven.com'], 'diverted' => [['host' => 'monoven.com', 'to' => 'cloudflare.vc']], 'checked_at' => now()]);
 
     $this->actingAs($owner)->get(route('servers.show', $server))->assertInertia(fn($page) => $page
         ->where('tunnel.state', 'open')
-        ->where('tunnel.hosts', ['beelink.coresmith.io'])
+        ->where('tunnel.hosts', ['beelink.coresmith.io', 'monoven.com'])
+        ->where('tunnel.diverted', [['host' => 'monoven.com', 'to' => 'cloudflare.vc']])
         ->where('tunnel.checked', 'now'));
 });

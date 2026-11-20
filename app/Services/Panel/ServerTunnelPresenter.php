@@ -17,7 +17,7 @@ use Carbon\CarbonImmutable;
 final class ServerTunnelPresenter
 {
     /**
-     * @return array{state: string, ipv4: ?string, hosts: list<string>, skipped: list<array{host: string, reason: string}>, error: ?string, checked: ?string, cloudflare: bool, can_manage: bool}|null
+     * @return array{state: string, ipv4: ?string, hosts: list<string>, skipped: list<array{host: string, reason: string}>, diverted: list<array{host: string, to: string}>, error: ?string, checked: ?string, cloudflare: bool, can_manage: bool}|null
      */
     public function present(Server $server, User $user): ?array
     {
@@ -37,6 +37,7 @@ final class ServerTunnelPresenter
             'ipv4' => is_string($addresses['ipv4'] ?? null) ? $addresses['ipv4'] : null,
             'hosts' => array_values(array_filter((array) ($tunnel?->hosts ?? []), is_string(...))),
             'skipped' => array_values(array_filter((array) ($tunnel?->skipped ?? []), fn(mixed $row): bool => is_array($row) && is_string($row['host'] ?? null) && is_string($row['reason'] ?? null))),
+            'diverted' => array_values(array_filter((array) ($tunnel?->diverted ?? []), fn(mixed $row): bool => is_array($row) && is_string($row['host'] ?? null) && is_string($row['to'] ?? null))),
             'error' => $tunnel?->error,
             'checked' => $tunnel?->checked_at === null ? null : Formats::when(CarbonImmutable::instance($tunnel->checked_at)),
             'cloudflare' => CloudflareConnection::token() !== null,

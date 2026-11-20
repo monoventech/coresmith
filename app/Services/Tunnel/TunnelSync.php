@@ -41,6 +41,7 @@ final class TunnelSync
         private readonly TunnelHosts $hosts,
         private readonly CaddyApiClient $caddy,
         private readonly AddressResolver $resolver,
+        private readonly EdgeRedirects $redirects,
     ) {}
 
     public function preflight(#[SensitiveParameter] string $token, Server $server): ?string
@@ -219,6 +220,7 @@ final class TunnelSync
             'state' => self::unlessClosing($tunnel, ServerTunnel::OPEN),
             'hosts' => $routed,
             'skipped' => $skipped,
+            'diverted' => $routed === [] ? [] : $this->redirects->find($connection, $routed),
             'error' => null,
             'opened_at' => $tunnel->opened_at ?? now(),
             'checked_at' => now(),
