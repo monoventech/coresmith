@@ -39,7 +39,7 @@ final class AppDomainReach
         $connection = $this->connections->for($server);
         $reading = $this->addresses->read($connection);
         $this->addresses->keep($server, $reading);
-        $reachability = new Reachability($this->resolver, $reading, $reading, new RemoteReachProbe($connection, $reading->direct));
+        $reachability = new Reachability($this->resolver, $reading, $reading, new RemoteReachProbe($connection, $reading->direct), thisMachine: false);
         $tunnel = $server->tunnel()->first();
 
         $reports = [];

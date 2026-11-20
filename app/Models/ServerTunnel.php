@@ -30,7 +30,7 @@ class ServerTunnel extends Model
 
     private const THIS_MACHINE_CACHE = 'server-tunnel:this-machine';
 
-    protected $fillable = ['server_id', 'state', 'account_id', 'tunnel_id', 'hosts', 'skipped', 'error', 'opened_at', 'checked_at'];
+    protected $fillable = ['server_id', 'state', 'account_id', 'tunnel_id', 'hosts', 'skipped', 'diverted', 'error', 'opened_at', 'checked_at'];
 
     public function server(): BelongsTo
     {
@@ -55,6 +55,11 @@ class ServerTunnel extends Model
             ->first();
     }
 
+    public static function usingToken(): ?self
+    {
+        return self::query()->whereHas('server')->with('server')->first();
+    }
+
     public static function thisMachineOpen(): bool
     {
         return Cache::remember(self::THIS_MACHINE_CACHE, 60, fn(): bool => self::forThisMachine() instanceof self);
@@ -74,6 +79,7 @@ class ServerTunnel extends Model
         return [
             'hosts' => 'array',
             'skipped' => 'array',
+            'diverted' => 'array',
             'opened_at' => 'datetime',
             'checked_at' => 'datetime',
         ];

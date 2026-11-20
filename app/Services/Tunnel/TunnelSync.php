@@ -41,6 +41,7 @@ final class TunnelSync
         private readonly TunnelHosts $hosts,
         private readonly CaddyApiClient $caddy,
         private readonly AddressResolver $resolver,
+        private readonly EdgeRedirects $redirects,
     ) {}
 
     public function preflight(#[SensitiveParameter] string $token, Server $server): ?string
@@ -49,6 +50,19 @@ final class TunnelSync
             $account = $this->account($token, array_keys($this->hosts->for($server)));
 
             return $account === null ? self::NO_ACCOUNT : $this->tunnels->refusal($token, $account);
+        } catch (RuntimeException $failed) {
+            return $failed->getMessage();
+        }
+    }
+
+    public function refusalFor(#[SensitiveParameter] string $token, ServerTunnel $tunnel): ?string
+    {
+        if ($tunnel->account_id === null) {
+            return $tunnel->server === null ? null : $this->preflight($token, $tunnel->server);
+        }
+
+        try {
+            return $this->tunnels->refusal($token, (string) $tunnel->account_id);
         } catch (RuntimeException $failed) {
             return $failed->getMessage();
         }
@@ -165,7 +179,7 @@ final class TunnelSync
         }
 
         $target = (string) $tunnel->target();
-        $own = self::own($server);
+        $own = self::ownAddresses($server);
         $routed = [];
 
         foreach ($zones as $host => $zone) {
@@ -206,6 +220,7 @@ final class TunnelSync
             'state' => self::unlessClosing($tunnel, ServerTunnel::OPEN),
             'hosts' => $routed,
             'skipped' => $skipped,
+            'diverted' => $routed === [] ? [] : $this->redirects->find($connection, $routed),
             'error' => null,
             'opened_at' => $tunnel->opened_at ?? now(),
             'checked_at' => now(),
@@ -277,7 +292,7 @@ final class TunnelSync
     /**
      * @return list<string>
      */
-    private static function own(Server $server): array
+    public static function ownAddresses(Server $server): array
     {
         $addresses = (array) $server->public_addresses;
 

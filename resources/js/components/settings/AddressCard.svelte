@@ -7,6 +7,7 @@
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import type { Address } from '@/lib/address'
+    import { tunnelTokenLink } from '@/lib/cloudflare'
     import { Form, router } from '@inertiajs/svelte'
     import { CircleAlert, CircleCheck, Info } from '@lucide/svelte'
 
@@ -28,6 +29,8 @@
         address.change?.state === 'done' && address.change.to === address.host ? address.change : null
     )
     const stale = $derived(moved !== null && typeof window !== 'undefined' && window.location.hostname !== address.host)
+    const tunnelFix = $derived(address.tunnel === 'off' || address.tunnel === 'on')
+    const replacing = $derived(address.cloudflare.connected)
 
     const certificate = $derived(
         {
@@ -107,6 +110,14 @@
     })
 </script>
 
+{#snippet machineLink()}
+    {#if address.machine}<a
+            href={address.machine}
+            class="focus-ring rounded-sm font-medium text-primary-strong"
+            data-testid="address-machine-link">this machine's page</a
+        >{:else}this machine's page{/if}
+{/snippet}
+
 <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="address-card">
     <div class="mb-1 flex flex-wrap items-center gap-2.5">
         <h3 class="type-h3 m-0">Address</h3>
@@ -134,24 +145,31 @@
             class="tint-warning mt-2 flex flex-col gap-1.5 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-normal"
             data-testid="address-ipv6-only"
         >
-            {#if address.reach && address.reach.notes.length > 0}
+            {#if tunnelFix}
+                <p class="m-0">
+                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people
+                    without IPv6 can't open Coresmith.
+                    {#if address.tunnel === 'on'}
+                        This machine's Cloudflare tunnel doesn't carry it yet. See why on
+                        {@render machineLink()}.
+                    {:else}
+                        To reach them, turn on IPv4 through Cloudflare on {@render machineLink()}. If its IPv4 address
+                        is yours alone, you can instead forward ports 80 and 443 to this machine and add an A record.
+                    {/if}
+                </p>
+            {:else if address.reach && address.reach.notes.length > 0}
                 {#each address.reach.notes as note (note)}
                     <p class="m-0 wrap-anywhere">{note}</p>
                 {/each}
             {:else}
                 <p class="m-0">
-                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people
-                    without IPv6 can't open Coresmith. To fix that, turn on IPv4 through Cloudflare on
-                    {#if address.machine}<a
-                            href={address.machine}
-                            class="focus-ring rounded-sm font-medium text-primary-strong"
-                            data-testid="address-machine-link">this machine's page</a
-                        >{:else}this machine's page{/if}. If you can forward ports 80 and 443 to this server, an A
-                    record for its IPv4 address works too.
+                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people without
+                    IPv6 can't open Coresmith. If this machine's IPv4 address answers on ports 80 and 443, add an A record
+                    for it.
                 </p>
             {/if}
         </div>
-        {#if address.reach && address.reach.records.length > 0}
+        {#if !tunnelFix && address.reach && address.reach.records.length > 0}
             <div class="mt-1">
                 <DnsRecords records={address.reach.records} testid="address-ipv6-records" />
             </div>
@@ -208,13 +226,20 @@
     {#if canManage && address.managed}
         <div class="mt-4 border-t border-border pt-3.5 text-[12.5px]" data-testid="address-dns">
             {#if address.cloudflare.connected}
-                <div class="flex items-start justify-between gap-3">
-                    <div>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1 basis-44">
                         <p class="m-0 font-medium">Cloudflare DNS</p>
                         {#if address.cloudflare.error}
                             <p class="m-0 mt-1 flex gap-2 text-destructive-strong">
                                 <CircleAlert class="mt-0.5 size-3.75 shrink-0" />
                                 <span class="wrap-anywhere">{address.cloudflare.error}</span>
+                            </p>
+                        {:else if address.tunnel === 'carries'}
+                            <p class="m-0 mt-1 text-muted-foreground">
+                                Keeps <span class="font-mono text-[12px] wrap-anywhere">{address.host}</span>
+                                on this machine's Cloudflare tunnel.{address.cloudflare.synced
+                                    ? ` Checked ${address.cloudflare.synced}.`
+                                    : ''}
                             </p>
                         {:else if address.cloudflare.host && address.cloudflare.synced}
                             <p class="m-0 mt-1 text-muted-foreground">
@@ -227,15 +252,32 @@
                                 minutes.
                             </p>
                         {/if}
+                        {#if address.cloudflare.tunnel}
+                            <p class="m-0 mt-1 text-muted-foreground" data-testid="address-dns-in-use">
+                                The tunnel on <a
+                                    href={address.cloudflare.tunnel.url}
+                                    class="focus-ring rounded-sm font-medium text-primary-strong"
+                                    >{address.cloudflare.tunnel.name}</a
+                                > uses this token, so you can replace it but not disconnect it.
+                            </p>
+                        {/if}
                     </div>
-                    <Button variant="outline" size="sm" onclick={disconnect}>Disconnect</Button>
+                    {#if address.cloudflare.tunnel}
+                        <Button variant="outline" size="sm" class="shrink-0" onclick={() => (connecting = true)}
+                            >Replace token</Button
+                        >
+                    {:else}
+                        <Button variant="outline" size="sm" class="shrink-0" onclick={disconnect}>Disconnect</Button>
+                    {/if}
                 </div>
             {:else}
-                <div class="flex items-start justify-between gap-3">
-                    <p class="m-0 text-muted-foreground">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <p class="m-0 min-w-0 flex-1 basis-44 text-muted-foreground">
                         Coresmith can keep its domain's DNS records pointed here, with a Cloudflare API token.
                     </p>
-                    <Button variant="outline" size="sm" onclick={() => (connecting = true)}>Connect Cloudflare</Button>
+                    <Button variant="outline" size="sm" class="shrink-0" onclick={() => (connecting = true)}
+                        >Connect Cloudflare</Button
+                    >
                 </div>
             {/if}
         </div>
@@ -358,11 +400,25 @@
         >
             {#snippet children({ errors, processing })}
                 <Dialog.Header>
-                    <Dialog.Title>Connect Cloudflare</Dialog.Title>
-                    <Dialog.Description
-                        >Create a token in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template,
-                        limited to your domain's zone. Coresmith keeps it encrypted and never shows it again.</Dialog.Description
-                    >
+                    <Dialog.Title>{replacing ? 'Replace the Cloudflare token' : 'Connect Cloudflare'}</Dialog.Title>
+                    <Dialog.Description>
+                        {#if replacing}
+                            The new token needs Account, Cloudflare Tunnel, Edit and Zone, DNS, Edit for your domains'
+                            zones.
+                            <a
+                                class="focus-ring rounded-sm font-medium text-primary-strong underline-offset-2 hover:underline"
+                                href={tunnelTokenLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid="address-token-link"
+                                >Create one in Cloudflare<span class="sr-only"> (opens in a new tab)</span></a
+                            > with both filled in. Coresmith checks it can still manage your tunnel before it replaces the
+                            old one.
+                        {:else}
+                            Create a token in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template,
+                            limited to your domain's zone. Coresmith keeps it encrypted and never shows it again.
+                        {/if}
+                    </Dialog.Description>
                 </Dialog.Header>
                 <div class="mt-4">
                     <Label for="cloudflare-token" class="mb-1.5">API token</Label>
@@ -380,7 +436,15 @@
                 </div>
                 <Dialog.Footer>
                     <Button variant="ghost" type="button" onclick={() => (connecting = false)}>Cancel</Button>
-                    <Button type="submit" disabled={processing}>{processing ? 'Connecting…' : 'Connect'}</Button>
+                    <Button type="submit" disabled={processing}
+                        >{processing
+                            ? replacing
+                                ? 'Replacing…'
+                                : 'Connecting…'
+                            : replacing
+                              ? 'Replace token'
+                              : 'Connect'}</Button
+                    >
                 </Dialog.Footer>
             {/snippet}
         </Form>

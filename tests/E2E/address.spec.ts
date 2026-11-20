@@ -30,7 +30,7 @@ const FAILED = {
 }
 
 const IPV6_ONLY_NOTE =
-    "coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Turn on Cloudflare's proxy for coresmith.example.com to fix it. If you can forward ports 80 and 443 to 192.168.0.248, an A record pointing at 203.0.113.7 works too."
+    "coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page to reach them. If 203.0.113.7 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."
 
 const IPV6_ONLY = {
     host: 'coresmith.example.com',
@@ -43,12 +43,6 @@ const IPV6_ONLY = {
         problems: [],
         notes: [IPV6_ONLY_NOTE],
         records: [
-            {
-                type: 'AAAA',
-                name: 'coresmith.example.com',
-                value: '2001:db8::10',
-                note: "Best fix, with Cloudflare's proxy on"
-            },
             {
                 type: 'A',
                 name: 'coresmith.example.com',
@@ -103,12 +97,35 @@ test.describe("Coresmith's address", () => {
         })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. To fix that, turn on IPv4 through Cloudflare on this machine's page. If you can forward ports 80 and 443 to this server, an A record for its IPv4 address works too."
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. If this machine's IPv4 address answers on ports 80 and 443, add an A record for it."
         )
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })
 
-    test('the daily reading of an IPv6-only domain leads with the AAAA record behind Cloudflare, and gives the A record only with its condition', async ({
+    test("with the tunnel off on this machine, the warning sends people to this machine's page and leaves the records out", async ({
+        page
+    }) => {
+        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', machine: '/servers/beelink' })
+
+        await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. To reach them, turn on IPv4 through Cloudflare on this machine's page. If its IPv4 address is yours alone, you can instead forward ports 80 and 443 to this machine and add an A record."
+        )
+        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
+        await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
+    })
+
+    test("with the tunnel on but not carrying the address yet, the warning says so and links to this machine's page", async ({
+        page
+    }) => {
+        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'on', machine: '/servers/beelink' })
+
+        await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. This machine's Cloudflare tunnel doesn't carry it yet. See why on this machine's page."
+        )
+        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
+    })
+
+    test('the daily reading of an IPv6-only domain leads with IPv4 through Cloudflare, and gives the A record only with its condition', async ({
         page
     }) => {
         await captureClipboard(page)
@@ -120,7 +137,6 @@ test.describe("Coresmith's address", () => {
 
         await expect(records).toContainText('coresmith.example.com')
         await expect(records.getByTestId('dns-record-note')).toHaveText([
-            "Best fix, with Cloudflare's proxy on",
             'Only if the address is yours and you can forward ports 80 and 443'
         ])
         await records.getByRole('button', { name: 'Copy the A value 203.0.113.7' }).click()
@@ -283,7 +299,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await dialog(page).getByRole('button', { name: 'Connect', exact: true }).click()
 
         await expect(dialog(page)).toContainText(
-            "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here."
+            "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one."
         )
         await expect(dialog(page).getByLabel('API token')).toHaveAttribute('aria-invalid', 'true')
     })
@@ -312,6 +328,40 @@ test.describe('Cloudflare DNS for the address', () => {
         )
     })
 
+    test('while a tunnel uses the token, the section names the tunnel and offers to replace the token, not disconnect it', async ({
+        page
+    }) => {
+        await settingsShowing(page, {
+            host: 'coresmith.example.com',
+            url: 'https://coresmith.example.com',
+            certificate: 'public',
+            tunnel: 'carries',
+            cloudflare: {
+                connected: true,
+                host: 'coresmith.example.com',
+                error: null,
+                synced: '3 minutes ago',
+                tunnel: { name: 'beelink', url: '/servers/beelink' }
+            }
+        })
+
+        const dns = page.getByTestId('address-dns')
+
+        await expect(dns).toContainText(
+            "Keeps coresmith.example.com on this machine's Cloudflare tunnel. Checked 3 minutes ago."
+        )
+        await expect(dns.getByTestId('address-dns-in-use')).toHaveText(
+            'The tunnel on beelink uses this token, so you can replace it but not disconnect it.'
+        )
+        await expect(dns.getByRole('link', { name: 'beelink' })).toHaveAttribute('href', '/servers/beelink')
+        await expect(dns.getByRole('button', { name: 'Disconnect' })).toHaveCount(0)
+
+        await dns.getByRole('button', { name: 'Replace token' }).click()
+
+        await expect(dialog(page).getByRole('heading', { name: 'Replace the Cloudflare token' })).toBeVisible()
+        await expect(dialog(page).getByRole('button', { name: 'Replace token' })).toBeVisible()
+    })
+
     test('with Cloudflare connected, a check that fails offers to point the domain here', async ({ page }) => {
         const connected = { cloudflare: { connected: true, host: null, error: null, synced: null } }
 
@@ -327,6 +377,26 @@ test.describe('Cloudflare DNS for the address', () => {
     })
 
     for (const theme of ['light', 'dark'] as const) {
+        test(`the tunnel-aware warning and the token a tunnel uses are accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await settingsShowing(page, {
+                ...IPV6_ONLY,
+                tunnel: 'off',
+                machine: '/servers/beelink',
+                cloudflare: {
+                    connected: true,
+                    host: 'coresmith.example.com',
+                    error: null,
+                    synced: '3 minutes ago',
+                    tunnel: { name: 'beelink', url: '/servers/beelink' }
+                }
+            })
+            await expect(card(page).getByTestId('address-machine-link')).toBeVisible()
+            await expect(page.getByTestId('address-dns-in-use')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+
         test(`the Cloudflare section and its dialog are accessible in ${theme}`, async ({ page }) => {
             await useTheme(page, theme)
             await gotoSettings(page, 'General')

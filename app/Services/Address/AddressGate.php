@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Services\Address;
 
+use App\Models\ServerTunnel;
+
 final class AddressGate
 {
     public function __construct(
@@ -44,6 +46,16 @@ final class AddressGate
 
         if (InstallationAddress::certificate($host) !== CertificateSource::Public) {
             return new AddressVerdict($this->address->dnsRefusal($host));
+        }
+
+        $tunnel = ServerTunnel::forThisMachine();
+
+        if ($tunnel?->carries($host) === true) {
+            return new AddressVerdict(null, ["{$host} reaches Coresmith through this machine's Cloudflare tunnel."]);
+        }
+
+        if ($tunnel !== null) {
+            return new AddressVerdict("{$host} isn't on this machine's Cloudflare tunnel yet. Point it here with Cloudflare, then check again.");
         }
 
         $report = $this->reachability->check($host);

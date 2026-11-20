@@ -210,6 +210,13 @@ final class CronJobs
         });
     }
 
+    public function presetScheduler(Application $application): void
+    {
+        if ($this->entries($application) === []) {
+            $application->forceFill(['cron_jobs' => [['schedule' => '* * * * *', 'command' => SmartToggles::SCHEDULE_COMMAND]]])->save();
+        }
+    }
+
     public function disableScheduler(Application $application): void
     {
         $this->change($application, fn(array $entries): array => [$this->withoutScheduler($entries), null]);

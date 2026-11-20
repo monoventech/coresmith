@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Services\Address;
 
+use App\Enums\Edition;
+use App\Models\Server;
 use App\Services\Network\AddressResolver;
 use App\Services\Network\CloudflareRanges;
 use App\Services\Network\DirectReach;
@@ -26,6 +28,7 @@ final class Reachability
         private readonly LocalAddresses $local,
         private readonly StableAddresses $stable,
         private readonly ReachProbe $probe,
+        private readonly bool $thisMachine = true,
     ) {}
 
     public function check(string $host): ReachReport
@@ -87,6 +90,14 @@ final class Reachability
         $lan = $this->lanAddress();
         $closed = "{$host} doesn't point anywhere yet, and this server's IPv4 address, {$direct->address}, doesn't answer on ports 80 and 443 from the internet.";
 
+        $tunnel = $lan === null ? null : $this->tunnelStep();
+
+        if ($tunnel !== null) {
+            $this->row($rows, 'A', $host, $direct->address, self::IF_YOURS);
+
+            return "{$closed} {$tunnel}, then check again. If {$direct->address} is yours alone, you can instead forward ports 80 and 443 to {$lan} and add an A record for it.";
+        }
+
         if ($lan !== null && $stable !== []) {
             $this->row($rows, 'AAAA', $host, $stable[0], self::BEST);
             $this->row($rows, 'A', $host, $direct->address, self::IF_YOURS);
@@ -101,7 +112,7 @@ final class Reachability
         }
 
         return match (true) {
-            $lan !== null => "{$closed} Forward ports 80 and 443 on your router to {$lan}, then add an A record pointing at {$direct->address}. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server's page.",
+            $lan !== null => "{$closed} Forward ports 80 and 443 on your router to {$lan}, then add an A record pointing at {$direct->address}. If your provider shares that address with other customers, use IPv6.",
             $stable !== [] => "{$closed} Open ports 80 and 443 in your provider's firewall and add an A record pointing at {$direct->address}, or add an AAAA record pointing at {$stable[0]} for visitors with IPv6. Then check again.",
             default => "{$closed} Open ports 80 and 443 in your provider's firewall, then add an A record pointing at {$direct->address}.",
         };
@@ -168,14 +179,16 @@ final class Reachability
 
         $lan = $this->lanAddress();
         $problem = "{$host} points at {$direct->address}, which doesn't answer on ports 80 and 443 from the internet.";
+        $tunnel = $lan === null ? null : $this->tunnelStep();
 
-        if ($lan !== null && $stable !== []) {
+        if ($lan !== null && $stable !== [] && $tunnel === null) {
             $this->row($rows, 'AAAA', $host, $stable[0], self::BEST);
         }
 
         $problems[] = match (true) {
             $lan === null => "{$problem} Open those ports in your provider's firewall, then check again.",
-            $stable === [] => "{$problem} Forward those ports on your router to {$lan}, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server's page.",
+            $tunnel !== null => "{$problem} {$tunnel}, then check again. If {$direct->address} is yours alone, you can instead forward those ports to {$lan}.",
+            $stable === [] => "{$problem} Forward those ports on your router to {$lan}, then check again. If your provider shares that address with other customers, use IPv6.",
             default => "{$problem} Add an AAAA record pointing at {$stable[0]}, remove the A record and turn on Cloudflare's proxy for {$host}, so visitors without IPv6 reach it too. Keep the A record only if you can forward ports 80 and 443 to {$lan}. Then check again.",
         };
 
@@ -199,9 +212,12 @@ final class Reachability
 
         if ($v6 === true && $v4 === false && $direct !== null) {
             $waiting = "Visitors without IPv6 can't open {$host}: its A record points at {$direct->address}, which doesn't answer on ports 80 and 443.";
-            $notes[] = $lan === null
-                ? "{$waiting} Open those ports in your provider's firewall, or remove the A record and turn on Cloudflare's proxy for {$host}."
-                : "{$waiting} Remove the A record and turn on Cloudflare's proxy for {$host}, or forward ports 80 and 443 to {$lan}.";
+            $tunnel = $lan === null ? null : $this->tunnelStep();
+            $notes[] = match (true) {
+                $lan === null => "{$waiting} Open those ports in your provider's firewall, or remove the A record and turn on Cloudflare's proxy for {$host}.",
+                $tunnel !== null => "{$waiting} {$tunnel} to reach them. If {$direct->address} is yours alone, you can instead forward those ports to {$lan}.",
+                default => "{$waiting} Remove the A record and turn on Cloudflare's proxy for {$host}, or forward ports 80 and 443 to {$lan}.",
+            };
         }
 
         if ($v6 === true && $v4Records === [] && $v6Records !== []) {
@@ -234,6 +250,14 @@ final class Reachability
             $this->row($rows, 'A', $host, $direct->address);
 
             return "{$only} Open ports 80 and 443 in your provider's firewall and add an A record pointing at {$direct->address}, or turn on Cloudflare's proxy for {$host}.";
+        }
+
+        $tunnel = $this->tunnelStep();
+
+        if ($tunnel !== null) {
+            $this->row($rows, 'A', $host, $direct->address, self::IF_YOURS);
+
+            return "{$only} {$tunnel} to reach them. If {$direct->address} is yours alone, you can instead forward ports 80 and 443 to {$lan} and add an A record for it.";
         }
 
         $this->row($rows, 'AAAA', $host, $v6, self::BEST);
@@ -271,6 +295,16 @@ final class Reachability
         }
 
         $rows[] = ['type' => $type, 'name' => $host, 'value' => $value, 'note' => $note];
+    }
+
+    private function tunnelStep(): ?string
+    {
+        return match (true) {
+            !Edition::current()->isSelfHosted() => null,
+            !$this->thisMachine => "Turn on IPv4 through Cloudflare on the server's page",
+            Server::query()->where('runs_coresmith', true)->exists() => "Turn on IPv4 through Cloudflare on this machine's page",
+            default => 'Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page',
+        };
     }
 
     private function lanAddress(): ?string
