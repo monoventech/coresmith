@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Server;
 use App\Services\Address\Reachability;
 use App\Services\Network\AddressResolver;
 use App\Services\Network\DirectReach;
@@ -110,9 +111,9 @@ test('a domain with no records yet says which record to add, ready to copy', fun
         ->and($report->records)->toBe($records);
 })->with([
     'reachable over IPv4' => [new DirectReach('151.226.169.196', true, true), [], "coresmith.example.com doesn't point anywhere yet. Add an A record pointing at 151.226.169.196, then check again.", [reachabilityRecord('A', '151.226.169.196')]],
-    'behind a router, with IPv6' => [new DirectReach('151.226.169.196', false, false), ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com doesn't point anywhere yet, and this server's IPv4 address, 151.226.169.196, doesn't answer on ports 80 and 443 from the internet. Add an AAAA record pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8 and turn on Cloudflare's proxy for coresmith.example.com, so visitors without IPv6 reach it too. Add the A record only if you can forward ports 80 and 443 to 192.168.0.248. Then check again.", [reachabilityRecord('AAAA', '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', note: REACHABILITY_BEST), reachabilityRecord('A', '151.226.169.196', note: REACHABILITY_IF_YOURS)]],
+    'behind a router, with IPv6' => [new DirectReach('151.226.169.196', false, false), ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com doesn't point anywhere yet, and this server's IPv4 address, 151.226.169.196, doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it.", [reachabilityRecord('A', '151.226.169.196', note: REACHABILITY_IF_YOURS)]],
     'no IPv4 reading, with IPv6' => [null, ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com doesn't point anywhere yet. Add an AAAA record pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8 and turn on Cloudflare's proxy for it, so visitors without IPv6 reach it too. Then check again.", [reachabilityRecord('AAAA', '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', note: REACHABILITY_BEST)]],
-    'behind a router, no IPv6' => [new DirectReach('151.226.169.196', false, false), [], "coresmith.example.com doesn't point anywhere yet, and this server's IPv4 address, 151.226.169.196, doesn't answer on ports 80 and 443 from the internet. Forward ports 80 and 443 on your router to 192.168.0.248, then add an A record pointing at 151.226.169.196. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server's page.", [reachabilityRecord('A', '151.226.169.196')]],
+    'behind a router, no IPv6' => [new DirectReach('151.226.169.196', false, false), [], "coresmith.example.com doesn't point anywhere yet, and this server's IPv4 address, 151.226.169.196, doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it.", [reachabilityRecord('A', '151.226.169.196', note: REACHABILITY_IF_YOURS)]],
     'nothing known' => [null, [], "coresmith.example.com doesn't point anywhere yet. Add a DNS record that points it at this server, then check again.", []],
 ]);
 
@@ -139,7 +140,7 @@ test('a domain that points at another address says which one this server has', f
         ->and($report->records)->toBe([reachabilityRecord('A', '151.226.169.196')]);
 });
 
-test('behind a router that forwards nothing, the problem names the ports, the machine and the IPv6 way out', function (array $stable, string $problem, array $records) {
+test('behind a router that forwards nothing, the problem leads with IPv4 through Cloudflare and keeps port forwarding for an address of your own', function (array $stable, string $problem, array $records) {
     reachabilityNetwork(['151.226.169.196'], ['127.0.0.1', '192.168.0.248'], $stable);
     reachabilityProbe(new DirectReach('151.226.169.196', false, false));
 
@@ -149,8 +150,8 @@ test('behind a router that forwards nothing, the problem names the ports, the ma
         ->and($report->problems)->toBe([$problem])
         ->and($report->records)->toBe($records);
 })->with([
-    'no IPv6' => [[], 'coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server\'s page.', []],
-    'with IPv6' => [['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add an AAAA record pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8, remove the A record and turn on Cloudflare's proxy for coresmith.example.com, so visitors without IPv6 reach it too. Keep the A record only if you can forward ports 80 and 443 to 192.168.0.248. Then check again.", [reachabilityRecord('AAAA', '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', note: REACHABILITY_BEST)]],
+    'no IPv6' => [[], "coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248.", []],
+    'with IPv6' => [['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248.", []],
 ]);
 
 test('a server with its own public address that the internet cannot reach is told to open its provider firewall', function () {
@@ -204,7 +205,7 @@ test('an A record nothing reaches beside a working IPv6 record is ready, with a 
         ->and($report->notes)->toBe([$note])
         ->and($report->records)->toBe([]);
 })->with([
-    'behind a router' => [['127.0.0.1', '192.168.0.248'], '151.226.169.196', "Visitors without IPv6 can't open beelink.coresmith.io: its A record points at 151.226.169.196, which doesn't answer on ports 80 and 443. Remove the A record and turn on Cloudflare's proxy for beelink.coresmith.io, or forward ports 80 and 443 to 192.168.0.248."],
+    'behind a router' => [['127.0.0.1', '192.168.0.248'], '151.226.169.196', "Visitors without IPv6 can't open beelink.coresmith.io: its A record points at 151.226.169.196, which doesn't answer on ports 80 and 443. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page to reach them. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248."],
     'with its own public address' => [['127.0.0.1', '203.0.113.10'], '203.0.113.10', "Visitors without IPv6 can't open beelink.coresmith.io: its A record points at 203.0.113.10, which doesn't answer on ports 80 and 443. Open those ports in your provider's firewall, or remove the A record and turn on Cloudflare's proxy for beelink.coresmith.io."],
 ]);
 
@@ -221,9 +222,35 @@ test('a domain with only an IPv6 address is ready, and the note says who it leav
         ->and($report->records)->toBe($records);
 })->with([
     'its IPv4 address takes visitors' => [['127.0.0.1', '203.0.113.10'], new DirectReach('203.0.113.10', true, true), 'beelink.coresmith.io has only an IPv6 address, so visitors without IPv6 can\'t open it. This server answers on IPv4 too, so add an A record pointing at 203.0.113.10.', [reachabilityRecord('A', '203.0.113.10', 'beelink.coresmith.io')]],
-    'its IPv4 address is closed or shared' => [['127.0.0.1', '192.168.0.248'], new DirectReach('151.226.169.196', false, false), "beelink.coresmith.io has only an IPv6 address, so visitors without IPv6 can't open it. Turn on Cloudflare's proxy for beelink.coresmith.io to fix it. If you can forward ports 80 and 443 to 192.168.0.248, an A record pointing at 151.226.169.196 works too.", [reachabilityRecord('AAAA', '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', 'beelink.coresmith.io', REACHABILITY_BEST), reachabilityRecord('A', '151.226.169.196', 'beelink.coresmith.io', REACHABILITY_IF_YOURS)]],
+    'its IPv4 address is closed or shared' => [['127.0.0.1', '192.168.0.248'], new DirectReach('151.226.169.196', false, false), "beelink.coresmith.io has only an IPv6 address, so visitors without IPv6 can't open it. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page to reach them. If 151.226.169.196 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it.", [reachabilityRecord('A', '151.226.169.196', 'beelink.coresmith.io', REACHABILITY_IF_YOURS)]],
     'its own IPv4 address is closed' => [['127.0.0.1', '203.0.113.10'], new DirectReach('203.0.113.10', false, false), "beelink.coresmith.io has only an IPv6 address, so visitors without IPv6 can't open it. Open ports 80 and 443 in your provider's firewall and add an A record pointing at 203.0.113.10, or turn on Cloudflare's proxy for beelink.coresmith.io.", [reachabilityRecord('A', '203.0.113.10', 'beelink.coresmith.io')]],
     'it has no IPv4 route' => [['127.0.0.1', '192.168.0.248'], null, "beelink.coresmith.io has only an IPv6 address, so visitors without IPv6 can't open it. Turn on Cloudflare's proxy for beelink.coresmith.io, which answers them over IPv4.", [reachabilityRecord('AAAA', '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', 'beelink.coresmith.io', REACHABILITY_BEST)]],
+]);
+
+test("once this machine is a server in Coresmith, the advice names this machine's page", function () {
+    Server::factory()->create(['runs_coresmith' => true]);
+    $v6 = '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8';
+    reachabilityNetwork([$v6], ['127.0.0.1', '192.168.0.248', $v6], [$v6]);
+    reachabilityProbe(new DirectReach('151.226.169.196', false, false), new HostReach($v6, true, true, true));
+
+    expect(app(Reachability::class)->check('beelink.coresmith.io')->notes)
+        ->toBe(["beelink.coresmith.io has only an IPv6 address, so visitors without IPv6 can't open it. Turn on IPv4 through Cloudflare on this machine's page to reach them. If 151.226.169.196 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."]);
+});
+
+test('on Cloud, which has no tunnel, a closed IPv4 behind a router keeps the advice that works without one', function (array $records, array $stable, array $problems, array $notes, array $rows) {
+    config(['coresmith.edition' => 'cloud']);
+    reachabilityNetwork($records, ['127.0.0.1', '192.168.0.248'], $stable);
+    reachabilityProbe(new DirectReach('151.226.169.196', false, false), new HostReach('2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', true, true, true));
+
+    $report = app(Reachability::class)->check('coresmith.example.com');
+
+    expect($report->problems)->toBe($problems)
+        ->and($report->notes)->toBe($notes)
+        ->and($report->records)->toBe($rows);
+})->with([
+    'no records, no IPv6' => [[], [], ["coresmith.example.com doesn't point anywhere yet, and this server's IPv4 address, 151.226.169.196, doesn't answer on ports 80 and 443 from the internet. Forward ports 80 and 443 on your router to 192.168.0.248, then add an A record pointing at 151.226.169.196. If your provider shares that address with other customers, use IPv6."], [], [reachabilityRecord('A', '151.226.169.196')]],
+    'an A record, no IPv6' => [['151.226.169.196'], [], ["coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6."], [], []],
+    'only an IPv6 record' => [['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], [], ["coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Turn on Cloudflare's proxy for coresmith.example.com to fix it. If you can forward ports 80 and 443 to 192.168.0.248, an A record pointing at 151.226.169.196 works too."], [reachabilityRecord('AAAA', '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8', note: REACHABILITY_BEST), reachabilityRecord('A', '151.226.169.196', note: REACHABILITY_IF_YOURS)]],
 ]);
 
 test("a domain behind Cloudflare's proxy is never told to point back at this server", function () {

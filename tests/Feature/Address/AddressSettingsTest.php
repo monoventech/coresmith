@@ -131,7 +131,7 @@ test('a domain the internet cannot reach is refused with what to fix, and nothin
 
     $this->actingAs(addressSettingsUser())
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
-        ->assertSessionHasErrors(['address' => 'coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server\'s page.']);
+        ->assertSessionHasErrors(['address' => "coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248."]);
 
     expect(AddressChange::current())->toBeNull()
         ->and(file_exists(AddressRequest::file()))->toBeFalse();
@@ -308,7 +308,7 @@ test('checking a domain keeps what the check found, one problem at a time, and s
     expect(AddressCheck::current())->toMatchArray([
         'host' => 'coresmith.example.com',
         'ok' => false,
-        'problems' => ['coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server\'s page.'],
+        'problems' => ["coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248."],
         'notes' => [],
         'records' => [],
     ])
@@ -364,9 +364,8 @@ test('Coresmith reads its own address every morning, and the settings page carri
         ->get(route('settings.general'))
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('address.ipv6_only', true)
-            ->where('address.reach.notes', ["coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Turn on Cloudflare's proxy for coresmith.example.com to fix it. If you can forward ports 80 and 443 to 192.168.0.248, an A record pointing at 151.226.169.196 works too."])
+            ->where('address.reach.notes', ["coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page to reach them. If 151.226.169.196 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."])
             ->where('address.reach.records', [
-                ['type' => 'AAAA', 'name' => 'coresmith.example.com', 'value' => '2001:db8::10', 'note' => "Best fix, with Cloudflare's proxy on"],
                 ['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196', 'note' => 'Only if the address is yours and you can forward ports 80 and 443'],
             ]));
 

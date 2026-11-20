@@ -87,6 +87,17 @@ test('a domain the tunnel carries passes the address check without being tested 
     Http::assertNothingSent();
 });
 
+test("while this machine's tunnel is on, a new address has to go through it, so the check says to point it there", function () {
+    addressTunnelOpen(['beelink.coresmith.io']);
+    Http::fake();
+
+    $verdict = app(AddressGate::class)->check('panel.coresmith.io');
+
+    expect($verdict->refusal)->toBe("panel.coresmith.io isn't on this machine's Cloudflare tunnel yet. Point it here with Cloudflare, then check again.")
+        ->and($verdict->problems())->toBe(["panel.coresmith.io isn't on this machine's Cloudflare tunnel yet. Point it here with Cloudflare, then check again."]);
+    Http::assertNothingSent();
+});
+
 test('after Coresmith moves, its old address stays on the tunnel so it can send people to the new one', function () {
     config(['app.url' => 'https://panel.coresmith.io']);
     $tunnel = addressTunnelOpen(['beelink.coresmith.io']);
