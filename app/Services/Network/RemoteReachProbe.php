@@ -30,6 +30,8 @@ final class RemoteReachProbe implements ReachProbe
             'cat /proc/net/if_inet6 2>/dev/null || true',
             "echo '== addresses'",
             "ip -o addr show 2>/dev/null | awk '{print \$4}' || true",
+            "echo '== private'",
+            "ip -4 -o addr show scope global 2>/dev/null | awk '{print \$2, \$4}' || true",
             "echo '== direct'",
             ...($url === '' ? [] : ['curl -4 -sS --max-time ' . self::SECONDS . ' -H ' . escapeshellarg('Accept: application/json') . ' ' . escapeshellarg($url) . ' 2>/dev/null || true']),
         ]);

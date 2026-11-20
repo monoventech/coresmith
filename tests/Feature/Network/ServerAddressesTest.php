@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ServerStatus;
 use App\Jobs\ReadServerAddresses;
 use App\Models\Server;
+use App\Services\Network\RemoteReachProbe;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Bus;
@@ -27,7 +28,7 @@ function serverAddressesOutput(?bool $ipv4Open): string
 
 function serverAddressesReading(string $checked, bool $open = true): array
 {
-    return ['ipv4' => '203.0.113.7', 'ipv4_open' => $open, 'ipv6' => ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], 'checked_at' => $checked];
+    return ['ipv4' => '203.0.113.7', 'ipv4_open' => $open, 'ipv6' => ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], 'private' => [], 'checked_at' => $checked];
 }
 
 test('reading a server keeps its public IPv4 address, whether visitors reach it, and its stable IPv6 addresses', function () {
@@ -39,6 +40,30 @@ test('reading a server keeps its public IPv4 address, whether visitors reach it,
 
     expect($server->fresh()->public_addresses)->toEqual(serverAddressesReading(now()->toIso8601String(), open: false))
         ->and($server->fresh()->public_addresses['ipv4_open'])->toBeFalse();
+});
+
+test("reading a server keeps its private IPv4 addresses, leaving out Docker, Coresmith's own link and anything public", function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)->respondTo("echo '== inet6'", serverAddressesOutput(true) . "\n" . implode("\n", [
+        '== private',
+        'eth0 88.99.12.121/32',
+        'enp7s0 10.0.0.2/32',
+        'docker0 172.17.0.1/16',
+        'br-3f2a9c 172.18.0.1/16',
+        'veth1a2b 169.254.10.1/16',
+        'coresmith-door 10.205.0.2/16',
+        'tailscale0 100.101.102.103/32',
+        'wg0 10.8.0.1/24',
+    ])));
+
+    app()->call([new ReadServerAddresses($server), 'handle']);
+
+    expect($server->fresh()->public_addresses['private'])->toBe(['10.0.0.2/32', '10.8.0.1/24']);
+});
+
+test('the reading asks the server for its IPv4 addresses with their interfaces', function () {
+    expect(RemoteReachProbe::script())->toContain("echo '== private'")
+        ->toContain("ip -4 -o addr show scope global 2>/dev/null | awk '{print \$2, \$4}' || true");
 });
 
 test("a reading that couldn't ask get.coresmith.io keeps the IPv4 address it had", function () {
