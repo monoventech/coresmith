@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.31 (2026-11-20)
+
+### Changed
+- Servers take tags, and a server lists its apps' processes (#159)
+
 ## v0.8.30 (2026-11-20)
 
 ### Changed
