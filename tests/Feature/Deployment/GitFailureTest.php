@@ -47,6 +47,14 @@ test('a caller with no log to point at says what an unrecognised failure means',
         ->and(GitFailure::from('fatal: something new', gitFailureApp())->reason)->toBe('Git failed with an error Coresmith does not recognise. Its full output is in the log.');
 });
 
+test('a git host whose SSH key changed is named as that, with the command that trusts the new key', function () {
+    $failure = GitFailure::from("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nHost key for gitlab.com has changed and you have requested strict checking.\nHost key verification failed.\nfatal: Could not read from remote repository.\n", gitFailureApp('git@gitlab.com:acme/shop.git'));
+
+    expect($failure->kind)->toBe(GitFailure::HOST_KEY)
+        ->and($failure->retryable)->toBeFalse()
+        ->and($failure->reason)->toBe("gitlab.com's SSH key isn't the one Coresmith saw before. That happens when the git server is rebuilt, or when something is in the way. If you trust the new key, run sudo ssh-keygen -R gitlab.com -f /etc/coresmith/deploy-keys/known_hosts on the app's server, then deploy again.");
+});
+
 test('the host is named for ssh style urls too', function () {
     expect(GitFailure::from('Connection timed out', gitFailureApp('git@gitlab.example.com:ops/atlas.git'))->reason)->toContain('gitlab.example.com');
 });
