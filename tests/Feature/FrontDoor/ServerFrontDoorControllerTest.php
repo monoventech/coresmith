@@ -49,6 +49,21 @@ test("an owner turns the front door on through another of the team's servers", f
     Queue::assertPushed(SyncServerFrontDoor::class, fn(SyncServerFrontDoor $job): bool => $job->server->is($home));
 });
 
+test('a door with no room left is refused next to the server picker, and nothing starts', function () {
+    [$home, $door] = frontDoorControllerServers();
+
+    for ($host = 2; $host <= 254; $host++) {
+        ServerFrontDoor::query()->create(['server_id' => Server::factory()->create(['team_id' => $door->team_id])->id, 'door_server_id' => $door->id, 'state' => ServerFrontDoor::OPEN, 'subnet' => '10.205.0.0/24', 'door_address' => '10.205.0.1', 'home_address' => "10.205.0.{$host}"]);
+    }
+
+    $this->actingAs(frontDoorControllerUser($home->team))
+        ->post(route('servers.front-door.store', $home), ['door' => $door->id])
+        ->assertSessionHasErrors(['door' => 'web-1 already takes visitors in for 253 servers, the most one server can. Pick another server.']);
+
+    expect($home->frontDoor()->exists())->toBeFalse();
+    Queue::assertNothingPushed();
+});
+
 test('only owners can turn it on or off', function (TeamRole $role) {
     [$home, $door] = frontDoorControllerServers();
     $user = frontDoorControllerUser($home->team, $role);
@@ -115,6 +130,17 @@ test('a door that takes visitors in for another server cannot be removed', funct
         ->assertSessionHas('error', "beelink takes visitors through web-1. Turn that off on beelink's page first.");
 
     expect($door->fresh())->not->toBeNull();
+});
+
+test('a server that takes visitors through another one cannot be detached until that is off', function () {
+    [$home, $door] = frontDoorControllerServers();
+    ServerFrontDoor::query()->create(['server_id' => $home->id, 'door_server_id' => $door->id, 'state' => ServerFrontDoor::OPEN, 'subnet' => '10.205.0.0/24', 'door_address' => '10.205.0.1', 'home_address' => '10.205.0.2']);
+
+    $this->actingAs(frontDoorControllerUser($home->team))
+        ->delete(route('servers.destroy', $home))
+        ->assertSessionHas('error', "beelink takes visitors through web-1. Turn that off on beelink's page first.");
+
+    expect($home->fresh()->trashed())->toBeFalse();
 });
 
 test('the server page offers the team\'s other open servers as doors, and never the server itself', function () {
