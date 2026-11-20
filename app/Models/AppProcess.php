@@ -8,11 +8,14 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AppProcess extends Model
 {
+    use IgnoresJsonKeyOrder;
+
     public const DAY_SECONDS = 86400;
 
     protected $guarded = ['id'];
