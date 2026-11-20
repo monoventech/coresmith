@@ -248,12 +248,24 @@ test.describe('hardening', () => {
             /^Checked (today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
         )
 
-        for (const key of ['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts', 'http3']) {
+        for (const key of [
+            'ssh',
+            'fail2ban',
+            'kernel',
+            'patches',
+            'maintenance',
+            'controls',
+            'unknown_hosts',
+            'http3'
+        ]) {
             await expect(page.getByTestId(`protection-${key}`)).toHaveAttribute('data-state', 'on')
         }
 
         await expect(page.getByTestId('protection-fail2ban')).toContainText(
             'An address that fails to sign in 5 times in 10 minutes is blocked for an hour.'
+        )
+        await expect(page.getByTestId('protection-maintenance')).toContainText(
+            /Last ran .+, and freed 393\.2\sMB\. System logs take up 96\sMB\./
         )
         await expect(card.getByRole('button')).toHaveCount(0)
         await expect(card).not.toContainText(/Caddy|systemd|fail2ban|sysctl|admin API/)
