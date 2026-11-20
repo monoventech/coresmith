@@ -48,6 +48,13 @@ final class SyncServerFrontDoor implements ShouldQueue
         return now()->addMinutes(30);
     }
 
+    public static function whenOpen(?Server $server): void
+    {
+        if ($server !== null && ServerFrontDoor::query()->where('server_id', $server->getKey())->where('state', ServerFrontDoor::OPEN)->exists()) {
+            self::dispatch($server);
+        }
+    }
+
     public function handle(SSHConnectionManager $connections, FrontDoorSync $sync): void
     {
         $frontDoor = ServerFrontDoor::query()->where('server_id', $this->server->getKey())->with(['home', 'door'])->first();

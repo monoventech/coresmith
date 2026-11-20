@@ -34,7 +34,7 @@ final class AddressPresenter
     ) {}
 
     /**
-     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, tunnel: ?string, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string, tunnel: ?array{name: string, url: string}}, machine: ?string, follow: ?array{github: ?string, sso: ?string}}|null
+     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, tunnel: ?string, front_door: ?string, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string, tunnel: ?array{name: string, url: string}}, machine: ?string, follow: ?array{github: ?string, sso: ?string}}|null
      */
     public function present(): ?array
     {
@@ -48,14 +48,17 @@ final class AddressPresenter
         $machine = Server::query()->where('runs_coresmith', true)->first();
         $tunnel = $machine?->tunnel()->first();
         $carried = $tunnel?->carries($host) === true;
+        $frontDoor = $machine?->frontDoor()->with('door')->first();
+        $throughDoor = $frontDoor?->carries($host) === true;
 
         return [
             'host' => $host,
             'url' => $url,
             'certificate' => InstallationAddress::certificate($host)->value,
             'managed' => $this->address->managed(),
-            'ipv6_only' => !$carried && $this->ipv6Only($host),
+            'ipv6_only' => !$carried && !$throughDoor && $this->ipv6Only($host),
             'tunnel' => $this->tunnel($machine, $tunnel, $carried),
+            'front_door' => $throughDoor ? null : $frontDoor?->door?->name,
             'change' => $change,
             'check' => AddressCheck::current(),
             'reach' => AddressReading::current($host),

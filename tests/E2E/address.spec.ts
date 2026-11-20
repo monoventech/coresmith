@@ -125,6 +125,18 @@ test.describe("Coresmith's address", () => {
         await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
     })
 
+    test("with IPv4 through another server on but not carrying the address yet, the warning names that server and links to this machine's page", async ({
+        page
+    }) => {
+        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', front_door: 'web-1', machine: '/servers/beelink' })
+
+        await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. It doesn't go through web-1 yet. See why on this machine's page."
+        )
+        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
+        await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
+    })
+
     test('the daily reading of an IPv6-only domain leads with IPv4 through Cloudflare, and gives the A record only with its condition', async ({
         page
     }) => {
@@ -374,6 +386,34 @@ test.describe('Cloudflare DNS for the address', () => {
         await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
 
         await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toBeVisible()
+    })
+
+    test('a check refused for a reason pointing the domain cannot fix leaves out the Cloudflare button', async ({
+        page
+    }) => {
+        const connected = { cloudflare: { connected: true, host: null, error: null, synced: null } }
+        const refused = {
+            host: 'coresmith.example.com',
+            ok: false,
+            problems: [
+                "Coresmith can't change its address while visitors come in through web-1. Turn off IPv4 through another server on this machine's page, change the address, then turn it on again."
+            ],
+            notes: [],
+            records: [],
+            pointable: false,
+            checked_at: '2026-11-20T05:50:00Z'
+        }
+
+        await withProps(page, /\/settings\/address\/check$/, (props) => {
+            props.address = { ...(props.address as Record<string, unknown>), ...connected, check: refused }
+        })
+        await settingsShowing(page, connected)
+        await card(page).getByRole('button', { name: 'Change' }).click()
+        await dialog(page).getByLabel('Domain').fill('coresmith.example.com')
+        await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
+
+        await expect(dialog(page).getByTestId('address-check')).toContainText('Turn off IPv4 through another server')
+        await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toHaveCount(0)
     })
 
     for (const theme of ['light', 'dark'] as const) {
