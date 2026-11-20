@@ -173,11 +173,6 @@
     </ul>
     <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
         Each app runs walled off from the others.
-        <Link
-            href={route('servers.under-the-hood', server.key)}
-            class="whitespace-nowrap text-foreground underline underline-offset-2"
-            data-testid="under-the-hood-link">What Coresmith runs here</Link
-        >
     </p>
     <div class="pt-3">
         <ToggleRow
