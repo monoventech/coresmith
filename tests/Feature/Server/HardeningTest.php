@@ -154,6 +154,38 @@ test('the Red Hat family installs security updates, not only downloads them', fu
         ->and($command)->toContain('systemctl enable --now dnf-automatic.timer');
 })->with(['rocky', 'almalinux', 'fedora', 'amzn']);
 
+test("the weekly clean-up removes old packages with each family's own tool, then trims system logs to the cap", function (string $os, string $remove, string $clean) {
+    $script = (new SecurityHardening)->maintenanceScript(Server::factory()->make(['os_name' => $os, 'meta' => ['disk_gb' => 80]]));
+
+    expect($script)->toContain($remove)
+        ->toContain($clean)
+        ->toContain('journalctl --vacuum-size=500M')
+        ->toContain('echo "coresmith-freed $((after - before))"');
+})->with([
+    ['ubuntu', 'apt-get -o DPkg::Lock::Timeout=600 autoremove --purge -y', 'apt-get -o DPkg::Lock::Timeout=600 clean'],
+    ['debian', 'apt-get -o DPkg::Lock::Timeout=600 autoremove --purge -y', 'apt-get -o DPkg::Lock::Timeout=600 clean'],
+    ['rocky', 'dnf -y autoremove', 'dnf clean packages'],
+]);
+
+test('system logs are capped at 500 MB, or 200 MB on a disk under 20 GB, and kept a month at most', function () {
+    $hardening = new SecurityHardening;
+
+    expect($hardening->journalCap(Server::factory()->make(['meta' => ['disk_gb' => 80]])))->toContain("[Journal]\nSystemMaxUse=500M\nMaxRetentionSec=1month")
+        ->and($hardening->journalCap(Server::factory()->make(['meta' => ['disk_gb' => 15]])))->toContain('SystemMaxUse=200M')
+        ->and($hardening->journalCap(Server::factory()->make(['meta' => []])))->toContain('SystemMaxUse=500M');
+});
+
+test('the clean-up runs every Sunday at 04:30, spread over an hour, and catches up after the server was off', function () {
+    $hardening = new SecurityHardening;
+
+    expect($hardening->maintenanceTimer())->toContain('OnCalendar=Sun *-*-* 04:30:00')
+        ->toContain('RandomizedDelaySec=1h')
+        ->toContain('Persistent=true')
+        ->toContain('WantedBy=timers.target')
+        ->and($hardening->maintenanceService())->toContain('Type=oneshot')
+        ->toContain('ExecStart=' . SecurityHardening::MAINTENANCE_SCRIPT);
+});
+
 test('every hardening sysctl from the spec is present', function (string $sysctl) {
     expect((new SecurityHardening)->sysctlConfig())->toContain($sysctl);
 })->with([

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Server;
 use App\Services\Panel\ProtectionRows;
+use Carbon\CarbonImmutable;
 
 /**
  * @param  array<string, mixed>  $meta
@@ -20,6 +21,7 @@ function protectionReadingMeta(array $overrides = []): array
 {
     return ['protections' => [
         'ssh' => 'on', 'fail2ban' => 'on', 'kernel' => 'on', 'kernel_off' => [], 'patches' => 'on', 'controls' => 'on', 'http3' => 'on',
+        'maintenance' => 'on', 'maintenance_ran' => null, 'maintenance_failed' => false, 'maintenance_freed' => null, 'journal' => '24.0M',
         'checked_at' => now()->subMinutes(5)->toIso8601String(),
         ...$overrides,
     ], 'caddy_unknown_hosts' => 'closed'];
@@ -31,7 +33,7 @@ test('a server that was never checked says so, and when Coresmith checks', funct
     $rows = collect($card['rows'])->keyBy('key');
 
     expect($card['checked'])->toBeNull()
-        ->and($rows->pluck('key')->all())->toBe(['ssh', 'fail2ban', 'kernel', 'patches', 'http3', 'controls', 'unknown_hosts'])
+        ->and($rows->pluck('key')->all())->toBe(['ssh', 'fail2ban', 'kernel', 'patches', 'maintenance', 'http3', 'controls', 'unknown_hosts'])
         ->and($rows['fail2ban']['state'])->toBe('pending')
         ->and($rows['fail2ban']['detail'])->toBe('Coresmith checks this within the hour.')
         ->and($rows['kernel']['state'])->toBe('pending')
@@ -46,6 +48,43 @@ test('a server whose protections all read as on says what each one does, with no
         ->and($rows['fail2ban']['detail'])->toBe('An address that fails to sign in 5 times in 10 minutes is blocked for an hour.')
         ->and($rows['patches']['detail'])->toBe('The server installs security updates every day.')
         ->and($rows['http3'])->toMatchArray(['label' => 'Browsers can use HTTP/3', 'detail' => 'The firewall lets HTTP/3 through.']);
+});
+
+test('the weekly clean-up says when it last ran and what it freed, or that it has not run yet', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 10:00:00'));
+
+    expect(protectionRows(protectionReadingMeta())['maintenance'])->toMatchArray([
+        'label' => 'Old packages and logs cleared weekly',
+        'state' => 'on',
+        'detail' => "Runs every Sunday morning. It hasn't run yet.",
+        'fix' => null,
+    ])
+        ->and(protectionRows(protectionReadingMeta(['maintenance_ran' => '2026-11-15T04:41:07+00:00', 'maintenance_freed' => 1288490188, 'journal' => '120.0M']))['maintenance']['detail'])
+        ->toBe("Last ran Nov 15, and freed 1.2\u{00A0}GB. System logs take up 120\u{00A0}MB.")
+        ->and(protectionRows(protectionReadingMeta(['maintenance_ran' => '2026-11-15T04:41:07+00:00', 'maintenance_freed' => 0, 'journal' => null]))['maintenance']['detail'])
+        ->toBe('Last ran Nov 15. There was nothing to clear.')
+        ->and(protectionRows(protectionReadingMeta(['maintenance_ran' => now()->subSeconds(20)->toIso8601String(), 'maintenance_freed' => 0, 'journal' => null]))['maintenance']['detail'])
+        ->toBe('Last ran a moment ago. There was nothing to clear.');
+});
+
+test('a clean-up whose result the server no longer has says only when it ran', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 10:00:00'));
+
+    expect(protectionRows(protectionReadingMeta(['maintenance_ran' => '2026-11-15T04:41:02+00:00', 'maintenance_freed' => null, 'journal' => '120.0M']))['maintenance']['detail'])
+        ->toBe("Last ran Nov 15. System logs take up 120\u{00A0}MB.");
+});
+
+test('a clean-up that is off offers to set it up, and one whose last run failed offers to run it now', function () {
+    expect(protectionRows(protectionReadingMeta(['maintenance' => 'off']))['maintenance'])->toMatchArray([
+        'state' => 'off',
+        'detail' => 'Old packages and system logs build up on this server.',
+        'fix' => 'Set it up',
+    ])
+        ->and(protectionRows(protectionReadingMeta(['maintenance_ran' => '2026-11-15T04:41:07+00:00', 'maintenance_failed' => true]))['maintenance'])->toMatchArray([
+            'state' => 'off',
+            'detail' => "The last clean-up didn't finish. Coresmith runs it again next Sunday.",
+            'fix' => 'Run it now',
+        ]);
 });
 
 test('a firewall that blocks HTTP/3 says browsers fall back, and offers to open it', function () {

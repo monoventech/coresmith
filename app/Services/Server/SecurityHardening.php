@@ -74,6 +74,16 @@ final class SecurityHardening
 
     public const AUDIT_RULES = '/etc/audit/rules.d/coresmith.rules';
 
+    public const JOURNAL_CAP = '/etc/systemd/journald.conf.d/coresmith.conf';
+
+    public const MAINTENANCE_SCRIPT = '/usr/local/sbin/coresmith-maintenance';
+
+    public const MAINTENANCE_SERVICE = '/etc/systemd/system/coresmith-maintenance.service';
+
+    public const MAINTENANCE_TIMER = '/etc/systemd/system/coresmith-maintenance.timer';
+
+    public const SMALL_DISK_GB = 20;
+
     public const PUBLIC_KEY_PATTERN = '/^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+) [A-Za-z0-9+\/=]+( [^\x00-\x1F\x7F]*)?\z/';
 
     public const MANAGED_KEYS_BEGIN = '# coresmith-managed-keys begin';
@@ -89,6 +99,7 @@ final class SecurityHardening
         $this->installFail2ban($connection);
         $this->applySysctls($connection);
         $this->configureAutomaticUpdates($connection);
+        $this->configureMaintenance($connection);
 
         if (!$connection->server()->runs_coresmith) {
             $this->setTimezone($connection);
@@ -383,7 +394,7 @@ final class SecurityHardening
 
     public function restore(SSHConnection $connection, string $protection): void
     {
-        if (!in_array($protection, ['kernel', 'http3'], true)) {
+        if (!in_array($protection, ['kernel', 'http3', 'maintenance'], true)) {
             $connection->execute(PackageManagerFactory::for($connection->server())->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
         }
 
@@ -391,6 +402,7 @@ final class SecurityHardening
             'fail2ban' => $this->installFail2ban($connection),
             'kernel' => $this->applySysctls($connection),
             'patches' => $this->configureAutomaticUpdates($connection),
+            'maintenance' => $this->configureMaintenance($connection, runNow: true),
             'http3' => $connection->execute(FirewallManagerFactory::for($connection->server())->allow(FirewallConfigurator::HTTP3_PORT, 'udp'), sudo: true)->throw(),
         };
     }
@@ -438,6 +450,82 @@ final class SecurityHardening
         return $packages->install(['dnf-automatic']) . ' && ' . <<<'BASH'
         conf=/etc/dnf/automatic.conf && touch "$conf" && { grep -q '^\[commands\]' "$conf" || printf '[commands]\n' >> "$conf"; } && for setting in 'upgrade_type = security' 'apply_updates = yes'; do key=${setting%% *}; if grep -Eq "^[#[:space:]]*${key}[[:space:]]*=" "$conf"; then sed -i -E "s/^[#[:space:]]*${key}[[:space:]]*=.*/${setting}/" "$conf"; else sed -i "/^\[commands\]/a ${setting}" "$conf"; fi; done
         BASH . ' && systemctl enable --now dnf-automatic.timer';
+    }
+
+    public function configureMaintenance(SSHConnection $connection, bool $runNow = false): void
+    {
+        $server = $connection->server();
+
+        $connection->execute('mkdir -p ' . dirname(self::JOURNAL_CAP), sudo: true)->throw();
+        $connection->uploadContent($this->journalCap($server), self::JOURNAL_CAP);
+        $connection->uploadContent($this->maintenanceScript($server), self::MAINTENANCE_SCRIPT);
+        $connection->execute('chmod 755 ' . self::MAINTENANCE_SCRIPT, sudo: true)->throw();
+        $connection->uploadContent($this->maintenanceService(), self::MAINTENANCE_SERVICE);
+        $connection->uploadContent($this->maintenanceTimer(), self::MAINTENANCE_TIMER);
+        $connection->execute('systemctl daemon-reload && systemctl restart systemd-journald && systemctl enable --now coresmith-maintenance.timer', sudo: true)->throw();
+
+        if ($runNow) {
+            $connection->execute('systemctl start coresmith-maintenance.service', sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        }
+    }
+
+    public function journalLimit(Server $server): string
+    {
+        $disk = (int) (((array) $server->meta)['disk_gb'] ?? 0);
+
+        return $disk > 0 && $disk < self::SMALL_DISK_GB ? '200M' : '500M';
+    }
+
+    public function journalCap(Server $server): string
+    {
+        return "[Journal]\nSystemMaxUse={$this->journalLimit($server)}\nMaxRetentionSec=1month\n";
+    }
+
+    public function maintenanceScript(Server $server): string
+    {
+        $packages = in_array($server->os_name, ProtectionCheck::APT_FAMILY, true)
+            ? ['DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 autoremove --purge -y', 'apt-get -o DPkg::Lock::Timeout=600 clean']
+            : ['dnf -y autoremove', 'dnf clean packages'];
+
+        return implode("\n", [
+            '#!/bin/bash',
+            'set -eu',
+            'before=$(df --output=avail -B1 / | tail -n 1)',
+            ...$packages,
+            'journalctl --vacuum-size=' . $this->journalLimit($server),
+            'after=$(df --output=avail -B1 / | tail -n 1)',
+            'echo "coresmith-freed $((after - before))"',
+        ]) . "\n";
+    }
+
+    public function maintenanceService(): string
+    {
+        return implode("\n", [
+            '[Unit]',
+            'Description=Coresmith weekly clean-up',
+            '',
+            '[Service]',
+            'Type=oneshot',
+            'ExecStart=' . self::MAINTENANCE_SCRIPT,
+            'Nice=10',
+            'IOSchedulingClass=idle',
+        ]) . "\n";
+    }
+
+    public function maintenanceTimer(): string
+    {
+        return implode("\n", [
+            '[Unit]',
+            'Description=Coresmith weekly clean-up',
+            '',
+            '[Timer]',
+            'OnCalendar=Sun *-*-* 04:30:00',
+            'RandomizedDelaySec=1h',
+            'Persistent=true',
+            '',
+            '[Install]',
+            'WantedBy=timers.target',
+        ]) . "\n";
     }
 
     private function setTimezone(SSHConnection $connection): void
