@@ -193,7 +193,7 @@ test.describe('database backups to s3', () => {
         await page.goto('/monoven/dashboard')
     })
 
-    test('a team sends its databases to s3', async ({ page }, testInfo) => {
+    test('a team sends its databases to s3 every hour', async ({ page }, testInfo) => {
         await page.goto(`/${own(testInfo, 'lab')}/settings/team`)
 
         const card = page.getByTestId('offsite-backups-card')
@@ -203,9 +203,14 @@ test.describe('database backups to s3', () => {
         await dialog(page).getByLabel('Bucket').fill('lab-backups')
         await dialog(page).getByLabel('Access key ID').fill('AKIAEXAMPLE0000000000')
         await dialog(page).getByLabel('Secret access key').fill('an-e2e-secret-access-key')
+        await expect(dialog(page).getByLabel('How often')).toHaveValue('daily')
+        await dialog(page).getByLabel('How often').selectOption('hourly')
         await dialog(page).getByRole('button', { name: 'Save' }).click()
 
-        await expect(toast(page)).toContainText('Saved.')
+        await expect(toast(page)).toContainText('Saved. Databases go to S3 every hour.')
+        await expect(card).toContainText(
+            'Every hour, each MySQL and PostgreSQL database goes from its server straight to your bucket.'
+        )
         await expect(card).toContainText('s3://lab-backups/')
         await expect(card).toContainText('not run yet')
 
