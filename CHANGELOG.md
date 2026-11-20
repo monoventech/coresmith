@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.29 (2026-11-20)
+
+### Changed
+- A server the internet can't reach on IPv4 can take visitors through another of your servers (#152)
+
 ## v0.8.28 (2026-11-20)
 
 ### Changed
