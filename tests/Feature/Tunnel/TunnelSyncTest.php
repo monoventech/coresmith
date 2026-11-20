@@ -110,7 +110,7 @@ test('a domain Cloudflare redirects to another site stays on the tunnel and is n
 
     expect($tunnel->state)->toBe(ServerTunnel::OPEN)
         ->and($tunnel->hosts)->toContain('pencil.example')
-        ->and($tunnel->diverted)->toBe([['host' => 'pencil.example', 'to' => 'cloudflare.vc']]);
+        ->and($tunnel->diverted)->toEqual([['host' => 'pencil.example', 'to' => 'cloudflare.vc']]);
 });
 
 test('turning on makes the tunnel, starts the connector and routes the domains it can', function () {
