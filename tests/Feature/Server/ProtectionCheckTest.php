@@ -51,9 +51,60 @@ test('a server with every protection in place reads as on', function () {
         'kernel' => 'on',
         'kernel_off' => [],
         'patches' => 'on',
+        'maintenance' => 'on',
+        'maintenance_ran' => null,
+        'maintenance_failed' => false,
+        'maintenance_freed' => null,
+        'journal' => '24.0M',
         'controls' => 'on',
         'http3' => 'on',
     ]);
+});
+
+test('the weekly clean-up says when it last ran, whether it failed and what it freed', function () {
+    $reading = app(ProtectionCheck::class)->parse(protectionServer(), ProtectionReading::output(['maintenance' => [
+        'capped',
+        'enabled',
+        'ExecMainExitTimestamp=Sun 2026-11-15 04:41:07 UTC',
+        'ExecMainStatus=0',
+        'Archived and active journals take up 120.0M in the file system.',
+        'coresmith-freed 1288490188',
+    ]]));
+
+    expect($reading)->toMatchArray(['maintenance' => 'on', 'maintenance_ran' => '2026-11-15T04:41:07+00:00', 'maintenance_failed' => false, 'maintenance_freed' => 1288490188, 'journal' => '120.0M']);
+});
+
+test('the weekly clean-up reads as off without the log cap or its timer, and a run that exited with an error reads as failed', function (array $lines, string $state, bool $failed) {
+    $reading = app(ProtectionCheck::class)->parse(protectionServer(), ProtectionReading::output(['maintenance' => $lines]));
+
+    expect($reading['maintenance'])->toBe($state)
+        ->and($reading['maintenance_failed'])->toBe($failed);
+})->with([
+    'no cap' => [['uncapped', 'enabled', 'ExecMainExitTimestamp=', 'ExecMainStatus=0'], 'off', false],
+    'timer off' => [['capped', 'disabled', 'ExecMainExitTimestamp=', 'ExecMainStatus=0'], 'off', false],
+    'no timer' => [['capped', 'missing', 'ExecMainExitTimestamp=', 'ExecMainStatus=0'], 'off', false],
+    'failed run' => [['capped', 'enabled', 'ExecMainExitTimestamp=Sun 2026-11-15 04:41:07 UTC', 'ExecMainStatus=100'], 'on', true],
+]);
+
+test('a clean-up that ran before the server restarted still reads as ran, from the timer', function (array $lines, ?string $ran) {
+    $reading = app(ProtectionCheck::class)->parse(protectionServer(), ProtectionReading::output(['maintenance' => ['capped', 'enabled', ...$lines]]));
+
+    expect($reading['maintenance_ran'])->toBe($ran)
+        ->and($reading['maintenance_failed'])->toBeFalse();
+})->with([
+    'restarted since' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', 'LastTriggerUSec=Sun 2026-11-15 04:41:02 UTC'], '2026-11-15T04:41:02+00:00'],
+    'never ran' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', 'LastTriggerUSec=n/a'], null],
+    'older systemd' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', 'LastTriggerUSec='], null],
+    'run by hand' => [['ExecMainExitTimestamp=Wed 2026-11-18 10:02:44 UTC', 'ExecMainStatus=0', 'LastTriggerUSec=Sun 2026-11-15 04:41:02 UTC'], '2026-11-18T10:02:44+00:00'],
+]);
+
+test('the clean-up section comes before the routing controls, which mark the end of the check', function () {
+    $script = app(ProtectionCheck::class)->script(protectionServer());
+
+    expect(strpos($script, "echo '== maintenance'"))->toBeLessThan(strpos($script, "echo '== controls'"))
+        ->and($script)->toContain('systemctl is-enabled coresmith-maintenance.timer 2>/dev/null || echo missing')
+        ->and($script)->toContain('systemctl show coresmith-maintenance.timer -p LastTriggerUSec 2>/dev/null || true')
+        ->and($script)->toContain('journalctl --disk-usage 2>/dev/null || true');
 });
 
 test('the sign-in blocker reads as off when it stopped or lost its SSH jail', function (array $lines) {
@@ -159,6 +210,11 @@ test('the hourly check records what it read and when', function () {
         'kernel' => 'on',
         'kernel_off' => [],
         'patches' => 'on',
+        'maintenance' => 'on',
+        'maintenance_ran' => null,
+        'maintenance_failed' => false,
+        'maintenance_freed' => null,
+        'journal' => '24.0M',
         'controls' => 'on',
         'http3' => 'on',
         'checked_at' => now()->toIso8601String(),

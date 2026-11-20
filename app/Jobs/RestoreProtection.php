@@ -22,7 +22,7 @@ final class RestoreProtection implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public const PROTECTIONS = ['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts', 'http3'];
+    public const PROTECTIONS = ['ssh', 'fail2ban', 'kernel', 'patches', 'maintenance', 'controls', 'unknown_hosts', 'http3'];
 
     public const LEFT_TO_OWNER = ['ssh', 'unknown_hosts'];
 

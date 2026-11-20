@@ -29,6 +29,7 @@ final class ServerProtectionController extends Controller
             'ssh' => 'Turning off password login.',
             'controls', 'unknown_hosts' => 'Closing them now.',
             'http3' => 'Opening it.',
+            'maintenance' => 'Setting it up.',
             default => 'Turning it back on.',
         });
     }
