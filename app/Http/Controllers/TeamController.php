@@ -156,6 +156,7 @@ final class TeamController extends Controller
             'bucket' => $destination->bucket,
             'prefix' => $destination->prefix,
             'path_style' => $destination->path_style,
+            'frequency' => $destination->frequency,
             'last_run' => Formats::when($destination->last_run_at),
             'failing' => ManagedDatabase::query()->where('team_id', $team->getKey())->whereNotNull('last_offsite_error')->count(),
         ];

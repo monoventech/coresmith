@@ -12,6 +12,7 @@ use App\Enums\Edition;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Jobs\BackUpPanel;
+use App\Models\BackupDestination;
 use App\Models\InstanceSetting;
 use App\Models\Server;
 use App\Models\SshKey;
@@ -20,6 +21,8 @@ use App\Models\User;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Moves\MovePresenter;
 use App\Services\Panel\AddressPresenter;
+use App\Services\Panel\BackupCopy;
+use App\Services\Panel\Formats;
 use App\Services\Panel\PanelBackup;
 use App\Services\Panel\PanelUpdatesPresenter;
 use App\Services\Panel\RemovalPresenter;
@@ -67,6 +70,7 @@ final class GeneralSettingsController extends Controller
                     'verified' => $latest['verified'],
                 ],
                 'keep' => PanelBackup::KEEP,
+                'copy' => $cloud ? null : self::copy(),
             ],
             'account' => ['refusal' => $closing->refusal($request->user()), 'hidden' => $closing->hidden($request->user())],
             'removal' => $removal->present($request->user(), $this->currentTeam()),
@@ -155,5 +159,29 @@ final class GeneralSettingsController extends Controller
             str_starts_with($publicKey, 'ecdsa') => 'ecdsa',
             default => 'key',
         };
+    }
+
+    /**
+     * @return array{endpoint: ?string, region: string, bucket: string, prefix: ?string, path_style: bool, last: ?string, error: ?string}|null
+     */
+    private static function copy(): ?array
+    {
+        $destination = BackupDestination::forCoresmith();
+
+        if (!$destination instanceof BackupDestination) {
+            return null;
+        }
+
+        $status = BackupCopy::status();
+
+        return [
+            'endpoint' => $destination->endpoint,
+            'region' => $destination->region,
+            'bucket' => $destination->bucket,
+            'prefix' => $destination->prefix,
+            'path_style' => $destination->path_style,
+            'last' => $status !== null && $status['ok'] ? Formats::when(CarbonImmutable::parse($status['at'])) : null,
+            'error' => $status !== null && !$status['ok'] ? $status['error'] : null,
+        ];
     }
 }

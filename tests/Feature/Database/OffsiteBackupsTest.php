@@ -383,6 +383,36 @@ test('self-hosted teams with a destination are backed up, except databases Cores
     Queue::assertNotPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($creating) || $job->database->is($failed));
 });
 
+test('hourly destinations go with the hourly run, and nightly ones with the nightly run', function () {
+    Queue::fake();
+    $hourlyTeam = Team::factory()->owned()->create(['slug' => 'hourly']);
+    $nightlyTeam = Team::factory()->owned()->create(['slug' => 'nightly']);
+    $hourly = offsiteDatabase($hourlyTeam, attributes: ['name' => 'hourly_db']);
+    $nightly = offsiteDatabase($nightlyTeam, attributes: ['name' => 'nightly_db']);
+    offsiteDestination($hourlyTeam, ['frequency' => 'hourly']);
+    offsiteDestination($nightlyTeam);
+
+    $this->artisan('coresmith:backup-databases', ['--hourly' => true])->assertSuccessful();
+
+    Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($hourly) && $job->offsite);
+    Queue::assertNotPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($nightly));
+
+    Queue::fake();
+    $this->artisan('coresmith:backup-databases')->assertSuccessful();
+
+    Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($nightly) && $job->offsite);
+    Queue::assertNotPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($hourly));
+});
+
+test('the hourly run is scheduled at half past every hour', function () {
+    $event = collect(app(Schedule::class)->events())->first(fn(Event $event): bool => $event->description === 'coresmith:backup-databases-hourly');
+
+    expect($event)->not->toBeNull()
+        ->and($event->expression)->toBe('30 * * * *')
+        ->and($event->command)->toContain('coresmith:backup-databases --hourly')
+        ->and($event->withoutOverlapping)->toBeTrue();
+});
+
 test('the nightly run is scheduled', function () {
     $event = collect(app(Schedule::class)->events())->first(fn(Event $event): bool => $event->description === 'coresmith:backup-databases');
 

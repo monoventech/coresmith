@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.30 (2026-11-20)
+
+### Changed
+- Coresmith copies its own backups to S3 without its keys, and coresmith:restore puts one back on a new machine (#157)
+- Database backups can go to S3 every hour, and changing the destination keeps the saved keys (#156)
+- An address check that sends you to this machine's page links to it (#155)
+- A git server whose SSH key changed is named as that, with the command that trusts the new key (#154)
+
 ## v0.8.29 (2026-11-20)
 
 ### Changed

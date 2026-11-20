@@ -189,6 +189,7 @@ final class RepositoryReader
         return match ($failure->kind) {
             GitFailure::NOT_FOUND => RepositoryRead::failed("There is no repository at {$url}. Check the URL.", true),
             GitFailure::UNREADABLE => RepositoryRead::failed($this->unreadable($access, $url, $host), true),
+            GitFailure::HOST_KEY => RepositoryRead::failed(GitFailure::hostKeyChanged($host, 'check again'), true),
             GitFailure::BRANCH => RepositoryRead::failed("Branch {$branch} isn't in the repository. Check the branch name.", true),
             GitFailure::DNS => RepositoryRead::failed("{$server->name} couldn't look up {$host}. Check its DNS settings, then try again.", false),
             GitFailure::NETWORK => RepositoryRead::failed("{$server->name} couldn't reach {$host}. Check its firewall allows outbound HTTPS and SSH, then try again.", false),

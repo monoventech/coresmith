@@ -16,11 +16,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BackupDestination extends Model
 {
+    public const DAILY = 'daily';
+
+    public const HOURLY = 'hourly';
+
     use HasFactory, HasUlids;
 
     protected $guarded = ['id'];
 
     protected $hidden = ['access_key_id', 'secret_access_key'];
+
+    public static function forCoresmith(): ?self
+    {
+        return self::query()->whereNull('team_id')->first();
+    }
 
     public function team(): BelongsTo
     {
