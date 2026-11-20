@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.32 (2026-11-20)
+
+### Changed
+- A server shows its private address, and servers clear old packages and logs every Sunday (#162)
+- A crash-looping process reads as one, the update card keeps to the changelog, last activity is recorded, and What Coresmith runs here leaves the public app (#161)
+
 ## v0.8.31 (2026-11-20)
 
 ### Changed
