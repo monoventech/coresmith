@@ -288,6 +288,7 @@
                         tone={server.state.tone}
                         aside={server.note}
                         asideClass={noteClass(server.state.tone)}
+                        tags={server.state.key === 'healthy' ? server.tags : []}
                         current={serverCurrent(server.href)}
                     />
                 {/each}

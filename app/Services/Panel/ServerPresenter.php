@@ -14,6 +14,7 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\User;
+use App\Services\Projects\AppTags;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\Server\HardwareFacts;
 use App\Services\SSH\AuthorizedKeyCommand;
@@ -54,6 +55,9 @@ final class ServerPresenter
             'key' => (string) $server->getRouteKey(),
             'name' => $server->name,
             'region' => $server->region,
+            'tags' => $server->tags,
+            'tags_href' => $user->can('update', $server) ? route('servers.tags.update', $server) : null,
+            'tag_suggestions' => $user->can('update', $server) && $server->team !== null ? AppTags::serverSuggestions($user, $server->team) : [],
             'state' => $state,
             'meta' => $fleet->meta($server, long: true),
             'active' => $server->status === ServerStatus::Active,

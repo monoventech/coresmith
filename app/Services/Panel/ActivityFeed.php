@@ -12,6 +12,7 @@ use App\Enums\DeploymentStatus;
 use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationSetupController;
 use App\Http\Controllers\ApplicationTagsController;
+use App\Http\Controllers\ServerTagsController;
 use App\Jobs\ApplyPhpLimits;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
@@ -268,6 +269,7 @@ final class ActivityFeed
             'server_destroy_failed' => [$this->text('Destroying '), $this->mono($server?->name), $this->text(' at ' . ($properties['provider'] ?? 'its provider') . ' failed')],
             'server_provisioned' => [$this->mono($server?->name), $this->text(' provisioned and hardened' . $this->took($properties['duration_seconds'] ?? null))],
             'server_renamed' => [$this->text('Server renamed to '), $this->mono($server?->name)],
+            ServerTagsController::CHANGED => [$this->text('Tags on '), $this->mono($server?->name), $this->text(($properties['to'] ?? []) === [] ? ' cleared' : ' set to ' . implode(', ', array_map('strval', (array) $properties['to'])))],
             'runtime_updated' => [
                 $this->text(($properties['runtime'] ?? 'A runtime') . ' ' . ($properties['from'] ?? '') . ' updated to ' . ($properties['to'] ?? '') . ' on '),
                 $this->mono($server?->name),

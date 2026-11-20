@@ -252,6 +252,7 @@ final class E2ESeeder extends Seeder
         $this->ssrDidNotStart($this->realtime('ssr-failed', 9220, [], Server::query()->where('name', 'hot-01')->sole()));
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->connectFixtures();
+        $this->tagFixtures();
         $this->databasePasswordFixtures();
         $this->serverWithNoFreePorts();
         $this->auditFixtures();
@@ -435,6 +436,15 @@ final class E2ESeeder extends Seeder
 
             $spent->replicate()->forceFill(['name' => $name, 'slug' => $name, 'system_user' => 'coresmith-app-' . $name, 'domain' => $name . '.bench.monoven.io', 'base_port' => $port])->saveQuietly();
         }
+    }
+
+    private function tagFixtures(): void
+    {
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->server("tags-{$code}", '203.0.113.' . (170 + $index), ServerStatus::Active);
+        }
+
+        $this->server('tagged-01', '203.0.113.175', ServerStatus::Active)->forceFill(['tags' => ['production', 'eu']])->save();
     }
 
     private function connectFixtures(): void

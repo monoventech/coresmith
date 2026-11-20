@@ -203,7 +203,7 @@ test('a move carries projects, what is in them and each app\'s tags', function (
     $payload['applications'][0]['project'] = 'p1';
     $payload['applications'][0]['tags'] = ['production'];
     $payload['applications'][1]['project'] = 'p1';
-    $payload['applications'][1]['tags'] = ['staging', 'eu'];
+    $payload['applications'][1]['tags'] = ['staging', 'eu', '#bad', str_repeat('x', 25)];
     $payload['databases'][0]['project'] = 'p1';
 
     $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
@@ -217,6 +217,17 @@ test('a move carries projects, what is in them and each app\'s tags', function (
         ->and([$api->project_id, $api->tags])->toBe([$project->id, ['staging', 'eu']])
         ->and([$docs->project_id, $docs->tags])->toBe([null, []])
         ->and($team->databases()->sole()->project_id)->toBe($project->id);
+});
+
+test("a move carries each server's tags, and a file from before server tags names the server's old environment as one", function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['servers'][1]['tags'] = ['db', 'eu', 'DB', '#odd'];
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    expect($team->servers()->where('name', 'web-01')->sole()->tags)->toBe(['Production'])
+        ->and($team->servers()->where('name', 'db-01')->sole()->tags)->toBe(['db', 'eu']);
 });
 
 test('a move file from when projects held environments keeps the projects and names the environments as tags', function () {
