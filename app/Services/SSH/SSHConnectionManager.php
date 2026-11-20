@@ -26,17 +26,17 @@ final class SSHConnectionManager
 
     public function for(Server $server): SSHConnection
     {
-        return $this->connections[$server->getKey()] ??= new SSHConnection($server, $this->makeTransport());
+        return $this->connections[$server->getKey()] ??= new SSHConnection($server, $this->makeTransport($server));
     }
 
     public function fresh(Server $server): SSHConnection
     {
-        return new SSHConnection($server, $this->makeTransport());
+        return new SSHConnection($server, $this->makeTransport($server));
     }
 
     public function brief(Server $server, int $seconds): SSHConnection
     {
-        return new SSHConnection($server, $this->makeTransport(), $seconds);
+        return new SSHConnection($server, $this->makeTransport($server), $seconds);
     }
 
     public function probe(Server $server, #[\SensitiveParameter] string $privateKey): SSHConnection
@@ -44,7 +44,7 @@ final class SSHConnectionManager
         $copy = clone $server;
         $copy->ssh_private_key = $privateKey;
 
-        return new SSHConnection($copy, $this->makeTransport());
+        return new SSHConnection($copy, $this->makeTransport($copy));
     }
 
     public function disconnect(Server $server): void
@@ -66,10 +66,10 @@ final class SSHConnectionManager
         $this->connections = [];
     }
 
-    private function makeTransport(): SSHTransport
+    private function makeTransport(Server $server): SSHTransport
     {
         return self::$transportFactory !== null
-            ? (self::$transportFactory)()
+            ? (self::$transportFactory)($server)
             : new Phpseclib3Transport;
     }
 }
