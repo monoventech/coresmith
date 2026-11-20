@@ -26,6 +26,11 @@ class BackupDestination extends Model
 
     protected $hidden = ['access_key_id', 'secret_access_key'];
 
+    public static function forCoresmith(): ?self
+    {
+        return self::query()->whereNull('team_id')->first();
+    }
+
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
