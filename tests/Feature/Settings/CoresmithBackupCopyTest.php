@@ -14,9 +14,11 @@ use App\Services\Panel\PanelBackup;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Client\Request;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -240,10 +242,11 @@ test('the Backups card says where copies go, when the last one went, and which k
             ->where('backups.copy.error', null));
 });
 
-test('the restore command puts a backup back after asking', function () {
+test('the restore command puts a backup back after asking, then has Coresmith pick up its keys', function () {
     $this->app->useStoragePath($this->copyRoot);
     coresmithCopyProbe($this->copyRoot);
     Queue::fake();
+    Process::fake();
     $backup = app(PanelBackup::class)->run();
     DB::connection('copy_probe')->table('probe')->update(['note' => 'changed']);
 
@@ -252,11 +255,16 @@ test('the restore command puts a backup back after asking', function () {
         ->assertFailed();
 
     expect(DB::connection('copy_probe')->table('probe')->value('note'))->toBe('changed');
+    Process::assertNothingRan();
 
     $this->artisan('coresmith:restore', ['archive' => $backup['path'], '--force' => true])->assertSuccessful();
 
     DB::purge('copy_probe');
     expect(DB::connection('copy_probe')->table('probe')->value('note'))->toBe('still here');
+
+    foreach (['config:cache', 'horizon:terminate', 'reverb:restart'] as $command) {
+        Process::assertRan(fn(PendingProcess $process): bool => $process->command === [PHP_BINARY, 'artisan', $command] && $process->path === base_path());
+    }
 });
 
 test("the restore command says when a backup can't be read", function () {

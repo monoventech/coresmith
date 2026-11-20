@@ -10,10 +10,13 @@ namespace App\Console\Commands;
 
 use App\Services\Panel\PanelBackup;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
 final class RestoreBackupCommand extends Command
 {
+    public const REFRESH = ['config:cache', 'horizon:terminate', 'reverb:restart'];
+
     protected $signature = 'coresmith:restore {archive : The backup to put back} {--force : Replace the database without asking}';
 
     protected $description = "Replace Coresmith's database with the one in a backup";
@@ -35,7 +38,14 @@ final class RestoreBackupCommand extends Command
         }
 
         activity()->withProperties(['archive' => basename($archive)])->log('panel_restored');
-        $this->info("Restored Coresmith's database from {$archive}.");
+
+        foreach (self::REFRESH as $command) {
+            if (Process::path(base_path())->timeout(120)->run([PHP_BINARY, 'artisan', $command])->failed()) {
+                $this->warn("Coresmith couldn't run {$command}. Run it yourself as the coresmith user, from " . base_path() . '.');
+            }
+        }
+
+        $this->info("Restored Coresmith's database from {$archive}. Coresmith now uses the keys in its .env.");
 
         return self::SUCCESS;
     }
