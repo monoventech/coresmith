@@ -11,6 +11,7 @@ namespace App\Services\Deployment;
 use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
 use App\Models\Application;
+use App\Services\Git\DeployKeyManager;
 use App\Services\Git\RefusalReason;
 
 final readonly class GitFailure
@@ -18,6 +19,8 @@ final readonly class GitFailure
     public const NOT_FOUND = 'not_found';
 
     public const UNREADABLE = 'unreadable';
+
+    public const HOST_KEY = 'host_key';
 
     public const BRANCH = 'branch';
 
@@ -41,12 +44,18 @@ final readonly class GitFailure
 
         return match (true) {
             self::mentions($output, ['Repository not found', 'remote: Not Found', 'does not appear to be a git repository']) => new self("Repository not found at {$url}. Check the URL is right and the repository still exists, then deploy again.", false, self::NOT_FOUND),
+            self::mentions($output, ['REMOTE HOST IDENTIFICATION HAS CHANGED', 'Host key verification failed']) => new self(self::hostKeyChanged($host, 'deploy again'), false, self::HOST_KEY),
             self::mentions($output, ['Permission denied (publickey)', 'Could not read from remote repository', 'Authentication failed', 'could not read Username', 'terminal prompts disabled']) => new self($advice ?? self::unreadable($application, $host), false, self::UNREADABLE),
             self::mentions($output, ["Remote branch {$branch} not found", 'did not match any', 'not a valid object name', 'unknown revision', "couldn't find remote ref"]) => new self("Branch {$branch} is not in the repository. Check the branch name in the app's settings, then deploy again.", false, self::BRANCH),
             self::mentions($output, ['Could not resolve host']) => new self("The server could not look up {$host}. Check its DNS settings, then deploy again.", true, self::DNS),
             self::mentions($output, ['Connection timed out', 'Connection refused', 'Operation timed out', 'Failed to connect', 'early EOF', 'RPC failed', 'Connection reset', 'The remote end hung up unexpectedly']) => new self("The server could not reach {$host}. Check its firewall allows outbound HTTPS and SSH, then deploy again.", true, self::NETWORK),
             default => new self($unrecognised ?? 'Git failed with an error Coresmith does not recognise. Its full output is in the log.', false),
         };
+    }
+
+    public static function hostKeyChanged(string $host, string $then): string
+    {
+        return "{$host}'s SSH key isn't the one Coresmith saw before. That happens when the git server is rebuilt, or when something is in the way. If you trust the new key, run sudo ssh-keygen -R {$host} -f " . DeployKeyManager::KEY_DIR . "/known_hosts on the app's server, then {$then}.";
     }
 
     public static function adviceFor(GitProviderException $refusal, Application $application): string
