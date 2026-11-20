@@ -17,6 +17,8 @@ final class EdgeRedirects
 {
     public const SECONDS = 8;
 
+    public const AGENT = 'Coresmith-tunnel-check';
+
     private const RESOLVER = 'https://cloudflare-dns.com/dns-query';
 
     /**
@@ -55,6 +57,7 @@ final class EdgeRedirects
 
             try {
                 $response = Http::withOptions(['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ["{$host}:443:" . ($code === 28 ? "[{$address}]" : $address)]]])
+                    ->withUserAgent(self::AGENT)
                     ->timeout(self::SECONDS)
                     ->get("https://{$host}/");
             } catch (Throwable) {
@@ -92,6 +95,7 @@ final class EdgeRedirects
     private function origin(SSHConnection $connection, string $host): ?string
     {
         $command = 'curl -sk -o /dev/null --max-time ' . self::SECONDS
+            . ' -A ' . escapeshellarg(self::AGENT)
             . ' -w ' . escapeshellarg('%{redirect_url}')
             . ' --resolve ' . escapeshellarg("{$host}:443:127.0.0.1")
             . ' ' . escapeshellarg("https://{$host}/");

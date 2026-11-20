@@ -21,6 +21,7 @@ use App\Notifications\TeamNotifier;
 use App\Services\Cron\CronRuns;
 use App\Services\Monitors\ReadingMonitor;
 use App\Services\SSH\SSHConnection;
+use App\Services\Tunnel\EdgeRedirects;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Cache;
@@ -117,7 +118,7 @@ final class MetricsCollector
     {
         $log = escapeshellarg(self::ACCESS_LOG);
         $result = $connection->execute(
-            "test -f {$log} && tail -n 500 {$log} | grep -o '\"host\":\"[^\"]*\"' | cut -d'\"' -f4 | sort -u || true",
+            "test -f {$log} && tail -n 500 {$log} | grep -vF " . escapeshellarg(EdgeRedirects::AGENT) . " | grep -o '\"host\":\"[^\"]*\"' | cut -d'\"' -f4 | sort -u || true",
             timeout: self::PROBE_SECONDS,
         );
 
