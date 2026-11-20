@@ -15,6 +15,7 @@
         tags = [],
         href = null,
         suggestions = [],
+        suggestionsLabel,
         limit,
         class: className
     }: {
@@ -22,6 +23,7 @@
         tags?: string[]
         href?: string | null
         suggestions?: string[]
+        suggestionsLabel?: string
         limit?: number
         class?: string
     } = $props()
@@ -140,6 +142,7 @@
                 labelledby="{uid}-title"
                 describedby="{uid}-hint"
                 {suggestions}
+                {suggestionsLabel}
                 {error}
                 onchange={save}
             />

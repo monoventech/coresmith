@@ -116,6 +116,7 @@
                     tags={server.tags}
                     href={server.tags_href}
                     suggestions={server.tag_suggestions}
+                    suggestionsLabel="Used on other servers"
                 />
             </div>
         {/if}

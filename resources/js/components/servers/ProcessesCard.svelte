@@ -53,10 +53,9 @@
             )}
             data-testid="process-row"
         >
-            <span class="min-w-0 truncate"
-                ><span class="font-mono text-[13.5px] font-medium">{row.process}</span><span
-                    class="text-muted-foreground sm:hidden">{` · ${row.app}`}</span
-                ></span
+            <span class="min-w-0 truncate max-sm:whitespace-normal"
+                ><span class="font-mono text-[13.5px] font-medium">{row.process}</span>
+                <span class="whitespace-nowrap text-muted-foreground sm:hidden">· {row.app}</span></span
             >
             <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{row.app}</span>
             <span class="font-mono text-[12.5px] whitespace-nowrap text-muted-foreground max-sm:hidden"

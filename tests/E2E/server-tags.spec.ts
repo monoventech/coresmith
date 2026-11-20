@@ -20,6 +20,7 @@ test.describe('tags on a server', () => {
             .getByRole('button', { name: `Add tags to ${server}` })
             .click()
         await expect(editor(page)).toContainText(`Tags on ${server}`)
+        await expect(editor(page)).toContainText('Used on other servers')
 
         const input = editor(page).getByRole('textbox', { name: `Tags on ${server}` })
 
