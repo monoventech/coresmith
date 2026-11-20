@@ -1,6 +1,8 @@
 <script lang="ts">
     import { Form, page, router } from '@inertiajs/svelte'
     import { X } from '@lucide/svelte'
+    import BackupCopy from '@/components/settings/BackupCopy.svelte'
+    import type { BackupCopyState } from '@/components/settings/BackupCopy.svelte'
     import AppHead from '@/components/AppHead.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -52,7 +54,11 @@
             notification_email: string | null
         }
         address?: Address | null
-        backups: { last: { when: string; size: string; verified: boolean } | null; keep: number }
+        backups: {
+            last: { when: string; size: string; verified: boolean } | null
+            keep: number
+            copy: BackupCopyState | null
+        }
         account: { refusal: string | null; hidden: boolean }
         team_deletion?: TeamDeletion | null
         timezones: string[]
@@ -168,6 +174,7 @@
                     <Button variant="outline" size="sm" disabled={backingUp} onclick={backUp}>Back up now</Button>
                 </div>
             {/if}
+            <BackupCopy copy={backups.copy} canManage={can.manageInstance} />
         {/if}
     </div>
 

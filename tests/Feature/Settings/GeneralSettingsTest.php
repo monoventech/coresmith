@@ -74,7 +74,7 @@ test('the general settings page shows the instance as configured', function () {
                 'timezone' => 'Europe/London',
                 'notification_email' => 'ops@example.com',
             ])
-            ->where('backups', ['last' => null, 'keep' => 14])
+            ->where('backups', ['last' => null, 'keep' => 14, 'copy' => null])
             ->where('timezones', fn($timezones) => $timezones->contains('Europe/London') && $timezones->contains('UTC'))
             ->where('can.manageInstance', true)
             ->where('key_reach', 'managed')
