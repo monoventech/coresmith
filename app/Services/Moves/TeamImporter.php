@@ -114,6 +114,7 @@ final class TeamImporter
             $server->forceFill([
                 'team_id' => $team->id,
                 'cloud_provider_id' => $accounts[(string) ($record['cloud_provider'] ?? '')] ?? null,
+                'tags' => AppTags::imported(is_array($record['tags'] ?? null) ? $record['tags'] : [$record['environment'] ?? null]),
                 ...MoveColumns::pick($record, MoveColumns::SERVERS),
                 'status' => ServerStatus::Moving,
                 'takeover' => ['state' => 'waiting', 'cloud_key' => (string) $record['ssh_public_key'], 'attempts' => 0, 'error' => null],
@@ -166,7 +167,7 @@ final class TeamImporter
                 'server_id' => $servers[(string) $record['server']]->id,
                 'source_provider_id' => $providers[(string) ($record['source_provider'] ?? '')] ?? null,
                 'project_id' => $projects[(string) ($record['project'] ?? '')] ?? $environments[(string) ($record['environment'] ?? '')]['project'] ?? null,
-                'tags' => array_slice(AppTags::normalize(is_array($record['tags'] ?? null) ? $record['tags'] : [$environments[(string) ($record['environment'] ?? '')]['tag'] ?? null]), 0, AppTags::MAX),
+                'tags' => AppTags::imported(is_array($record['tags'] ?? null) ? $record['tags'] : [$environments[(string) ($record['environment'] ?? '')]['tag'] ?? null]),
                 ...MoveColumns::pick($record, MoveColumns::APPLICATIONS),
                 'last_request_at' => now(),
             ])->save();

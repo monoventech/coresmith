@@ -6,6 +6,8 @@
     import { Link } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
+    import ProcessesCard from '@/components/servers/ProcessesCard.svelte'
+    import type { ProcessRow } from '@/components/servers/ProcessesCard.svelte'
     import ProvisioningPanel from '@/components/servers/ProvisioningPanel.svelte'
     import RuntimesCard from '@/components/servers/RuntimesCard.svelte'
     import type { Runtimes } from '@/components/servers/RuntimesCard.svelte'
@@ -38,13 +40,15 @@
         applications = [],
         runtimes,
         tunnel = null,
-        frontDoor = null
+        frontDoor = null,
+        processes = []
     }: {
         server: ServerHeader
         applications: AppRow[]
         runtimes: Runtimes
         tunnel?: Tunnel | null
         frontDoor?: FrontDoor | null
+        processes?: ProcessRow[]
     } = $props()
 
     const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
@@ -139,6 +143,9 @@
             </p>
         </div>
     </div>
+    {#if processes.length > 0}
+        <ProcessesCard {processes} />
+    {/if}
     {#if runtimes.rows.length > 0}
         <RuntimesCard server={server.name} {runtimes} />
     {/if}

@@ -100,9 +100,9 @@ final class CommandPalette
         return [
             'label' => 'Open ' . $server->name,
             'icon' => in_array($state['tone'], ['warning', 'destructive'], true) ? 'triangle-alert' : 'server',
-            'hint' => $state['key'] === 'healthy'
+            'hint' => implode(' · ', [...$server->tags, $state['key'] === 'healthy'
                 ? $count . ' ' . ($count === 1 ? 'app' : 'apps')
-                : strtolower($state['label']),
+                : strtolower($state['label'])]),
             'href' => route('servers.show', $server),
         ];
     }

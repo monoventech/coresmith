@@ -46,6 +46,7 @@ final class ServerApiController extends ApiController
         return [
             'id' => $server->id,
             'name' => $server->name,
+            'tags' => $server->tags,
             'ip_address' => $server->ip_address,
             'status' => $server->status?->value,
             'os' => trim(((string) $server->os_name) . ' ' . ((string) $server->os_version)) ?: null,

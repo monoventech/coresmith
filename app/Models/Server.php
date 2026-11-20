@@ -164,6 +164,17 @@ class Server extends Model
     }
 
     /**
+     * @return Attribute<list<string>, list<string>>
+     */
+    protected function tags(): Attribute
+    {
+        return Attribute::make(
+            get: fn(?string $value): array => array_values(array_filter((array) json_decode((string) $value, true), 'is_string')),
+            set: fn(array $tags): array => ['tags' => $tags === [] ? null : json_encode(array_values($tags))],
+        );
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

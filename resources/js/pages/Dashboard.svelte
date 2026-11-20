@@ -3,6 +3,7 @@
     import { onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import ActivityRow from '@/components/fleet/ActivityRow.svelte'
+    import AppTags from '@/components/projects/AppTags.svelte'
     import DayBars from '@/components/fleet/DayBars.svelte'
     import FleetHeader from '@/components/fleet/FleetHeader.svelte'
     import MetricBar from '@/components/fleet/MetricBar.svelte'
@@ -209,6 +210,9 @@
                             data-testid="server-state">{server.state.label}</span
                         >
                     </div>
+                    {#if server.tags.length > 0}
+                        <AppTags tags={server.tags} class="mb-1.5 max-sm:mt-1" />
+                    {/if}
                     <div class="mb-4 text-[12.5px] text-muted-foreground max-sm:hidden">
                         {server.meta || 'Waiting for its first connection'}
                     </div>

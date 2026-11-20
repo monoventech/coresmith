@@ -197,6 +197,7 @@ final class FleetSnapshot
             'id' => $server->getKey(),
             'key' => (string) $server->getRouteKey(),
             'name' => $server->name,
+            'tags' => $server->tags,
             'state' => $this->state($server),
             'meta' => $this->meta($server),
             'compact_meta' => $this->compactMeta($server),

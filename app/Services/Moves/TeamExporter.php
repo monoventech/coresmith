@@ -54,6 +54,7 @@ final class TeamExporter
             'servers' => $servers->map(fn(Server $server): array => [
                 'ref' => $server->id,
                 'cloud_provider' => $server->cloud_provider_id,
+                'tags' => $server->tags,
                 ...MoveColumns::read($server, MoveColumns::SERVERS),
             ])->values()->all(),
             'source_providers' => $providers->map(fn(SourceProvider $provider): array => [

@@ -10,6 +10,7 @@
         id,
         tags = $bindable([]),
         suggestions = [],
+        suggestionsLabel = 'Used on other apps',
         name,
         error = null,
         describedby,
@@ -20,6 +21,7 @@
         labelledby?: string
         tags?: string[]
         suggestions?: string[]
+        suggestionsLabel?: string
         name?: string
         error?: string | null
         describedby?: string
@@ -140,7 +142,7 @@
     <FieldError {message} />
     {#if offered.length > 0 && !full}
         <div class="mt-2 flex flex-wrap items-center gap-1.5" data-testid="tag-suggestions">
-            <span class="text-[12px] text-muted-foreground">Used on other apps</span>
+            <span class="text-[12px] text-muted-foreground">{suggestionsLabel}</span>
             {#each offered as suggestion (suggestion)}
                 <button
                     type="button"

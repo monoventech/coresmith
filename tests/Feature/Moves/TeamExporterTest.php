@@ -168,6 +168,15 @@ test('the export carries projects, and each app\'s project and tags', function (
         ->and(array_key_exists('environment', $site))->toBeFalse();
 });
 
+test("the export carries each server's tags", function () {
+    $team = teamExporterTeam();
+    $team->servers()->where('name', 'web-01')->sole()->update(['tags' => ['production', 'eu']]);
+
+    $web = collect(app(TeamExporter::class)->payload($team, $team->owner)['servers'])->firstWhere('name', 'web-01');
+
+    expect($web['tags'])->toBe(['production', 'eu']);
+});
+
 test('package credentials move with their project and their secret', function () {
     $team = Team::factory()->owned()->create();
     $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
