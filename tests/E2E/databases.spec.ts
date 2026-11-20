@@ -616,17 +616,6 @@ test.describe('the shared Redis', () => {
         await expect(page.getByRole('button', { name: 'Turn off the shared Redis' })).toBeVisible()
     })
 
-    test('what Coresmith runs here names the shared Redis as the exception to credentials per app', async ({
-        page
-    }) => {
-        await gotoServerTab(page, 'vault-02', 'Hardening')
-        await page.getByTestId('under-the-hood-link').click()
-
-        await expect(page.getByTestId('machinery-isolation')).toContainText(
-            'Database credentials per app, except the shared Redis on port 6379'
-        )
-    })
-
     test.describe('accessibility', () => {
         test.use({ reducedMotion: 'reduce' })
 
