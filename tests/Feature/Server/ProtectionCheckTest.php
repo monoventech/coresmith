@@ -68,7 +68,7 @@ test('the weekly clean-up says when it last ran, whether it failed and what it f
         'ExecMainExitTimestamp=Sun 2026-11-15 04:41:07 UTC',
         'ExecMainStatus=0',
         'Archived and active journals take up 120.0M in the file system.',
-        'coresmith-freed 1288490188',
+        '2026-11-15T04:41:07+00:00 forge-01 coresmith-maintenance[811]: coresmith-freed 1288490188',
     ]]));
 
     expect($reading)->toMatchArray(['maintenance' => 'on', 'maintenance_ran' => '2026-11-15T04:41:07+00:00', 'maintenance_failed' => false, 'maintenance_freed' => 1288490188, 'journal' => '120.0M']);
@@ -86,16 +86,16 @@ test('the weekly clean-up reads as off without the log cap or its timer, and a r
     'failed run' => [['capped', 'enabled', 'ExecMainExitTimestamp=Sun 2026-11-15 04:41:07 UTC', 'ExecMainStatus=100'], 'on', true],
 ]);
 
-test('a clean-up that ran before the server restarted still reads as ran, from the timer', function (array $lines, ?string $ran) {
+test('after a restart, when the clean-up last ran comes from its own log, not from when its timer was set up', function (array $lines, ?string $ran, ?int $freed) {
     $reading = app(ProtectionCheck::class)->parse(protectionServer(), ProtectionReading::output(['maintenance' => ['capped', 'enabled', ...$lines]]));
 
     expect($reading['maintenance_ran'])->toBe($ran)
+        ->and($reading['maintenance_freed'])->toBe($freed)
         ->and($reading['maintenance_failed'])->toBeFalse();
 })->with([
-    'restarted since' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', 'LastTriggerUSec=Sun 2026-11-15 04:41:02 UTC'], '2026-11-15T04:41:02+00:00'],
-    'never ran' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', 'LastTriggerUSec=n/a'], null],
-    'older systemd' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', 'LastTriggerUSec='], null],
-    'run by hand' => [['ExecMainExitTimestamp=Wed 2026-11-18 10:02:44 UTC', 'ExecMainStatus=0', 'LastTriggerUSec=Sun 2026-11-15 04:41:02 UTC'], '2026-11-18T10:02:44+00:00'],
+    'ran, then restarted' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0', '2026-11-15T04:41:09+00:00 forge-01 coresmith-maintenance[811]: coresmith-freed 2048'], '2026-11-15T04:41:09+00:00', 2048],
+    'set up, restarted, never ran' => [['ExecMainExitTimestamp=', 'ExecMainStatus=0'], null, null],
+    'ran since the restart' => [['ExecMainExitTimestamp=Wed 2026-11-18 10:02:44 UTC', 'ExecMainStatus=0', '2026-11-18T10:02:43+00:00 forge-01 coresmith-maintenance[902]: coresmith-freed 4096'], '2026-11-18T10:02:44+00:00', 4096],
 ]);
 
 test('the clean-up section comes before the routing controls, which mark the end of the check', function () {
@@ -103,7 +103,8 @@ test('the clean-up section comes before the routing controls, which mark the end
 
     expect(strpos($script, "echo '== maintenance'"))->toBeLessThan(strpos($script, "echo '== controls'"))
         ->and($script)->toContain('systemctl is-enabled coresmith-maintenance.timer 2>/dev/null || echo missing')
-        ->and($script)->toContain('systemctl show coresmith-maintenance.timer -p LastTriggerUSec 2>/dev/null || true')
+        ->and($script)->toContain("journalctl -u coresmith-maintenance.service -o short-iso --no-pager -n 50 2>/dev/null | grep ' coresmith-freed ' | tail -n 1 || true")
+        ->and($script)->not->toContain('LastTriggerUSec')
         ->and($script)->toContain('journalctl --disk-usage 2>/dev/null || true');
 });
 
