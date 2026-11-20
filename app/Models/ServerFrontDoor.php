@@ -44,6 +44,13 @@ class ServerFrontDoor extends Model
         return $this->state === self::OPEN && in_array(strtolower($host), (array) $this->hosts, true);
     }
 
+    public static function refusal(Server $door): ?string
+    {
+        $home = self::query()->where('door_server_id', $door->getKey())->with('home')->first()?->home;
+
+        return $home === null ? null : "{$home->name} takes visitors through {$door->name}. Turn that off on {$home->name}'s page first.";
+    }
+
     public static function forThisMachine(): ?self
     {
         return self::query()

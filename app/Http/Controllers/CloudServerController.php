@@ -17,6 +17,7 @@ use App\Http\Requests\Server\StoreCloudServerRequest;
 use App\Jobs\RunCloudTask;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Models\ServerFrontDoor;
 use App\Services\Billing\PlanGate;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Contracts\CloudApiFactory;
@@ -100,6 +101,12 @@ final class CloudServerController extends Controller
 
     public function destroy(DestroyCloudServerRequest $request, Server $server): RedirectResponse
     {
+        $serving = ServerFrontDoor::refusal($server);
+
+        if ($serving !== null) {
+            return back()->with('error', $serving);
+        }
+
         $account = $server->cloudProvider;
 
         abort_if($account === null || (blank($server->provider_server_id) && !CreateServerTask::uncertain($server)), 404);

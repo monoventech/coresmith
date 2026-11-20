@@ -220,7 +220,7 @@ final class FrontDoorSync
 
     /**
      * @param  array<string, bool>  $wanted
-     * @return array{0: list<array{host: string, reason: string}>, 1: list<string>}
+     * @return array{0: list<array{host: string, reason: string, kind: string}>, 1: list<string>}
      */
     private function check(array $wanted, Server $home, Server $door, string $ipv4): array
     {
@@ -235,7 +235,7 @@ final class FrontDoorSync
             }
 
             if (!in_array($ipv4, $answers, true)) {
-                $failing[] = ['host' => $host, 'reason' => "{$host} doesn't point at {$door->name} yet."];
+                $failing[] = ['host' => $host, 'reason' => "{$host} doesn't point at {$door->name} yet.", 'kind' => 'dns'];
 
                 continue;
             }
@@ -243,7 +243,7 @@ final class FrontDoorSync
             $status = $this->web->reach($host, $ipv4);
 
             if ($status === null || in_array($status, [502, 504], true)) {
-                $failing[] = ['host' => $host, 'reason' => "{$host} didn't load through {$door->name}. Check that its app is deployed on {$home->name}."];
+                $failing[] = ['host' => $host, 'reason' => "{$host} didn't load through {$door->name}. Check that its app is deployed on {$home->name}.", 'kind' => 'path'];
 
                 continue;
             }

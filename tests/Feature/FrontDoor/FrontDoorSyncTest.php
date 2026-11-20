@@ -143,8 +143,8 @@ test("domains the door can't pass on, or that don't point at it yet, are listed 
     expect($frontDoor->state)->toBe(ServerFrontDoor::OPEN)
         ->and($frontDoor->hosts)->toEqual([])
         ->and($frontDoor->failing)->toEqual([
-            ['host' => 'beelink.coresmith.io', 'reason' => "beelink.coresmith.io doesn't point at web-1 yet."],
-            ['host' => 'pencil.example', 'reason' => "pencil.example didn't load through web-1. Check that its app is deployed on beelink."],
+            ['host' => 'beelink.coresmith.io', 'reason' => "beelink.coresmith.io doesn't point at web-1 yet.", 'kind' => 'dns'],
+            ['host' => 'pencil.example', 'reason' => "pencil.example didn't load through web-1. Check that its app is deployed on beelink.", 'kind' => 'path'],
         ]);
 });
 
