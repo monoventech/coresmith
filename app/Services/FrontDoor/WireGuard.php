@@ -58,8 +58,8 @@ final class WireGuard
         $name = $connection->server()->name;
         $prefix = preg_quote(Str::beforeLast(Str::before($subnet, '/'), '.') . '.', '/');
         $lines = [
-            ...preg_split('/\R/', $connection->execute('ip -4 -o addr show || true')->output) ?: [],
-            ...preg_split('/\R/', $connection->execute('ip -4 route show || true')->output) ?: [],
+            ...preg_split('/\r\n|\n|\r/', $connection->execute('ip -4 -o addr show || true')->output) ?: [],
+            ...preg_split('/\r\n|\n|\r/', $connection->execute('ip -4 route show || true')->output) ?: [],
         ];
 
         foreach ($lines as $line) {
@@ -111,7 +111,7 @@ final class WireGuard
     {
         $output = $connection->execute('wg show ' . self::INTERFACE . ' latest-handshakes 2>/dev/null || true', sudo: true)->output;
 
-        foreach (preg_split('/\R/', trim($output)) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', trim($output)) ?: [] as $line) {
             [$key, $at] = array_pad(preg_split('/\s+/', trim($line)) ?: [], 2, '');
 
             if ($key === $peerKey && ctype_digit($at) && (int) $at > 0) {
