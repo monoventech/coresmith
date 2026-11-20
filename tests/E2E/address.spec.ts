@@ -388,10 +388,42 @@ test.describe('Cloudflare DNS for the address', () => {
         await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toBeVisible()
     })
 
-    test('a check refused for a reason pointing the domain cannot fix leaves out the Cloudflare button', async ({
+    test("a check's note that sends you to this machine's page links to it", async ({ page }) => {
+        const connected = {
+            cloudflare: { connected: false, host: null, error: null, synced: null },
+            machine: '/servers/beelink'
+        }
+        const passed = {
+            host: 'coresmith.example.com',
+            ok: true,
+            problems: [],
+            notes: [
+                "Visitors without IPv6 can't open coresmith.example.com yet. Turn on IPv4 through Cloudflare on this machine's page to reach them."
+            ],
+            records: [],
+            checked_at: '2026-11-20T05:50:00Z'
+        }
+
+        await withProps(page, /\/settings\/address\/check$/, (props) => {
+            props.address = { ...(props.address as Record<string, unknown>), ...connected, check: passed }
+        })
+        await settingsShowing(page, connected)
+        await card(page).getByRole('button', { name: 'Change' }).click()
+        await dialog(page).getByLabel('Domain').fill('coresmith.example.com')
+        await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
+
+        await expect(
+            dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's page" })
+        ).toHaveAttribute('href', '/servers/beelink')
+    })
+
+    test('a check refused for a reason pointing the domain cannot fix leaves out the Cloudflare button and links the page that can', async ({
         page
     }) => {
-        const connected = { cloudflare: { connected: true, host: null, error: null, synced: null } }
+        const connected = {
+            cloudflare: { connected: true, host: null, error: null, synced: null },
+            machine: '/servers/beelink'
+        }
         const refused = {
             host: 'coresmith.example.com',
             ok: false,
@@ -414,6 +446,9 @@ test.describe('Cloudflare DNS for the address', () => {
 
         await expect(dialog(page).getByTestId('address-check')).toContainText('Turn off IPv4 through another server')
         await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toHaveCount(0)
+        await expect(
+            dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's page" })
+        ).toHaveAttribute('href', '/servers/beelink')
     })
 
     for (const theme of ['light', 'dark'] as const) {
