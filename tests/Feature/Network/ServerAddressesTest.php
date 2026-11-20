@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Services\Network\RemoteReachProbe;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Bus;
 use Tests\Support\FakeSSHTransport;
 
@@ -86,10 +87,11 @@ test('a server Coresmith cannot reach keeps its last reading', function () {
     expect($server->fresh()->public_addresses)->toEqual(serverAddressesReading('2026-11-01T00:00:00+00:00'));
 });
 
-test('the hourly pass reads active servers with no reading, or one older than a week', function () {
+test('the hourly pass reads active servers with no reading, one older than a week, or one taken before private addresses were read', function () {
     Bus::fake([ReadServerAddresses::class]);
     $unread = Server::factory()->create(['status' => ServerStatus::Active]);
     $stale = Server::factory()->create(['status' => ServerStatus::Active, 'public_addresses' => serverAddressesReading(now()->subDays(8)->toIso8601String())]);
+    $older = Server::factory()->create(['status' => ServerStatus::Active, 'public_addresses' => Arr::except(serverAddressesReading(now()->subDay()->toIso8601String()), 'private')]);
     Server::factory()->create(['status' => ServerStatus::Active, 'public_addresses' => serverAddressesReading(now()->subDay()->toIso8601String())]);
     Server::factory()->create(['status' => ServerStatus::Active, 'unreachable_since' => now()]);
 
@@ -100,7 +102,8 @@ test('the hourly pass reads active servers with no reading, or one older than a 
 
     $event->run(app());
 
-    Bus::assertDispatchedTimes(ReadServerAddresses::class, 2);
+    Bus::assertDispatchedTimes(ReadServerAddresses::class, 3);
     Bus::assertDispatched(ReadServerAddresses::class, fn(ReadServerAddresses $job): bool => $job->server->is($unread));
     Bus::assertDispatched(ReadServerAddresses::class, fn(ReadServerAddresses $job): bool => $job->server->is($stale));
+    Bus::assertDispatched(ReadServerAddresses::class, fn(ReadServerAddresses $job): bool => $job->server->is($older));
 });
