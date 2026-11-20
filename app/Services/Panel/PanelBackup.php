@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Services\Panel;
 
+use App\Jobs\CopyCoresmithBackup;
+use App\Models\BackupDestination;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -56,6 +58,10 @@ final class PanelBackup
             chmod($tar . '.gz', 0600);
 
             $this->prune();
+
+            if (rescue(fn(): ?BackupDestination => BackupDestination::forCoresmith(), null, report: false) instanceof BackupDestination) {
+                CopyCoresmithBackup::dispatch($tar . '.gz');
+            }
 
             return ['path' => $tar . '.gz', 'bytes' => (int) filesize($tar . '.gz')];
         } finally {

@@ -16,14 +16,13 @@
 
 <script lang="ts">
     import PlanNote from '@/components/settings/PlanNote.svelte'
+    import S3DestinationFields from '@/components/settings/S3DestinationFields.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
-    import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
-    import { Switch } from '@/components/ui/switch'
     import { Form, router } from '@inertiajs/svelte'
 
     let { offsite = null, planNote = null }: { offsite?: OffsiteDestination | null; planNote?: string | null } =
@@ -143,110 +142,7 @@
                             Hourly backups fill the bucket fast. Set a lifecycle rule to expire old ones.
                         </p>
                     </div>
-                    <div>
-                        <Label for="offsite-endpoint" class="mb-1.5">Endpoint</Label>
-                        <Input
-                            id="offsite-endpoint"
-                            name="endpoint"
-                            value={offsite?.endpoint ?? ''}
-                            placeholder="Leave empty for AWS"
-                            autocomplete="off"
-                            spellcheck="false"
-                            class="font-mono text-[13px]"
-                            aria-invalid={errors.endpoint ? true : undefined}
-                        />
-                        <FieldError message={errors.endpoint} />
-                    </div>
-                    <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                        <div>
-                            <Label for="offsite-region" class="mb-1.5">Region</Label>
-                            <Input
-                                id="offsite-region"
-                                name="region"
-                                value={offsite?.region ?? ''}
-                                required
-                                placeholder="eu-central-1"
-                                autocomplete="off"
-                                spellcheck="false"
-                                class="font-mono text-[13px]"
-                                aria-invalid={errors.region ? true : undefined}
-                            />
-                            <FieldError message={errors.region} />
-                        </div>
-                        <div>
-                            <Label for="offsite-bucket" class="mb-1.5">Bucket</Label>
-                            <Input
-                                id="offsite-bucket"
-                                name="bucket"
-                                value={offsite?.bucket ?? ''}
-                                required
-                                autocomplete="off"
-                                spellcheck="false"
-                                class="font-mono text-[13px]"
-                                aria-invalid={errors.bucket ? true : undefined}
-                            />
-                            <FieldError message={errors.bucket} />
-                        </div>
-                    </div>
-                    <div>
-                        <Label for="offsite-prefix" class="mb-1.5">Path prefix</Label>
-                        <Input
-                            id="offsite-prefix"
-                            name="prefix"
-                            value={offsite?.prefix ?? ''}
-                            autocomplete="off"
-                            spellcheck="false"
-                            class="font-mono text-[13px]"
-                            aria-invalid={errors.prefix ? true : undefined}
-                        />
-                        <FieldError message={errors.prefix} />
-                    </div>
-                    <div>
-                        <Label for="offsite-access-key" class="mb-1.5">Access key ID</Label>
-                        <Input
-                            id="offsite-access-key"
-                            name="access_key_id"
-                            required={!offsite}
-                            placeholder={offsite ? 'Saved, never shown' : ''}
-                            autocomplete="off"
-                            spellcheck="false"
-                            class="font-mono text-[13px]"
-                            aria-invalid={errors.access_key_id ? true : undefined}
-                        />
-                        <FieldError message={errors.access_key_id} />
-                    </div>
-                    <div>
-                        <Label for="offsite-secret" class="mb-1.5">Secret access key</Label>
-                        <Input
-                            id="offsite-secret"
-                            name="secret_access_key"
-                            type="password"
-                            required={!offsite}
-                            placeholder={offsite ? 'Saved, never shown' : ''}
-                            autocomplete="new-password"
-                            class="font-mono text-[13px]"
-                            aria-invalid={errors.secret_access_key ? true : undefined}
-                        />
-                        <FieldError message={errors.secret_access_key} />
-                    </div>
-                    <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <Label id="offsite-path-style-label" for="offsite-path-style">Path-style addressing</Label>
-                            <p
-                                id="offsite-path-style-description"
-                                class="m-0 mt-0.5 text-[12.5px] text-muted-foreground"
-                            >
-                                Needed for MinIO and some other S3-compatible stores.
-                            </p>
-                        </div>
-                        <Switch
-                            id="offsite-path-style"
-                            bind:checked={pathStyle}
-                            aria-labelledby="offsite-path-style-label"
-                            aria-describedby="offsite-path-style-description"
-                        />
-                        <input type="hidden" name="path_style" value={pathStyle ? '1' : '0'} />
-                    </div>
+                    <S3DestinationFields id="offsite" destination={offsite} {errors} bind:pathStyle />
                 </div>
                 <Dialog.Footer>
                     <Button variant="ghost" type="button" onclick={() => (editing = false)}>Cancel</Button>

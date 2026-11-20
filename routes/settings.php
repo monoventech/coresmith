@@ -4,6 +4,7 @@ use App\Http\Controllers\Settings\AccountGitController;
 use App\Http\Controllers\Settings\AddressController;
 use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\AuditLogController;
+use App\Http\Controllers\Settings\BackupCopyController;
 use App\Http\Controllers\Settings\BillingController;
 use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
@@ -58,6 +59,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/backups', [GeneralSettingsController::class, 'backup'])
         ->middleware('throttle:6,1,backups')
         ->name('settings.backups.store');
+    Route::put('settings/backups/copy', [BackupCopyController::class, 'update'])
+        ->middleware('throttle:10,1,backup-copy')
+        ->name('settings.backups.copy.update');
+    Route::delete('settings/backups/copy', [BackupCopyController::class, 'destroy'])->name('settings.backups.copy.destroy');
 
     Route::get('settings/updates/status', [PanelUpdateController::class, 'status'])->name('settings.updates.status');
     Route::post('settings/updates/check', [PanelUpdateController::class, 'check'])
