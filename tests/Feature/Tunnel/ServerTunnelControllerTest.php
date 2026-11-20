@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\TeamRole;
 use App\Jobs\SyncServerTunnel;
 use App\Models\Server;
+use App\Models\ServerFrontDoor;
 use App\Models\ServerTunnel;
 use App\Models\Team;
 use App\Models\User;
@@ -161,7 +162,18 @@ test("the server page offers the tunnel when the internet can't reach its IPv4 a
             ->where('tunnel.state', 'off')
             ->where('tunnel.ipv4', '151.226.169.196')
             ->where('tunnel.cloudflare', false)
+            ->where('tunnel.front_door', null)
             ->where('tunnel.can_manage', true));
+});
+
+test('while the server takes visitors through another one, its tunnel card names that server', function () {
+    $server = tunnelControllerServer();
+    $door = Server::factory()->create(['team_id' => $server->team_id, 'name' => 'web-1']);
+    ServerFrontDoor::query()->create(['server_id' => $server->id, 'door_server_id' => $door->id, 'state' => ServerFrontDoor::OPEN, 'subnet' => '10.205.0.0/24', 'door_address' => '10.205.0.1', 'home_address' => '10.205.0.2']);
+
+    $this->actingAs(tunnelControllerUser($server->team))
+        ->get(route('servers.show', $server))
+        ->assertInertia(fn($page) => $page->where('tunnel.state', 'off')->where('tunnel.front_door', 'web-1'));
 });
 
 test('a server the internet reaches on IPv4 has no tunnel card, unless a tunnel is on', function () {

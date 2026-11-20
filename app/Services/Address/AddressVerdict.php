@@ -20,6 +20,7 @@ final readonly class AddressVerdict
         public array $notes = [],
         private array $problems = [],
         public array $records = [],
+        public bool $pointable = true,
     ) {}
 
     /**

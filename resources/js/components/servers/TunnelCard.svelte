@@ -8,6 +8,7 @@
         error: string | null
         checked: string | null
         cloudflare: boolean
+        front_door: string | null
         can_manage: boolean
     }
 </script>
@@ -82,10 +83,17 @@
 >
     <div class="mb-1 flex flex-wrap items-center gap-2.5">
         <h2 id="tunnel-title" class="type-h3 m-0">IPv4 through Cloudflare</h2>
-        <Badge variant={badge.variant} dot={working} pulse={working}>{badge.label}</Badge>
+        {#if !tunnel.front_door}
+            <Badge variant={badge.variant} dot={working} pulse={working}>{badge.label}</Badge>
+        {/if}
     </div>
 
-    {#if tunnel.state === 'off'}
+    {#if tunnel.front_door}
+        <p class="m-0 mt-1 max-w-prose text-[13px] leading-normal text-muted-foreground" data-testid="tunnel-door-on">
+            IPv4 through {tunnel.front_door} is on for this server. To bring visitors in through Cloudflare instead, turn
+            that off first.
+        </p>
+    {:else if tunnel.state === 'off'}
         <p class="m-0 mt-1 max-w-prose text-[13px] leading-normal text-muted-foreground">
             The internet can't reach
             {#if tunnel.ipv4}<span class="font-mono text-[12px] text-foreground">{tunnel.ipv4}</span>{:else}this
@@ -196,7 +204,7 @@
         <p class="m-0 mt-3 text-[12px] text-muted-foreground">Checked {tunnel.checked}.</p>
     {/if}
 
-    {#if tunnel.can_manage && !working}
+    {#if tunnel.can_manage && !working && !tunnel.front_door}
         <div class="mt-4 flex flex-wrap gap-2">
             {#if tunnel.state === 'off'}
                 <Button onclick={() => (opening = true)} data-testid="tunnel-turn-on">Turn on</Button>
@@ -216,7 +224,7 @@
         <div class="mt-4">
             <Button variant="outline" disabled={sending} onclick={turnOff}>Try again</Button>
         </div>
-    {:else if !tunnel.can_manage && tunnel.state === 'off'}
+    {:else if !tunnel.can_manage && tunnel.state === 'off' && !tunnel.front_door}
         <p class="m-0 mt-3 text-[12.5px] text-muted-foreground">Someone who manages Coresmith can turn this on.</p>
     {/if}
 </section>

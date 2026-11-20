@@ -328,6 +328,7 @@ test('a check that asks for a DNS record keeps the record, for the dialog to sho
         'ok' => false,
         'problems' => ["coresmith.example.com doesn't point anywhere yet. Add an A record pointing at 151.226.169.196, then check again."],
         'records' => [['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196', 'note' => null]],
+        'pointable' => true,
     ]);
 });
 
@@ -395,6 +396,22 @@ test('an address the form would refuse is kept as its one problem', function () 
 
     expect(AddressCheck::current())->toMatchArray(['host' => 'not a domain', 'ok' => false, 'problems' => ["That doesn't look like a domain. Try coresmith.example.com."]]);
 });
+
+test("a refusal that pointing the domain can't fix says so, so the dialog leaves out the Cloudflare button", function (Closure $arrange, string $address) {
+    $arrange();
+
+    $this->actingAs(addressSettingsUser())->post(route('settings.address.check'), ['address' => $address]);
+
+    expect(AddressCheck::current())->toMatchArray(['ok' => false, 'pointable' => false]);
+})->with([
+    'not a domain' => [fn() => null, 'not a domain'],
+    'a change under way' => [fn() => AddressChange::begin('192.168.0.248', 'coresmith.example.com'), 'other.example.com'],
+    'an install that cannot move from here' => [function () {
+        config(['coresmith.address.site' => '']);
+        addressSettingsResolving(['151.226.169.196']);
+        addressSettingsReach(new DirectReach('151.226.169.196', true, true));
+    }, 'coresmith.example.com'],
+]);
 
 test('the settings page carries the last check, for the dialog to show', function () {
     addressSettingsResolving(['151.226.169.196']);

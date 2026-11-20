@@ -140,6 +140,16 @@ class Server extends Model
         return $this->hasOne(ServerTunnel::class);
     }
 
+    public function frontDoor(): HasOne
+    {
+        return $this->hasOne(ServerFrontDoor::class);
+    }
+
+    public function frontDoorHomes(): HasMany
+    {
+        return $this->hasMany(ServerFrontDoor::class, 'door_server_id');
+    }
+
     public function metrics(): HasMany
     {
         return $this->hasMany(ServerMetric::class);
