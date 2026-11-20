@@ -29,6 +29,7 @@
         address.change?.state === 'done' && address.change.to === address.host ? address.change : null
     )
     const stale = $derived(moved !== null && typeof window !== 'undefined' && window.location.hostname !== address.host)
+    const MACHINE_PAGE = "this machine's page"
     const tunnelFix = $derived(address.tunnel === 'off' || address.tunnel === 'on')
     const replacing = $derived(address.cloudflare.connected)
 
@@ -114,8 +115,13 @@
     {#if address.machine}<a
             href={address.machine}
             class="focus-ring rounded-sm font-medium text-primary-strong"
-            data-testid="address-machine-link">this machine's page</a
-        >{:else}this machine's page{/if}
+            data-testid="address-machine-link">{MACHINE_PAGE}</a
+        >{:else}{MACHINE_PAGE}{/if}
+{/snippet}
+
+{#snippet machineLinked(text: string)}
+    {@const at = text.indexOf(MACHINE_PAGE)}
+    {#if at >= 0}{text.slice(0, at)}{@render machineLink()}{text.slice(at + MACHINE_PAGE.length)}{:else}{text}{/if}
 {/snippet}
 
 <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="address-card">
@@ -352,7 +358,7 @@
                                 {#each result.problems as problem (problem)}
                                     <p class="m-0 flex gap-2 text-destructive-strong">
                                         <CircleAlert class="mt-0.5 size-3.75 shrink-0" />
-                                        <span class="wrap-anywhere">{problem}</span>
+                                        <span class="wrap-anywhere">{@render machineLinked(problem)}</span>
                                     </p>
                                 {/each}
                                 {#if address.cloudflare.connected && result.pointable !== false}
