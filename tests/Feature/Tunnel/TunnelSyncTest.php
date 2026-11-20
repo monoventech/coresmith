@@ -86,6 +86,33 @@ function tunnelSyncCloudflare(array $records = [], string $status = 'healthy', i
     });
 }
 
+test('a domain Cloudflare redirects to another site stays on the tunnel and is named with where it goes', function () {
+    CloudflareConnection::connect('cf-token');
+    $server = tunnelSyncServer();
+    Application::factory()->for($server->team)->for($server)->create(['domain' => 'pencil.example']);
+    $tunnel = ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPENING]);
+    tunnelSyncTransport()->respondTo('pencil.example:443:127.0.0.1', '');
+    Http::fake(function (Request $request) {
+        $url = $request->url();
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        return match (true) {
+            str_starts_with($url, 'https://cloudflare-dns.com/') => Http::response(['Status' => 0, 'Answer' => ($query['type'] ?? '') === 'A' ? [['name' => (string) ($query['name'] ?? ''), 'type' => 1, 'data' => '104.21.41.210']] : []]),
+            str_starts_with($url, 'https://pencil.example/') => Http::response('', 301, ['Location' => 'https://cloudflare.vc/']),
+            default => null,
+        };
+    });
+    tunnelSyncCloudflare();
+
+    app()->call([new SyncServerTunnel($server), 'handle']);
+
+    $tunnel->refresh();
+
+    expect($tunnel->state)->toBe(ServerTunnel::OPEN)
+        ->and($tunnel->hosts)->toContain('pencil.example')
+        ->and($tunnel->diverted)->toEqual([['host' => 'pencil.example', 'to' => 'cloudflare.vc']]);
+});
+
 test('turning on makes the tunnel, starts the connector and routes the domains it can', function () {
     CloudflareConnection::connect('cf-token');
     $server = tunnelSyncServer();

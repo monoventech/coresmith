@@ -4,6 +4,7 @@
         ipv4: string | null
         hosts: string[]
         skipped: { host: string; reason: string }[]
+        diverted: { host: string; to: string }[]
         error: string | null
         checked: string | null
         cloudflare: boolean
@@ -31,7 +32,9 @@
     let sending = $state(false)
 
     const working = $derived(tunnel.state === 'opening' || tunnel.state === 'closing')
-    const count = $derived(tunnel.hosts.length === 1 ? '1 domain' : `${tunnel.hosts.length} domains`)
+    const reaching = $derived(tunnel.hosts.filter((host) => !tunnel.diverted.some((row) => row.host === host)).length)
+    const count = $derived(reaching === 1 ? '1 domain' : `${reaching} domains`)
+    const diverted = $derived(tunnel.diverted.length === 1 ? 'this domain' : `these ${tunnel.diverted.length} domains`)
 
     const badge = $derived(
         {
@@ -105,8 +108,11 @@
         </p>
     {:else if tunnel.state === 'open'}
         <p class="m-0 mt-1 max-w-prose text-[13px] leading-normal text-muted-foreground" data-testid="tunnel-summary">
-            {#if tunnel.hosts.length > 0}
-                {count} reach this server through Cloudflare, over IPv4 and IPv6.
+            {#if reaching > 0}
+                {count}
+                {reaching === 1 ? 'reaches' : 'reach'} this server through Cloudflare, over IPv4 and IPv6.
+            {:else if tunnel.hosts.length > 0}
+                No domain on the tunnel reaches this server yet.
             {:else}
                 The tunnel is on, but no domain goes through it yet. Domains you add to apps here join it on their own.
             {/if}
@@ -141,6 +147,32 @@
             {#each tunnel.skipped as row (row.host)}
                 <p class="m-0 wrap-anywhere text-muted-foreground">{row.reason}</p>
             {/each}
+        </div>
+    {/if}
+
+    {#if tunnel.state === 'open' && tunnel.diverted.length > 0}
+        <div
+            class="tint-warning mt-3 flex gap-2 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-normal"
+            data-testid="tunnel-diverted"
+        >
+            <CircleAlert class="mt-0.5 size-3.75 shrink-0" aria-hidden="true" />
+            <div class="flex min-w-0 flex-col gap-1.5">
+                <p class="m-0">
+                    Cloudflare redirects {diverted} to another site, so visitors never reach this server:
+                </p>
+                <ul class="m-0 flex list-none flex-col gap-1 p-0">
+                    {#each tunnel.diverted as row (row.host)}
+                        <li class="wrap-anywhere">
+                            <span class="font-mono text-[12px]">{row.host}</span> goes to
+                            <span class="font-mono text-[12px]">{row.to}</span>
+                        </li>
+                    {/each}
+                </ul>
+                <p class="m-0">
+                    If that isn't on purpose, delete the redirect in Cloudflare. Look in Redirect Rules, Page Rules and
+                    Bulk Redirects. Then choose Check again.
+                </p>
+            </div>
         </div>
     {/if}
 

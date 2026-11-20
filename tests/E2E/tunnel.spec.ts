@@ -10,6 +10,7 @@ const CLOSED = {
     ipv4: '151.226.169.196',
     hosts: [],
     skipped: [],
+    diverted: [],
     error: null,
     checked: null,
     cloudflare: false,
@@ -108,6 +109,36 @@ test.describe('IPv4 through Cloudflare', () => {
             "shop.example.net points at 198.51.100.9, which isn't this server, so Coresmith left it alone."
         )
         await expect(card).toContainText('Checked 4 minutes ago.')
+        expect(await blockingViolations(page)).toEqual([])
+    })
+
+    test('domains Cloudflare redirects elsewhere are named with where they go, and left out of the count', async ({
+        page
+    }) => {
+        const card = await serverShowing(page, {
+            ...OPEN,
+            diverted: [
+                { host: 'notes.example.com', to: 'cloudflare.vc' },
+                { host: 'www.notes.example.com', to: 'cloudflare.vc' }
+            ]
+        })
+
+        await expect(card.getByTestId('tunnel-summary')).toHaveText(
+            '1 domain reaches this server through Cloudflare, over IPv4 and IPv6.'
+        )
+
+        const diverted = card.getByTestId('tunnel-diverted')
+
+        await expect(diverted).toContainText(
+            'Cloudflare redirects these 2 domains to another site, so visitors never reach this server:'
+        )
+        await expect(diverted.getByRole('listitem')).toHaveText([
+            'notes.example.com goes to cloudflare.vc',
+            'www.notes.example.com goes to cloudflare.vc'
+        ])
+        await expect(diverted).toContainText(
+            "If that isn't on purpose, delete the redirect in Cloudflare. Look in Redirect Rules, Page Rules and Bulk Redirects. Then choose Check again."
+        )
         expect(await blockingViolations(page)).toEqual([])
     })
 

@@ -17,10 +17,12 @@ use App\Services\Server\MetricsCollector;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Tunnel\EdgeRedirects;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
+use Symfony\Component\Process\Process;
 use Tests\Support\FakeSSHTransport;
 
 const PROBE_OUTPUT = "cpu=12.5\nmemory=48.2\ndisk=61\nload=0.42,0.51,0.60\n";
@@ -87,6 +89,20 @@ test('a probe that returns nothing still records zeroes rather than failing', fu
     $connection = metricsConnection((new FakeSSHTransport)->respondTo('top -bn1', '', 0));
 
     expect((new MetricsCollector)->collect($connection)->cpu_percent)->toBe(0.0);
+});
+
+test("Coresmith's own tunnel check isn't read as a visit, so it never wakes a sleeping app", function () {
+    $transport = new FakeSSHTransport;
+    (new MetricsCollector)->recentHosts(metricsConnection($transport));
+    $command = (string) collect($transport->commands())->first(fn(string $command): bool => str_contains($command, MetricsCollector::ACCESS_LOG));
+    $log = tempnam(sys_get_temp_dir(), 'coresmith-access');
+    file_put_contents($log, json_encode(['request' => ['host' => 'app.example.com', 'headers' => ['User-Agent' => [EdgeRedirects::AGENT]]]]) . "\n" . json_encode(['request' => ['host' => 'other.example.com', 'headers' => ['User-Agent' => ['Mozilla/5.0']]]]) . "\n");
+
+    $process = Process::fromShellCommandline(str_replace(escapeshellarg(MetricsCollector::ACCESS_LOG), escapeshellarg($log), $command));
+    $process->run();
+    unlink($log);
+
+    expect(trim($process->getOutput()))->toBe('other.example.com');
 });
 
 test('traffic to a sleeping app queues a wake', function () {
