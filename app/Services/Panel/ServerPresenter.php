@@ -49,6 +49,7 @@ final class ServerPresenter
         $state = $fleet->state($server);
         $metrics = $this->metrics($server);
         $unreachable = $server->unreachable_since !== null && $server->pending_host_key_fingerprint === null;
+        $canUpdate = $user->can('update', $server);
 
         return [
             'id' => $server->getKey(),
@@ -56,8 +57,8 @@ final class ServerPresenter
             'name' => $server->name,
             'region' => $server->region,
             'tags' => $server->tags,
-            'tags_href' => $user->can('update', $server) ? route('servers.tags.update', $server) : null,
-            'tag_suggestions' => $user->can('update', $server) && $server->team !== null ? AppTags::serverSuggestions($user, $server->team) : [],
+            'tags_href' => $canUpdate ? route('servers.tags.update', $server) : null,
+            'tag_suggestions' => $canUpdate && $server->team !== null ? AppTags::serverSuggestions($user, $server->team) : [],
             'state' => $state,
             'meta' => $fleet->meta($server, long: true),
             'active' => $server->status === ServerStatus::Active,
@@ -81,7 +82,7 @@ final class ServerPresenter
                 'away' => $server->team?->moving_at !== null,
                 'state' => (string) ($server->takeover['state'] ?? 'waiting'),
                 'error' => $server->takeover['error'] ?? null,
-                'can_retry' => $server->team?->moving_at === null && ($server->takeover['state'] ?? null) === 'failed' && $user->can('update', $server),
+                'can_retry' => $server->team?->moving_at === null && ($server->takeover['state'] ?? null) === 'failed' && $canUpdate,
             ],
             'cloud' => $this->cloud->server($server, $user),
             'tabs' => [
@@ -91,7 +92,7 @@ final class ServerPresenter
                 'activity' => route('servers.activity', $server),
             ],
             'can' => [
-                'update' => $user->can('update', $server),
+                'update' => $canUpdate,
                 'delete' => $user->can('delete', $server),
                 'manageFirewall' => $user->can('manageFirewall', $server),
                 'createApplication' => $user->can('create', Application::class),
