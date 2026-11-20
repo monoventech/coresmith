@@ -176,6 +176,7 @@ test("the check keeps what it learned about the server's addresses, for the next
         'ipv4' => '203.0.113.7',
         'ipv4_open' => false,
         'ipv6' => [appReachIpv6()],
+        'private' => [],
         'checked_at' => now()->toIso8601String(),
     ])->and($application->server->fresh()->public_addresses['ipv4_open'])->toBeFalse();
 });
