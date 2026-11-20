@@ -14,7 +14,6 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Services\Server\MetricsCollector;
-use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Tunnel\EdgeRedirects;
@@ -175,7 +174,7 @@ test('metrics are not collected from a server that is not active', function () {
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
-        (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), new MetricsCollector, app(ServerReachability::class));
+        app()->call([new CollectServerMetrics($server), 'handle']);
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }

@@ -47,7 +47,7 @@ export type ExplorerProject = {
     databases: ExplorerDatabase[]
 }
 
-export type ExplorerServer = { id: string; name: string; href: string; state: StatusTone; note: string }
+export type ExplorerServer = { id: string; name: string; href: string; state: StatusTone; note: string; tags: string[] }
 
 export type ExplorerRunning = {
     application: string

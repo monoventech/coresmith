@@ -40,6 +40,7 @@ use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerRuntimeController;
 use App\Http\Controllers\ServerTabsController;
+use App\Http\Controllers\ServerTagsController;
 use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\ServerTunnelController;
 use App\Http\Controllers\SetupController;
@@ -107,6 +108,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->middleware('throttle:10,1,server-test')
         ->name('servers.test-connection');
+    Route::put('servers/{server}/tags', [ServerTagsController::class, 'update'])
+        ->name('servers.tags.update');
     Route::post('servers/{server}/provision', [ServerController::class, 'provision'])
         ->name('servers.provision');
     Route::post('servers/{server}/provisioning/retry', [ServerController::class, 'retryProvisioning'])

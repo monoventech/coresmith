@@ -30,6 +30,9 @@ export type ServerHeader = {
     key: string
     name: string
     region: string | null
+    tags: string[]
+    tags_href: string | null
+    tag_suggestions: string[]
     state: EntityState
     meta: string
     active: boolean

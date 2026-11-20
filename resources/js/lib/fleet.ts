@@ -10,6 +10,7 @@ export type ServerCard = {
     id: string
     key: string
     name: string
+    tags: string[]
     state: EntityState
     meta: string
     compact_meta: string

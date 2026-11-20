@@ -119,6 +119,7 @@ final class ExplorerPresenter
             'href' => route('servers.show', $server),
             'state' => $state,
             'note' => $state['key'] === 'healthy' ? $apps . ' ' . ($apps === 1 ? 'app' : 'apps') : strtolower($state['label']),
+            'tags' => $server->tags,
         ];
     }
 

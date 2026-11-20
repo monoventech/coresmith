@@ -5,6 +5,7 @@
     import ResizeServerDialog from '@/components/cloud/ResizeServerDialog.svelte'
     import HostKeyAlert from '@/components/HostKeyAlert.svelte'
     import PageTabs from '@/components/PageTabs.svelte'
+    import TagEditor from '@/components/projects/TagEditor.svelte'
     import Sparkline from '@/components/Sparkline.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
@@ -107,6 +108,17 @@
                     ? ` · ${server.cloud.monthly} a month before tax`
                     : ''}
             </p>
+        {/if}
+        {#if server.tags.length > 0 || server.tags_href}
+            <div class="mt-2" data-testid="server-tags-row">
+                <TagEditor
+                    name={server.name}
+                    tags={server.tags}
+                    href={server.tags_href}
+                    suggestions={server.tag_suggestions}
+                    suggestionsLabel="Used on other servers"
+                />
+            </div>
         {/if}
     </div>
     {#if primary || server.can.update || server.can.delete}
