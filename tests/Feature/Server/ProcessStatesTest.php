@@ -12,7 +12,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\ServerProcesses;
-use App\Services\Process\ProcessStates;
+use App\Services\Server\ProcessStates;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
