@@ -180,6 +180,19 @@ test('turning off while the door is unreachable still cleans the home server, po
     Http::assertSent(fn(Request $request): bool => $request->method() === 'POST' && ($request->data()['type'] ?? null) === 'AAAA' && ($request->data()['content'] ?? null) === '2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8');
 });
 
+test("turning off points back domains Coresmith moved to the door even when they didn't come through", function () {
+    CloudflareConnection::connect('cf-token');
+    [$home, $door] = frontDoorSyncServers();
+    frontDoorSyncRow($home, $door, ['state' => ServerFrontDoor::CLOSING, 'hosts' => [], 'failing' => [['host' => 'pencil.example', 'reason' => "pencil.example didn't load through web-1. Check that its app is deployed on beelink.", 'kind' => 'path']], 'home_public_key' => 'HOMEKEY=', 'door_public_key' => 'DOORKEY=']);
+    frontDoorSyncTransports($home, $door);
+    frontDoorSyncWeb(records: ['pencil.example' => [['id' => 'a', 'type' => 'A', 'content' => '203.0.113.9']], 'beelink.coresmith.io' => [['id' => 'b', 'type' => 'A', 'content' => '203.0.113.9']]]);
+
+    app()->call([new SyncServerFrontDoor($home), 'handle']);
+
+    Http::assertSent(fn(Request $request): bool => $request->method() === 'DELETE' && str_ends_with($request->url(), '/dns_records/a'));
+    Http::assertSent(fn(Request $request): bool => $request->method() === 'DELETE' && str_ends_with($request->url(), '/dns_records/b'));
+});
+
 test("turning off one of two homes keeps the other's peer and the door's port", function () {
     [$home, $door] = frontDoorSyncServers();
     $other = Server::factory()->create(['team_id' => $home->team_id, 'host_key_fingerprint' => null, 'os_name' => 'ubuntu']);

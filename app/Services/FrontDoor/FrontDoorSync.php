@@ -268,11 +268,17 @@ final class FrontDoorSync
             array_filter(ServerAddresses::targets($home->public_addresses), fn(array $target): bool => !$target['closed']),
         ));
 
-        foreach ((array) $frontDoor->hosts as $host) {
-            $zone = $this->dns->zone($token, (string) $host);
+        $moved = array_values(array_unique([
+            ...array_filter((array) $frontDoor->hosts, is_string(...)),
+            ...array_filter(array_column(array_filter((array) $frontDoor->failing, is_array(...)), 'host'), is_string(...)),
+            ...array_map(strval(...), array_keys($this->hosts->for($home))),
+        ]));
+
+        foreach ($moved as $host) {
+            $zone = $this->dns->zone($token, $host);
 
             if ($zone !== null) {
-                $this->dns->pointBack($token, $zone['id'], (string) $host, $doorAddresses, $restore);
+                $this->dns->pointBack($token, $zone['id'], $host, $doorAddresses, $restore);
             }
         }
     }
