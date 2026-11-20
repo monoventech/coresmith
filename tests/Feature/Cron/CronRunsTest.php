@@ -10,8 +10,6 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Services\Cron\CronRuns;
 use App\Services\Panel\CronJobs;
-use App\Services\Server\MetricsCollector;
-use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Exceptions;
@@ -128,7 +126,7 @@ test('the minute read records each app job\'s last run, and a read that fails is
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
-        (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), app(MetricsCollector::class), app(ServerReachability::class));
+        app()->call([new CollectServerMetrics($server), 'handle']);
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }

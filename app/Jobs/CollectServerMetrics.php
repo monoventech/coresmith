@@ -11,6 +11,7 @@ namespace App\Jobs;
 use App\Enums\ServerStatus;
 use App\Models\Server;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Process\ProcessStates;
 use App\Services\Server\MetricsCollector;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnectionManager;
@@ -27,7 +28,7 @@ final class CollectServerMetrics implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 120;
+    public int $timeout = 150;
 
     public int $uniqueFor = 180;
 
@@ -41,7 +42,7 @@ final class CollectServerMetrics implements ShouldBeUnique, ShouldQueue
         return (string) $this->server->getKey();
     }
 
-    public function handle(SSHConnectionManager $connections, MetricsCollector $metrics, ServerReachability $reachability): void
+    public function handle(SSHConnectionManager $connections, MetricsCollector $metrics, ServerReachability $reachability, ProcessStates $processes): void
     {
         if ($this->server->status !== ServerStatus::Active || $this->server->pending_host_key_fingerprint !== null || CloudTask::running($this->server)) {
             return;
@@ -57,6 +58,12 @@ final class CollectServerMetrics implements ShouldBeUnique, ShouldQueue
             $metrics->recordTraffic($connection);
             $metrics->recordOomKills($connection);
             $metrics->recordCronRuns($connection);
+
+            try {
+                $processes->read($connection);
+            } catch (Throwable $e) {
+                report($e);
+            }
         } catch (Throwable $e) {
             if ($answered || !ServerReachability::isConnectionFailure($e)) {
                 throw $e;
