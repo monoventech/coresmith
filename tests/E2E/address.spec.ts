@@ -299,7 +299,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await dialog(page).getByRole('button', { name: 'Connect', exact: true }).click()
 
         await expect(dialog(page)).toContainText(
-            "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here."
+            "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one."
         )
         await expect(dialog(page).getByLabel('API token')).toHaveAttribute('aria-invalid', 'true')
     })

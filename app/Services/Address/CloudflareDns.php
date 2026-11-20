@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Address;
 
+use App\Exceptions\CloudflareRefused;
 use RuntimeException;
 use SensitiveParameter;
 
@@ -20,18 +21,40 @@ final class CloudflareDns
     public function refusal(#[SensitiveParameter] string $token): ?string
     {
         try {
-            $verify = $this->api->get($token, '/user/tokens/verify');
-            $zones = ($verify['result']['status'] ?? null) === 'active' ? $this->api->get($token, '/zones', ['per_page' => 1]) : null;
+            $status = $this->status($token);
+            $zones = $status === 'active' ? $this->api->get($token, '/zones', ['per_page' => 1]) : null;
         } catch (RuntimeException) {
-            $verify = null;
+            $status = null;
             $zones = null;
         }
 
         return match (true) {
-            ($verify['result']['status'] ?? null) !== 'active' => "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here.",
-            ($zones['result'] ?? []) === [] => "That token can't see any of your zones. Create one from the Edit zone DNS template, with your domain's zone under Zone Resources.",
+            $status !== 'active' => "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one.",
+            ($zones['result'] ?? []) === [] => "That token can't see any of your zones. In Cloudflare, add your domain's zone under the token's Zone Resources, then try again.",
             default => null,
         };
+    }
+
+    private function status(#[SensitiveParameter] string $token): ?string
+    {
+        try {
+            $verified = $this->api->get($token, '/user/tokens/verify');
+        } catch (CloudflareRefused $refused) {
+            $account = $this->account($token) ?? throw $refused;
+            $verified = $this->api->get($token, "/accounts/{$account}/tokens/verify");
+        }
+
+        $status = $verified['result']['status'] ?? null;
+
+        return is_string($status) ? $status : null;
+    }
+
+    private function account(#[SensitiveParameter] string $token): ?string
+    {
+        $account = rescue(fn(): mixed => $this->api->get($token, '/zones', ['per_page' => 1])['result'][0]['account']['id'] ?? null, report: false)
+            ?: rescue(fn(): mixed => $this->api->get($token, '/accounts', ['per_page' => 1])['result'][0]['id'] ?? null, report: false);
+
+        return is_string($account) && $account !== '' ? $account : null;
     }
 
     /**
