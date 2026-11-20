@@ -13,6 +13,7 @@ use App\Http\Middleware\EnsureTeamContext;
 use App\Http\Middleware\FrontDoorVisitorAddress;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RecordLastActive;
 use App\Http\Middleware\RequireSetupToken;
 use App\Http\Middleware\ResolveTeamUrl;
 use App\Http\Middleware\StartSession;
@@ -59,6 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             EnsureTeamContext::class,
+            RecordLastActive::class,
             CanonicalAddress::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
