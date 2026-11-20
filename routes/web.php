@@ -35,6 +35,7 @@ use App\Http\Controllers\ReleasesController;
 use App\Http\Controllers\RepositoryCheckController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
+use App\Http\Controllers\ServerFrontDoorController;
 use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerRuntimeController;
@@ -145,6 +146,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('servers/{server}/tunnel', [ServerTunnelController::class, 'destroy'])
         ->middleware('throttle:6,1,server-tunnel')
         ->name('servers.tunnel.destroy');
+    Route::post('servers/{server}/front-door', [ServerFrontDoorController::class, 'store'])
+        ->middleware('throttle:6,1,server-front-door')
+        ->name('servers.front-door.store');
+    Route::delete('servers/{server}/front-door', [ServerFrontDoorController::class, 'destroy'])
+        ->middleware('throttle:6,1,server-front-door')
+        ->name('servers.front-door.destroy');
     Route::post('servers/{server}/ssh-check', [ThisMachineSshController::class, 'store'])
         ->middleware('throttle:6,1,ssh-check')
         ->name('servers.ssh-check');

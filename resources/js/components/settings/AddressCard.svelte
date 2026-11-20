@@ -145,7 +145,13 @@
             class="tint-warning mt-2 flex flex-col gap-1.5 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-normal"
             data-testid="address-ipv6-only"
         >
-            {#if tunnelFix}
+            {#if address.front_door}
+                <p class="m-0">
+                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people
+                    without IPv6 can't open Coresmith. It doesn't go through {address.front_door} yet. See why on
+                    {@render machineLink()}.
+                </p>
+            {:else if tunnelFix}
                 <p class="m-0">
                     <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people
                     without IPv6 can't open Coresmith.
@@ -169,7 +175,7 @@
                 </p>
             {/if}
         </div>
-        {#if !tunnelFix && address.reach && address.reach.records.length > 0}
+        {#if !tunnelFix && !address.front_door && address.reach && address.reach.records.length > 0}
             <div class="mt-1">
                 <DnsRecords records={address.reach.records} testid="address-ipv6-records" />
             </div>
@@ -349,7 +355,7 @@
                                         <span class="wrap-anywhere">{problem}</span>
                                     </p>
                                 {/each}
-                                {#if address.cloudflare.connected}
+                                {#if address.cloudflare.connected && result.pointable !== false}
                                     <div>
                                         <Button
                                             variant="outline"

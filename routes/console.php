@@ -19,10 +19,12 @@ use App\Jobs\PollRepositories;
 use App\Jobs\PruneRemovedApplications;
 use App\Jobs\ReadServerAddresses;
 use App\Jobs\ResumeCloudTasks;
+use App\Jobs\SyncServerFrontDoor;
 use App\Jobs\SyncServerTunnel;
 use App\Models\InstanceSetting;
 use App\Models\MoveCode;
 use App\Models\Server;
+use App\Models\ServerFrontDoor;
 use App\Models\ServerTunnel;
 use App\Models\StripeEvent;
 use App\Services\Address\AddressChange;
@@ -161,6 +163,13 @@ Schedule::call(function (): void {
         ->with('server')
         ->each(fn(ServerTunnel $tunnel) => $tunnel->server === null ? null : SyncServerTunnel::dispatch($tunnel->server));
 })->hourlyAt(25)->name('coresmith:sync-server-tunnels')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    ServerFrontDoor::query()
+        ->where('state', ServerFrontDoor::OPEN)
+        ->with('home')
+        ->each(fn(ServerFrontDoor $frontDoor) => $frontDoor->home === null ? null : SyncServerFrontDoor::dispatch($frontDoor->home));
+})->hourlyAt(35)->name('coresmith:sync-front-doors')->withoutOverlapping();
 
 Schedule::call(function (): void {
     $host = app(InstallationAddress::class)->host();

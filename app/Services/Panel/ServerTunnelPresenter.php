@@ -17,7 +17,7 @@ use Carbon\CarbonImmutable;
 final class ServerTunnelPresenter
 {
     /**
-     * @return array{state: string, ipv4: ?string, hosts: list<string>, skipped: list<array{host: string, reason: string}>, diverted: list<array{host: string, to: string}>, error: ?string, checked: ?string, cloudflare: bool, can_manage: bool}|null
+     * @return array{state: string, ipv4: ?string, hosts: list<string>, skipped: list<array{host: string, reason: string}>, diverted: list<array{host: string, to: string}>, error: ?string, checked: ?string, cloudflare: bool, front_door: ?string, can_manage: bool}|null
      */
     public function present(Server $server, User $user): ?array
     {
@@ -41,6 +41,7 @@ final class ServerTunnelPresenter
             'error' => $tunnel?->error,
             'checked' => $tunnel?->checked_at === null ? null : Formats::when(CarbonImmutable::instance($tunnel->checked_at)),
             'cloudflare' => CloudflareConnection::token() !== null,
+            'front_door' => $server->frontDoor()->with('door')->first()?->door?->name,
             'can_manage' => $user->managesInstance() && $user->can('update', $server),
         ];
     }

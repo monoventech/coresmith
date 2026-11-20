@@ -7,6 +7,7 @@ export type Address = {
     managed: boolean
     ipv6_only: boolean
     tunnel?: 'carries' | 'on' | 'off' | null
+    front_door?: string | null
     change: { state: 'running' | 'failed' | 'done'; from: string; to: string; error: string | null } | null
     check: {
         host: string
@@ -14,6 +15,7 @@ export type Address = {
         problems: string[]
         notes: string[]
         records?: DnsRecord[]
+        pointable?: boolean
         checked_at: string
     } | null
     reach: {

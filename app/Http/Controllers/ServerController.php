@@ -25,6 +25,7 @@ use App\Jobs\UpdateServerRuntime;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Models\ServerFrontDoor;
 use App\Models\Team;
 use App\Services\Billing\PlanGate;
 use App\Services\Cloud\Tasks\CloudTask;
@@ -33,6 +34,7 @@ use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
+use App\Services\Panel\ServerFrontDoorPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Panel\ServerTunnelPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
@@ -157,6 +159,7 @@ final class ServerController extends Controller
                 'href' => route('servers.runtimes.update', $server),
             ],
             'tunnel' => app(ServerTunnelPresenter::class)->present($server, $request->user()),
+            'frontDoor' => app(ServerFrontDoorPresenter::class)->present($server, $request->user()),
         ]);
     }
 
@@ -176,6 +179,12 @@ final class ServerController extends Controller
     public function destroy(Server $server, ThisMachine $machine, CoresmithKey $keys): RedirectResponse
     {
         $this->authorize('delete', $server);
+
+        $serving = ServerFrontDoor::refusal($server);
+
+        if ($serving !== null) {
+            return back()->with('error', $serving);
+        }
 
         if ($server->runs_coresmith) {
             return $this->detachThisMachine($server, $machine);
