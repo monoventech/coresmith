@@ -377,7 +377,7 @@
                             {#each result.notes as note (note)}
                                 <p class="m-0 flex gap-2 text-muted-foreground">
                                     <Info class="mt-0.5 size-3.75 shrink-0" />
-                                    <span class="wrap-anywhere">{note}</span>
+                                    <span class="wrap-anywhere">{@render machineLinked(note)}</span>
                                 </p>
                             {/each}
                         </div>
