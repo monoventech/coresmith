@@ -64,7 +64,7 @@ final class WireGuard
 
         foreach ($lines as $line) {
             if (!str_contains($line, self::INTERFACE) && preg_match('/\b' . $prefix . '\d{1,3}\b/', $line) === 1) {
-                return "{$subnet} is already in use on {$name}.";
+                return "Another network on {$name} uses {$subnet}, which Coresmith needs for the link. Move that network to another range, then try again.";
             }
         }
 
@@ -74,7 +74,7 @@ final class WireGuard
 
         $ours = trim($connection->execute('wg show ' . self::INTERFACE . ' listen-port 2>/dev/null || true', sudo: true)->output);
 
-        return $ours === (string) $port ? null : "UDP {$port} is already in use on {$name}.";
+        return $ours === (string) $port ? null : "Something else on {$name} listens on UDP {$port}, which the link needs. Stop it or move it to another port, then try again.";
     }
 
     /**

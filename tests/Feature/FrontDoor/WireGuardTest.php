@@ -48,7 +48,7 @@ test('a subnet or port another service uses is refused with what clashes', funct
         ->respondTo('ip -4 route', '')
         ->respondTo('ss -Hulpn', '');
 
-    expect(app(WireGuard::class)->clash(wireGuardConnection($taken), '10.205.2.0/24', null))->toBe('10.205.2.0/24 is already in use on web-1.');
+    expect(app(WireGuard::class)->clash(wireGuardConnection($taken), '10.205.2.0/24', null))->toBe('Another network on web-1 uses 10.205.2.0/24, which Coresmith needs for the link. Move that network to another range, then try again.');
 
     $port = (new FakeSSHTransport)
         ->respondTo('ip -4 -o addr', '')
@@ -56,7 +56,7 @@ test('a subnet or port another service uses is refused with what clashes', funct
         ->respondTo('ss -Hulpn', "UNCONN 0      0            0.0.0.0:51871      0.0.0.0:*\n")
         ->respondTo('listen-port', '');
 
-    expect(app(WireGuard::class)->clash(wireGuardConnection($port), '10.205.2.0/24', 51871))->toBe('UDP 51871 is already in use on web-1.');
+    expect(app(WireGuard::class)->clash(wireGuardConnection($port), '10.205.2.0/24', 51871))->toBe('Something else on web-1 listens on UDP 51871, which the link needs. Stop it or move it to another port, then try again.');
 });
 
 test("the front door's own interface and port are never a clash", function () {
