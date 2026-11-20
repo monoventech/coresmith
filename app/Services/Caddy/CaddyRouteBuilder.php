@@ -11,6 +11,7 @@ namespace App\Services\Caddy;
 use App\Enums\PowerState;
 use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
+use App\Models\ServerFrontDoor;
 use App\Services\Address\DomainTwins;
 use App\Services\Panel\Reverb;
 use App\Services\SafeName;
@@ -38,6 +39,43 @@ final class CaddyRouteBuilder
         'Permissions-Policy' => 'camera=(), microphone=(), geolocation=()',
         'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains; preload',
     ];
+
+    public static function doorRouteId(ServerFrontDoor $frontDoor): string
+    {
+        return 'door-' . $frontDoor->server_id;
+    }
+
+    /**
+     * @param  list<string>  $hosts
+     * @return array<string, mixed>
+     */
+    public function door(ServerFrontDoor $frontDoor, array $hosts): array
+    {
+        $home = (string) $frontDoor->home_address;
+
+        return [
+            '@id' => self::doorRouteId($frontDoor),
+            'match' => [['host' => $hosts]],
+            'handle' => [[
+                'handler' => 'subroute',
+                'routes' => [
+                    [
+                        'match' => [['path' => ['/.well-known/acme-challenge/*']]],
+                        'handle' => [['handler' => 'reverse_proxy', 'upstreams' => [['dial' => "{$home}:80"]]]],
+                        'terminal' => true,
+                    ],
+                    [
+                        'handle' => [[
+                            'handler' => 'reverse_proxy',
+                            'upstreams' => [['dial' => "{$home}:443"]],
+                            'transport' => ['protocol' => 'http', 'tls' => ['insecure_skip_verify' => true, 'server_name' => '{http.request.host}']],
+                        ]],
+                    ],
+                ],
+            ]],
+            'terminal' => true,
+        ];
+    }
 
     public static function routeId(Application $application): string
     {
