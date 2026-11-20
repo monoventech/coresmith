@@ -24,12 +24,16 @@ function frontDoorAddressesDoor(string $prefix, int $homes = 1): Server
     return $door;
 }
 
-test('the first home on a door gets 10.205.k.2 in the lowest /24 no other door uses', function () {
+test("the first home on a door gets 10.205.0.2, whatever other doors use, since each link is the door's own", function () {
     frontDoorAddressesDoor('10.205.0');
     frontDoorAddressesDoor('10.205.1');
 
     expect(app(FrontDoorAddresses::class)->allocate(Server::factory()->create()))
-        ->toBe(['subnet' => '10.205.2.0/24', 'door' => '10.205.2.1', 'home' => '10.205.2.2']);
+        ->toBe(['subnet' => '10.205.0.0/24', 'door' => '10.205.0.1', 'home' => '10.205.0.2']);
+});
+
+test('a door that already takes in 253 servers has no address left to give', function () {
+    expect(app(FrontDoorAddresses::class)->allocate(frontDoorAddressesDoor('10.205.0', homes: 253)))->toBeNull();
 });
 
 test('a second home on the same door shares its /24 and takes the next address', function () {

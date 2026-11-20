@@ -43,8 +43,12 @@ final class ServerFrontDoorController extends Controller
 
         $this->authorize('update', $door);
 
-        Cache::lock('front-door-addresses:' . $door->getKey(), 10)->block(5, function () use ($server, $door, $addresses): void {
+        $created = Cache::lock('front-door-addresses:' . $door->getKey(), 10)->block(5, function () use ($server, $door, $addresses): bool {
             $allocated = $addresses->allocate($door);
+
+            if ($allocated === null) {
+                return false;
+            }
 
             ServerFrontDoor::query()->create([
                 'server_id' => $server->getKey(),
@@ -54,7 +58,13 @@ final class ServerFrontDoorController extends Controller
                 'door_address' => $allocated['door'],
                 'home_address' => $allocated['home'],
             ]);
+
+            return true;
         });
+
+        if (!$created) {
+            throw ValidationException::withMessages(['door' => "{$door->name} already takes visitors in for 253 servers, the most one server can. Pick another server."]);
+        }
 
         SyncServerFrontDoor::dispatch($server);
 

@@ -11,46 +11,30 @@ namespace App\Services\FrontDoor;
 use App\Models\Server;
 use App\Models\ServerFrontDoor;
 use Illuminate\Support\Str;
-use RuntimeException;
 
 final class FrontDoorAddresses
 {
     public const PREFIX = '10.205';
 
     /**
-     * @return array{subnet: string, door: string, home: string}
+     * @return array{subnet: string, door: string, home: string}|null
      */
-    public function allocate(Server $door): array
+    public function allocate(Server $door): ?array
     {
         $served = ServerFrontDoor::query()->where('door_server_id', $door->getKey())->get(['subnet', 'home_address']);
+        $prefix = $served->isEmpty() ? self::PREFIX . '.0' : self::prefix((string) $served->first()->subnet);
+        $taken = $served->map(fn(ServerFrontDoor $row): int => (int) Str::afterLast((string) $row->home_address, '.'))->all();
+        $host = 2;
 
-        if ($served->isNotEmpty()) {
-            $prefix = self::prefix((string) $served->first()->subnet);
-            $taken = $served->map(fn(ServerFrontDoor $row): int => (int) Str::afterLast((string) $row->home_address, '.'))->all();
-            $host = 2;
-
-            while (in_array($host, $taken, true)) {
-                $host++;
-            }
-
-            if ($host > 254) {
-                throw new RuntimeException("{$door->name} can't take any more servers through its front door.");
-            }
-
-            return self::addresses($prefix, $host);
+        while (in_array($host, $taken, true)) {
+            $host++;
         }
 
-        $used = ServerFrontDoor::query()->pluck('subnet')->map(fn(mixed $subnet): string => self::prefix((string) $subnet))->all();
-
-        for ($range = 0; $range <= 255; $range++) {
-            $prefix = self::PREFIX . ".{$range}";
-
-            if (!in_array($prefix, $used, true)) {
-                return self::addresses($prefix, 2);
-            }
+        if ($host > 254) {
+            return null;
         }
 
-        throw new RuntimeException('Every front door address range is in use.');
+        return self::addresses($prefix, $host);
     }
 
     /**
