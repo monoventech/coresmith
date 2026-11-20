@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Network;
 
 use App\Models\Server;
+use App\Models\ServerFrontDoor;
 use App\Models\ServerTunnel;
 use App\Services\SSH\SSHConnection;
 
@@ -42,6 +43,14 @@ final class ServerAddresses
 
         if ($tunnel?->state === ServerTunnel::OPEN && $tunnel->target() !== null) {
             return [['type' => 'CNAME', 'value' => $tunnel->target(), 'closed' => false, 'note' => self::TUNNEL_NOTE]];
+        }
+
+        $frontDoor = $server->frontDoor()->with('door')->first();
+
+        if ($frontDoor?->state === ServerFrontDoor::OPEN && $frontDoor->door !== null) {
+            $note = "Points at {$frontDoor->door->name}, which passes visitors on to this server.";
+
+            return array_values(array_map(fn(array $target): array => [...$target, 'note' => $note], array_filter(self::targets($frontDoor->door->public_addresses), fn(array $target): bool => !$target['closed'])));
         }
 
         return self::targets($server->public_addresses);

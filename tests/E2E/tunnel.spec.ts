@@ -14,6 +14,7 @@ const CLOSED = {
     error: null,
     checked: null,
     cloudflare: false,
+    front_door: null,
     can_manage: true
 }
 
@@ -185,5 +186,17 @@ test.describe('IPv4 through Cloudflare', () => {
 
         await expect(card).toContainText('Someone who manages Coresmith can turn this on.')
         await expect(card.getByRole('button', { name: 'Turn on' })).toHaveCount(0)
+    })
+
+    test('while the server takes visitors through another one, the card names it and offers no switch', async ({
+        page
+    }) => {
+        const card = await serverShowing(page, { ...CLOSED, front_door: 'web-1' })
+
+        await expect(card.getByTestId('tunnel-door-on')).toHaveText(
+            'IPv4 through web-1 is on for this server. To bring visitors in through Cloudflare instead, turn that off first.'
+        )
+        await expect(card.getByText('IPv4 closed', { exact: true })).toHaveCount(0)
+        await expect(card.getByRole('button')).toHaveCount(0)
     })
 })

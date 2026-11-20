@@ -153,6 +153,87 @@ final class CloudflareDns
     /**
      * @param  list<array{type: string, value: string}>  $restore
      */
+    /**
+     * @param  list<array{type: string, value: string}>  $door
+     * @param  list<string>  $own
+     */
+    public function pointAtDoor(#[SensitiveParameter] string $token, string $zone, string $host, array $door, array $own, bool $create = true): ?string
+    {
+        $records = $this->records($token, $zone, $host);
+        $alias = array_values(array_filter($records, fn(array $record): bool => ($record['type'] ?? null) === 'CNAME'))[0] ?? null;
+
+        if ($alias !== null) {
+            return "{$host} points at {$alias['content']}, so Coresmith left it alone.";
+        }
+
+        $doorValues = array_column($door, 'value');
+        $addresses = array_values(array_filter($records, fn(array $record): bool => in_array($record['type'] ?? null, ['A', 'AAAA'], true)));
+
+        foreach ($addresses as $record) {
+            $content = (string) ($record['content'] ?? '');
+
+            if (!self::listed($content, $own) && !self::listed($content, $doorValues)) {
+                return "{$host} points at {$content}, which isn't this server, so Coresmith left it alone.";
+            }
+        }
+
+        if ($addresses === [] && !$create) {
+            return '';
+        }
+
+        $stale = array_values(array_filter($addresses, fn(array $record): bool => self::listed((string) ($record['content'] ?? ''), $own)));
+        $missing = array_values(array_filter($door, fn(array $target): bool => array_filter($addresses, fn(array $record): bool => ($record['type'] ?? null) === $target['type'] && self::listed((string) ($record['content'] ?? ''), [$target['value']])) === []));
+
+        foreach ($stale as $record) {
+            $this->api->send($token, 'delete', "/zones/{$zone}/dns_records/{$record['id']}");
+        }
+
+        try {
+            foreach ($missing as $target) {
+                $this->api->send($token, 'post', "/zones/{$zone}/dns_records", ['type' => $target['type'], 'name' => $host, 'content' => $target['value'], 'ttl' => 1, 'proxied' => false, 'comment' => self::COMMENT]);
+            }
+        } catch (RuntimeException $refused) {
+            foreach ($stale as $record) {
+                rescue(fn() => $this->api->send($token, 'post', "/zones/{$zone}/dns_records", [
+                    'type' => $record['type'],
+                    'name' => $host,
+                    'content' => $record['content'],
+                    'ttl' => $record['ttl'] ?? 1,
+                    'proxied' => ($record['proxied'] ?? false) === true,
+                    'comment' => $record['comment'] ?? self::COMMENT,
+                ]), report: false);
+            }
+
+            throw $refused;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $door
+     * @param  list<array{type: string, value: string}>  $restore
+     */
+    public function pointBack(#[SensitiveParameter] string $token, string $zone, string $host, array $door, array $restore): void
+    {
+        $removed = false;
+
+        foreach ($this->records($token, $zone, $host) as $record) {
+            if (in_array($record['type'] ?? null, ['A', 'AAAA'], true) && self::listed((string) ($record['content'] ?? ''), $door)) {
+                $this->api->send($token, 'delete', "/zones/{$zone}/dns_records/{$record['id']}");
+                $removed = true;
+            }
+        }
+
+        if (!$removed) {
+            return;
+        }
+
+        foreach ($restore as $address) {
+            $this->api->send($token, 'post', "/zones/{$zone}/dns_records", ['type' => $address['type'], 'name' => $host, 'content' => $address['value'], 'ttl' => 1, 'proxied' => false, 'comment' => self::COMMENT]);
+        }
+    }
+
     public function routeAway(#[SensitiveParameter] string $token, string $zone, string $host, string $target, array $restore): void
     {
         foreach ($this->records($token, $zone, $host, 'CNAME') as $record) {

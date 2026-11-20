@@ -25,6 +25,10 @@ final class ServerTunnelController extends Controller
     {
         $this->authorizeTunnel($request, $server);
 
+        if ($server->frontDoor()->exists()) {
+            return back()->with('error', 'IPv4 through another server is on. Turn it off first.');
+        }
+
         $tunnel = ServerTunnel::query()->firstOrNew(['server_id' => $server->getKey()]);
 
         if (in_array($tunnel->state, [ServerTunnel::OPENING, ServerTunnel::CLOSING], true)) {

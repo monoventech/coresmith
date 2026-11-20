@@ -10,6 +10,7 @@ namespace App\Services\Tunnel;
 
 use App\Services\Network\CloudflareRanges;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -46,21 +47,47 @@ final class EdgeRedirects
         return $diverted;
     }
 
+    /**
+     * @return list<string>
+     */
+    public function addresses(string $host, string $type): array
+    {
+        $code = $type === 'AAAA' ? 28 : 1;
+
+        try {
+            $answers = Http::withHeaders(['Accept' => 'application/dns-json'])
+                ->timeout(self::SECONDS)
+                ->get(self::RESOLVER, ['name' => $host, 'type' => $type])
+                ->json('Answer');
+        } catch (Throwable) {
+            return [];
+        }
+
+        $found = [];
+
+        foreach (is_array($answers) ? $answers : [] as $answer) {
+            $data = is_array($answer) ? ($answer['data'] ?? null) : null;
+
+            if (is_array($answer) && ($answer['type'] ?? null) === $code && is_string($data)) {
+                $found[] = $data;
+            }
+        }
+
+        return $found;
+    }
+
+    public function reach(string $host, string $address): ?int
+    {
+        return $this->open($host, $address)?->status();
+    }
+
     private function edge(string $host): ?string
     {
-        foreach (['A' => 1, 'AAAA' => 28] as $type => $code) {
-            $address = $this->cloudflareAddress($host, $type, $code);
+        foreach (['A', 'AAAA'] as $type) {
+            $address = array_values(array_filter($this->addresses($host, $type), fn(string $found): bool => CloudflareRanges::containsAll([$found])))[0] ?? null;
+            $response = $address === null ? null : $this->open($host, $address);
 
-            if ($address === null) {
-                continue;
-            }
-
-            try {
-                $response = Http::withOptions(['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ["{$host}:443:" . ($code === 28 ? "[{$address}]" : $address)]]])
-                    ->withUserAgent(self::AGENT)
-                    ->timeout(self::SECONDS)
-                    ->get("https://{$host}/");
-            } catch (Throwable) {
+            if ($response === null) {
                 continue;
             }
 
@@ -70,26 +97,18 @@ final class EdgeRedirects
         return null;
     }
 
-    private function cloudflareAddress(string $host, string $type, int $code): ?string
+    private function open(string $host, string $address): ?Response
     {
+        $resolved = str_contains($address, ':') ? "[{$address}]" : $address;
+
         try {
-            $answers = Http::withHeaders(['Accept' => 'application/dns-json'])
+            return Http::withOptions(['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ["{$host}:443:{$resolved}"]]])
+                ->withUserAgent(self::AGENT)
                 ->timeout(self::SECONDS)
-                ->get(self::RESOLVER, ['name' => $host, 'type' => $type])
-                ->json('Answer');
+                ->get("https://{$host}/");
         } catch (Throwable) {
             return null;
         }
-
-        foreach (is_array($answers) ? $answers : [] as $answer) {
-            $data = is_array($answer) ? ($answer['data'] ?? null) : null;
-
-            if (($answer['type'] ?? null) === $code && is_string($data) && CloudflareRanges::containsAll([$data])) {
-                return $data;
-            }
-        }
-
-        return null;
     }
 
     private function origin(SSHConnection $connection, string $host): ?string

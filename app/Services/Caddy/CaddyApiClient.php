@@ -12,6 +12,7 @@ use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
 use App\Models\InstanceSetting;
 use App\Models\Server;
+use App\Models\ServerFrontDoor;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHResult;
 use Illuminate\Support\Facades\Cache;
@@ -136,16 +137,64 @@ final class CaddyApiClient
 
     public function trustLoopback(SSHConnection $connection, bool $trust): void
     {
-        $this->changing($connection, function () use ($connection, $trust): void {
+        $this->trustProxies($connection, $trust ? self::LOOPBACK : [], ['Cf-Connecting-Ip', 'X-Forwarded-For']);
+    }
+
+    /**
+     * @param  list<string>  $ranges
+     * @param  list<string>  $headers
+     */
+    public function trustProxies(SSHConnection $connection, array $ranges, array $headers = ['X-Forwarded-For']): void
+    {
+        $this->changing($connection, function () use ($connection, $ranges, $headers): void {
             $this->delete($connection, self::SERVER_PATH . '/trusted_proxies');
             $this->delete($connection, self::SERVER_PATH . '/client_ip_headers');
 
-            if ($trust) {
-                $this->request($connection, 'PUT', self::SERVER_PATH . '/trusted_proxies', ['source' => 'static', 'ranges' => self::LOOPBACK], retry: false);
-                $this->request($connection, 'PUT', self::SERVER_PATH . '/client_ip_headers', ['Cf-Connecting-Ip', 'X-Forwarded-For'], retry: false);
+            if ($ranges !== []) {
+                $this->request($connection, 'PUT', self::SERVER_PATH . '/trusted_proxies', ['source' => 'static', 'ranges' => $ranges], retry: false);
+                $this->request($connection, 'PUT', self::SERVER_PATH . '/client_ip_headers', $headers, retry: false);
             }
 
             $this->persistConfig($connection);
+        });
+    }
+
+    /**
+     * @param  list<string>  $hosts
+     */
+    public function putDoor(SSHConnection $connection, ServerFrontDoor $frontDoor, array $hosts): void
+    {
+        $route = $this->builder->door($frontDoor, $hosts);
+        $path = '/id/' . CaddyRouteBuilder::doorRouteId($frontDoor);
+
+        $this->changing($connection, function () use ($connection, $frontDoor, $hosts, $route, $path): void {
+            if ($this->exists($connection, $path)) {
+                $this->request($connection, 'PATCH', $path, $route);
+                $this->updateDoorPolicy($connection, $frontDoor, $hosts);
+            } elseif ($this->onCoresmithsMachine($connection)) {
+                $this->request($connection, 'PUT', self::AFTER_CORESMITH_SITE, $route, retry: false);
+                $this->request($connection, 'PUT', self::FIRST_POLICY, $this->doorPolicy($frontDoor, $hosts), retry: false);
+            } else {
+                $this->request($connection, 'PUT', self::FIRST_ROUTE, $route, retry: false);
+            }
+
+            $this->persistConfig($connection);
+        });
+    }
+
+    public function removeDoor(SSHConnection $connection, ServerFrontDoor $frontDoor): void
+    {
+        $this->changing($connection, function () use ($connection, $frontDoor): void {
+            $id = CaddyRouteBuilder::doorRouteId($frontDoor);
+            $removed = $this->delete($connection, '/id/' . $id);
+
+            if ($this->onCoresmithsMachine($connection)) {
+                $removed = $this->delete($connection, '/id/' . $id . '-tls') || $removed;
+            }
+
+            if ($removed) {
+                $this->persistConfig($connection);
+            }
         });
     }
 
@@ -231,6 +280,35 @@ final class CaddyApiClient
 
         $this->request($connection, 'PUT', self::AFTER_CORESMITH_SITE, $config, retry: false);
         $this->request($connection, 'PUT', self::FIRST_POLICY, $this->policy($application), retry: false);
+    }
+
+    /**
+     * @param  list<string>  $hosts
+     */
+    private function updateDoorPolicy(SSHConnection $connection, ServerFrontDoor $frontDoor, array $hosts): void
+    {
+        if (!$this->onCoresmithsMachine($connection)) {
+            return;
+        }
+
+        try {
+            $this->request($connection, 'PATCH', '/id/' . CaddyRouteBuilder::doorRouteId($frontDoor) . '-tls', $this->doorPolicy($frontDoor, $hosts));
+        } catch (SSHCommandFailedException $e) {
+            if (!$this->missing($e)) {
+                throw $e;
+            }
+
+            $this->request($connection, 'PUT', self::FIRST_POLICY, $this->doorPolicy($frontDoor, $hosts), retry: false);
+        }
+    }
+
+    /**
+     * @param  list<string>  $hosts
+     * @return array<string, mixed>
+     */
+    private function doorPolicy(ServerFrontDoor $frontDoor, array $hosts): array
+    {
+        return CaddyInstaller::appPolicy(CaddyRouteBuilder::doorRouteId($frontDoor), $hosts, CaddyInstaller::issuers(InstanceSetting::get('notification_email')));
     }
 
     private function updatePolicy(SSHConnection $connection, Application $application): void
