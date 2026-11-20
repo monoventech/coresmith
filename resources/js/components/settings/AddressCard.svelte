@@ -7,6 +7,7 @@
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import type { Address } from '@/lib/address'
+    import { tunnelTokenLink } from '@/lib/cloudflare'
     import { Form, router } from '@inertiajs/svelte'
     import { CircleAlert, CircleCheck, Info } from '@lucide/svelte'
 
@@ -403,7 +404,16 @@
                     <Dialog.Description>
                         {#if replacing}
                             The new token needs Account, Cloudflare Tunnel, Edit and Zone, DNS, Edit for your domains'
-                            zones. Coresmith checks it can still manage your tunnel before it replaces the old one.
+                            zones.
+                            <a
+                                class="focus-ring rounded-sm font-medium text-primary-strong underline-offset-2 hover:underline"
+                                href={tunnelTokenLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid="address-token-link"
+                                >Create one in Cloudflare<span class="sr-only"> (opens in a new tab)</span></a
+                            > with both filled in. Coresmith checks it can still manage your tunnel before it replaces the
+                            old one.
                         {:else}
                             Create a token in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template,
                             limited to your domain's zone. Coresmith keeps it encrypted and never shows it again.

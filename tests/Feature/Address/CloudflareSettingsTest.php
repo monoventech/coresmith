@@ -89,11 +89,11 @@ test('an owner connects a token Cloudflare accepts, kept encrypted and never sho
 });
 
 test('a token Cloudflare refuses is refused next to the field, and nothing is kept', function () {
-    Http::fake([CLOUDFLARE_SETTINGS_API . '/user/tokens/verify' => Http::response(['success' => false, 'errors' => [['code' => 1000, 'message' => 'Invalid API Token']]], 401)]);
+    Http::fake([CLOUDFLARE_SETTINGS_API . '/*' => Http::response(['success' => false, 'errors' => [['code' => 1000, 'message' => 'Invalid API Token']]], 401)]);
 
     $this->actingAs(cloudflareSettingsUser())
         ->post(route('settings.address.cloudflare.store'), ['token' => 'not-a-token'])
-        ->assertSessionHasErrors(['token' => "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here."]);
+        ->assertSessionHasErrors(['token' => "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one."]);
 
     expect(CloudflareConnection::token())->toBeNull();
 });

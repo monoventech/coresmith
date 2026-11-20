@@ -20,7 +20,12 @@ const OPEN = {
     ...CLOSED,
     state: 'open',
     hosts: ['beelink.example.com', 'notes.example.com', 'www.notes.example.com'],
-    skipped: [{ host: 'shop.example.net', reason: 'shop.example.net points at 198.51.100.9, which isn\'t this server, so Coresmith left it alone.' }],
+    skipped: [
+        {
+            host: 'shop.example.net',
+            reason: "shop.example.net points at 198.51.100.9, which isn't this server, so Coresmith left it alone."
+        }
+    ],
     checked: '4 minutes ago',
     cloudflare: true
 }
@@ -55,6 +60,29 @@ test.describe('IPv4 through Cloudflare', () => {
 
         await dialog(page).getByRole('button', { name: 'Cancel' }).click()
         await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test("the token field links to Cloudflare's account token form with both permissions filled in", async ({
+        page
+    }) => {
+        const card = await serverShowing(page, CLOSED)
+
+        await card.getByRole('button', { name: 'Turn on' }).click()
+
+        const link = dialog(page).getByTestId('tunnel-token-link')
+
+        await expect(link).toHaveAccessibleName('Create one in Cloudflare (opens in a new tab)')
+        await expect(link).toHaveAttribute('target', '_blank')
+
+        const href = new URL(String(await link.getAttribute('href')))
+
+        expect(href.origin).toBe('https://dash.cloudflare.com')
+        expect(href.searchParams.get('to')).toBe('/:account/api-tokens')
+        expect(href.searchParams.get('name')).toBe('Coresmith')
+        expect(JSON.parse(String(href.searchParams.get('permissionGroupKeys')))).toEqual([
+            { key: 'c07321b023e944ff818fec44d8203567', type: 'edit' },
+            { key: 'dns', type: 'edit' }
+        ])
     })
 
     test('with the tunnel on, the card counts the domains, lists them on request and names those left alone, in dark', async ({
@@ -112,7 +140,9 @@ test.describe('IPv4 through Cloudflare', () => {
         await expect(card.getByRole('button', { name: 'Turn off' })).toBeVisible()
     })
 
-    test('while the tunnel is being set up, the card says what is happening and offers no buttons', async ({ page }) => {
+    test('while the tunnel is being set up, the card says what is happening and offers no buttons', async ({
+        page
+    }) => {
         const card = await serverShowing(page, { ...CLOSED, state: 'opening', cloudflare: true })
 
         await expect(card.getByRole('status')).toContainText(`Installing Cloudflare's connector on ${SERVER}`)
