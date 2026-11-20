@@ -176,6 +176,16 @@ test('a read that fails keeps the gate and says why', function () {
         ->and($application->fresh()->repository_check_pending)->toBeTrue();
 });
 
+test('a git host whose SSH key changed says so instead of blaming the deploy key', function () {
+    [$owner, $application] = repositoryCheckApp(['repository_url' => 'git@gitlab.com:acme/shop.git']);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)->respondTo(RepositoryReader::MARKER, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nHost key for gitlab.com has changed and you have requested strict checking.\nHost key verification failed.\nfatal: Could not read from remote repository.\n", 128));
+
+    repositoryCheckPost($owner, $application);
+
+    expect($application->fresh()->repository_check['failure'])
+        ->toBe("gitlab.com's SSH key isn't the one Coresmith saw before. That happens when the git server is rebuilt, or when something is in the way. If you trust the new key, run sudo ssh-keygen -R gitlab.com -f /etc/coresmith/deploy-keys/known_hosts on the app's server, then check again.");
+});
+
 test('only someone who can deploy the app can check it', function () {
     [, $application] = repositoryCheckApp();
     $member = User::factory()->create();
