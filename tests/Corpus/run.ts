@@ -297,7 +297,7 @@ await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 60_0
 await page.goto(`${panel}/servers`)
 await page.getByRole('link', { name: server, exact: true }).first().click()
 await page.waitForURL(/\/servers\/[^/?#]+(?:[?#].*)?$/, { timeout: 30_000 })
-await page.getByRole('link', { name: 'Add an app' }).first().waitFor({ timeout: 30_000 })
+await page.getByRole('main').getByRole('link', { name: 'Add an app' }).first().waitFor({ timeout: 30_000 })
 
 const serverPage = page.url()
 
@@ -316,7 +316,7 @@ for (const [index, entry] of entries.entries()) {
         console.log(`${index + 1}/${entries.length} ${entry.name}`)
 
         await page.goto(serverPage)
-        await page.getByRole('link', { name: 'Add an app' }).first().click({ timeout: 60_000 })
+        await page.getByRole('main').getByRole('link', { name: 'Add an app' }).first().click({ timeout: 60_000 })
         await page.getByLabel('Name', { exact: true }).fill(name)
 
         if ((await page.getByLabel('Source', { exact: true }).count()) > 0) {

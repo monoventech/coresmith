@@ -18,10 +18,12 @@ use App\Models\Team;
 use App\Models\User;
 use App\Notifications\ServerReachableNotification;
 use App\Notifications\ServerUnreachableNotification;
+use App\Services\Cron\CronRuns;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\MetricsCollector;
+use App\Services\Server\ProcessStates;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\HostKeyFingerprint;
@@ -117,7 +119,7 @@ function reachabilityCollect(Server $server, SSHTransport $transport): void
     SSHConnectionManager::createTransportUsing(fn(): SSHTransport => $transport);
 
     try {
-        (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), app(MetricsCollector::class), app(ServerReachability::class));
+        app()->call([new CollectServerMetrics($server), 'handle']);
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }
@@ -616,8 +618,9 @@ test("a hung server times out inside the job's own limit", function () {
         ->and($transport->budgetFor('top -bn1'))->toBe(20)
         ->and($transport->budgetFor('access.log'))->toBe(20)
         ->and($transport->budgetFor('journalctl'))->toBe(20)
-        ->and($job->timeout)->toBe(120)
-        ->and($job->timeout)->toBeGreaterThan(SSHConnection::TIMEOUT_SECONDS + 3 * MetricsCollector::PROBE_SECONDS)
+        ->and($job->timeout)->toBe(150)
+        ->and($job->timeout)->toBeGreaterThan(SSHConnection::TIMEOUT_SECONDS + 3 * MetricsCollector::PROBE_SECONDS + CronRuns::SECONDS + ProcessStates::SECONDS)
+        ->and($job->uniqueFor)->toBeGreaterThan($job->timeout)
         ->and($job->tries)->toBe(1)
         ->and($job)->toBeInstanceOf(ShouldBeUnique::class)
         ->and($job->uniqueId())->toBe($server->id)

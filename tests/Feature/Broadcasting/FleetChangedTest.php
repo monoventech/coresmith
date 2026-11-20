@@ -112,7 +112,7 @@ function fleetPingCollect(Server $server, int $memory = 40, int $disk = 40): voi
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
-        (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), app(MetricsCollector::class), app(ServerReachability::class));
+        app()->call([new CollectServerMetrics($server), 'handle']);
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }

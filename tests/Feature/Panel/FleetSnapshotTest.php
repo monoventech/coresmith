@@ -172,6 +172,7 @@ test('a server card carries its state, rounded readings, links and applications'
         'id' => $server->id,
         'key' => 'web-1',
         'name' => 'web-1',
+        'tags' => [],
         'state' => ['key' => 'healthy', 'label' => 'Healthy', 'tone' => 'success'],
         'meta' => '1 app',
         'compact_meta' => '1 app',

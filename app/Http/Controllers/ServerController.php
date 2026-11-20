@@ -36,6 +36,7 @@ use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ServerFrontDoorPresenter;
 use App\Services\Panel\ServerPresenter;
+use App\Services\Panel\ServerProcesses;
 use App\Services\Panel\ServerTunnelPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
@@ -160,6 +161,7 @@ final class ServerController extends Controller
             ],
             'tunnel' => app(ServerTunnelPresenter::class)->present($server, $request->user()),
             'frontDoor' => app(ServerFrontDoorPresenter::class)->present($server, $request->user()),
+            'processes' => app(ServerProcesses::class)->for($server, $request->user()),
         ]);
     }
 

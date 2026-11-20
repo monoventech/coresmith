@@ -47,6 +47,7 @@ use App\Services\Runtime\JsTooling;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\CertificateCheck;
 use App\Services\Server\PortAllocator;
+use App\Services\Server\ProcessStates;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
@@ -252,6 +253,8 @@ final class E2ESeeder extends Seeder
         $this->ssrDidNotStart($this->realtime('ssr-failed', 9220, [], Server::query()->where('name', 'hot-01')->sole()));
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->connectFixtures();
+        $this->tagFixtures();
+        $this->processFixtures();
         $this->databasePasswordFixtures();
         $this->serverWithNoFreePorts();
         $this->auditFixtures();
@@ -435,6 +438,32 @@ final class E2ESeeder extends Seeder
 
             $spent->replicate()->forceFill(['name' => $name, 'slug' => $name, 'system_user' => 'coresmith-app-' . $name, 'domain' => $name . '.bench.monoven.io', 'base_port' => $port])->saveQuietly();
         }
+    }
+
+    private function processFixtures(): void
+    {
+        $server = $this->server('busy-01', '203.0.113.176', ServerStatus::Active);
+        $this->application('busy-shop', 9700, [], $server);
+        $this->application('busy-blog', 9710, ['power_state' => PowerState::Sleeping], $server);
+        $started = '@' . now()->subHours(3)->getTimestamp();
+        $reading = fn(int $restarts): array => ProcessStates::parse(implode("\n\n", [
+            "Id=coresmith-app-busy-shop-web.service\nActiveState=active\nSubState=running\nNRestarts=0\nMemoryCurrent=104857600\nActiveEnterTimestamp={$started}",
+            "Id=coresmith-app-busy-shop-queue-worker.service\nActiveState=active\nSubState=running\nNRestarts={$restarts}\nMemoryCurrent=62914560\nActiveEnterTimestamp={$started}",
+            "Id=coresmith-app-busy-shop-scheduler.service\nActiveState=failed\nSubState=failed\nNRestarts=0\nMemoryCurrent=[not set]\nActiveEnterTimestamp=",
+            "Id=coresmith-app-busy-blog-web.service\nActiveState=inactive\nSubState=dead\nNRestarts=0\nMemoryCurrent=[not set]\nActiveEnterTimestamp=",
+        ]));
+
+        app(ProcessStates::class)->record($server, $reading(0));
+        app(ProcessStates::class)->record($server, $reading(14));
+    }
+
+    private function tagFixtures(): void
+    {
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->server("tags-{$code}", '203.0.113.' . (170 + $index), ServerStatus::Active);
+        }
+
+        $this->server('tagged-01', '203.0.113.175', ServerStatus::Active)->forceFill(['tags' => ['production', 'eu']])->save();
     }
 
     private function connectFixtures(): void
