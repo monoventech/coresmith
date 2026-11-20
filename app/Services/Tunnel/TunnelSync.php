@@ -54,6 +54,19 @@ final class TunnelSync
         }
     }
 
+    public function refusalFor(#[SensitiveParameter] string $token, ServerTunnel $tunnel): ?string
+    {
+        if ($tunnel->account_id === null) {
+            return $tunnel->server === null ? null : $this->preflight($token, $tunnel->server);
+        }
+
+        try {
+            return $this->tunnels->refusal($token, (string) $tunnel->account_id);
+        } catch (RuntimeException $failed) {
+            return $failed->getMessage();
+        }
+    }
+
     public function open(ServerTunnel $tunnel, SSHConnection $connection): void
     {
         $server = $connection->server();

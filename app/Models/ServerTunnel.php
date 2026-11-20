@@ -55,6 +55,11 @@ class ServerTunnel extends Model
             ->first();
     }
 
+    public static function usingToken(): ?self
+    {
+        return self::query()->whereHas('server')->with('server')->first();
+    }
+
     public static function thisMachineOpen(): bool
     {
         return Cache::remember(self::THIS_MACHINE_CACHE, 60, fn(): bool => self::forThisMachine() instanceof self);

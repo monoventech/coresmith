@@ -48,8 +48,14 @@ final class AddressGate
             return new AddressVerdict($this->address->dnsRefusal($host));
         }
 
-        if (ServerTunnel::forThisMachine()?->carries($host) === true) {
+        $tunnel = ServerTunnel::forThisMachine();
+
+        if ($tunnel?->carries($host) === true) {
             return new AddressVerdict(null, ["{$host} reaches Coresmith through this machine's Cloudflare tunnel."]);
+        }
+
+        if ($tunnel !== null) {
+            return new AddressVerdict("{$host} isn't on this machine's Cloudflare tunnel yet. Point it here with Cloudflare, then check again.");
         }
 
         $report = $this->reachability->check($host);

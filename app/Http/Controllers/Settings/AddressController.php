@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\ServerTunnel;
 use App\Services\Address\AddressChange;
 use App\Services\Address\AddressCheck;
 use App\Services\Address\AddressGate;
@@ -17,6 +18,7 @@ use App\Services\Address\CloudflareConnection;
 use App\Services\Address\CloudflareDns;
 use App\Services\Address\InstallationAddress;
 use App\Services\Address\PointAddress;
+use App\Services\Tunnel\TunnelSync;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -50,12 +52,18 @@ final class AddressController extends Controller
         return back()->with('success', "Switching to {$host}. Coresmith keeps answering on {$from} until the certificate is ready.");
     }
 
-    public function connectCloudflare(Request $request, CloudflareDns $dns): RedirectResponse
+    public function connectCloudflare(Request $request, CloudflareDns $dns, TunnelSync $sync): RedirectResponse
     {
         abort_unless($request->user()->managesInstance(), 403);
 
         $token = trim((string) $request->input('token'));
+        $replacing = CloudflareConnection::token() !== null;
+        $tunnel = ServerTunnel::usingToken();
         $refusal = $token === '' ? 'Paste the API token Cloudflare showed you once.' : $dns->refusal($token);
+
+        if ($refusal === null && $tunnel !== null) {
+            $refusal = $sync->refusalFor($token, $tunnel);
+        }
 
         if ($refusal !== null) {
             throw ValidationException::withMessages(['token' => $refusal]);
@@ -63,12 +71,18 @@ final class AddressController extends Controller
 
         CloudflareConnection::connect($token);
 
-        return back()->with('success', 'Cloudflare is connected. Coresmith keeps its address pointed at this server.');
+        return back()->with('success', $replacing ? 'Token replaced.' : 'Cloudflare is connected. Coresmith keeps its address pointed at this server.');
     }
 
     public function disconnectCloudflare(Request $request): RedirectResponse
     {
         abort_unless($request->user()->managesInstance(), 403);
+
+        $tunneled = ServerTunnel::usingToken()?->server;
+
+        if ($tunneled !== null) {
+            return back()->with('error', "The Cloudflare tunnel on {$tunneled->name} uses this token. Turn that tunnel off first, then disconnect.");
+        }
 
         CloudflareConnection::disconnect();
 

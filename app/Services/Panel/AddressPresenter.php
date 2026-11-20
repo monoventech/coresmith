@@ -11,6 +11,7 @@ namespace App\Services\Panel;
 use App\Enums\Edition;
 use App\Models\GitHubApp;
 use App\Models\Server;
+use App\Models\ServerTunnel;
 use App\Models\TeamSsoConnection;
 use App\Services\Address\AddressChange;
 use App\Services\Address\AddressCheck;
@@ -33,7 +34,7 @@ final class AddressPresenter
     ) {}
 
     /**
-     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, machine: ?string, follow: ?array{github: ?string, sso: ?string}}|null
+     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, tunnel: ?string, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string, tunnel: ?array{name: string, url: string}}, machine: ?string, follow: ?array{github: ?string, sso: ?string}}|null
      */
     public function present(): ?array
     {
@@ -44,18 +45,22 @@ final class AddressPresenter
         $host = $this->address->host();
         $url = rtrim((string) config('app.url'), '/');
         $change = AddressChange::current();
+        $machine = Server::query()->where('runs_coresmith', true)->first();
+        $tunnel = $machine?->tunnel()->first();
+        $carried = $tunnel?->carries($host) === true;
 
         return [
             'host' => $host,
             'url' => $url,
             'certificate' => InstallationAddress::certificate($host)->value,
             'managed' => $this->address->managed(),
-            'ipv6_only' => $this->ipv6Only($host),
+            'ipv6_only' => !$carried && $this->ipv6Only($host),
+            'tunnel' => $this->tunnel($machine, $tunnel, $carried),
             'change' => $change,
             'check' => AddressCheck::current(),
             'reach' => AddressReading::current($host),
-            'cloudflare' => $this->cloudflare(),
-            'machine' => $this->machine(),
+            'cloudflare' => $this->cloudflare($carried ? $tunnel : null, $tunnel === null ? null : $machine),
+            'machine' => $machine === null ? null : route('servers.show', $machine),
             'follow' => ($change['state'] ?? null) !== 'done' ? null : [
                 'github' => GitHubApp::query()->exists() ? route('source-providers.index') : null,
                 'sso' => TeamSsoConnection::query()->exists() ? $url . SignIn::CALLBACK_PATH : null,
@@ -63,11 +68,14 @@ final class AddressPresenter
         ];
     }
 
-    private function machine(): ?string
+    private function tunnel(?Server $machine, ?ServerTunnel $tunnel, bool $carried): ?string
     {
-        $machine = Server::query()->where('runs_coresmith', true)->first();
-
-        return $machine === null ? null : route('servers.show', $machine);
+        return match (true) {
+            $carried => 'carries',
+            $tunnel !== null => 'on',
+            (((array) $machine?->public_addresses)['ipv4_open'] ?? null) === false => 'off',
+            default => null,
+        };
     }
 
     private function ipv6Only(string $host): bool
@@ -83,18 +91,20 @@ final class AddressPresenter
     }
 
     /**
-     * @return array{connected: bool, host: ?string, error: ?string, synced: ?string}
+     * @return array{connected: bool, host: ?string, error: ?string, synced: ?string, tunnel: ?array{name: string, url: string}}
      */
-    private function cloudflare(): array
+    private function cloudflare(?ServerTunnel $carrying, ?Server $tunneled): array
     {
         $status = CloudflareConnection::status();
         $synced = is_string($status['synced_at'] ?? null) ? CarbonImmutable::parse($status['synced_at']) : null;
+        $using = $tunneled ?? ServerTunnel::usingToken()?->server;
 
         return [
             'connected' => CloudflareConnection::token() !== null,
             'host' => $status['host'] ?? null,
-            'error' => $status['error'] ?? null,
-            'synced' => Formats::when($synced),
+            'error' => $carrying === null ? ($status['error'] ?? null) : $carrying->error,
+            'synced' => Formats::when($carrying === null ? $synced : $carrying->checked_at),
+            'tunnel' => $using === null ? null : ['name' => $using->name, 'url' => route('servers.show', $using)],
         ];
     }
 }
