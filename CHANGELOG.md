@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.28 (2026-11-20)
+
+### Added
+- feat: a Laravel app whose repository schedules work starts with its scheduler on (#147)
+
+### Changed
+- The tunnel card names domains Cloudflare redirects to another site before visitors reach the server (#150)
+- The tunnel card links to Cloudflare's token form with its permissions filled in, and account tokens work (#149)
+- Settings knows when this machine's Cloudflare tunnel carries Coresmith's address (#148)
+- A Laravel app added with Horizon starts with its queue worker on (#146)
+- Coresmith's own address can move to a new domain while this machine's tunnel is on (#145)
+
 ## v0.8.27 (2026-11-19)
 
 ### Changed
