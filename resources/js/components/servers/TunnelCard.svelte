@@ -19,6 +19,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { tunnelTokenLink } from '@/lib/cloudflare'
     import { cn } from '@/lib/utils'
     import { Form, router } from '@inertiajs/svelte'
     import { ChevronRight, CircleAlert } from '@lucide/svelte'
@@ -227,9 +228,15 @@
                         />
                         <FieldError message={errors.token} />
                         <p id="tunnel-token-hint" class="mt-2 text-[12px] text-muted-foreground">
-                            Create one in Cloudflare under My Profile, API Tokens, with Account, Cloudflare Tunnel, Edit
-                            and Zone, DNS, Edit for your domains' zones. Coresmith keeps it encrypted and never shows it
-                            again.
+                            <a
+                                class="focus-ring rounded-sm font-medium text-primary-strong underline-offset-2 hover:underline"
+                                href={tunnelTokenLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid="tunnel-token-link"
+                                >Create one in Cloudflare<span class="sr-only"> (opens in a new tab)</span></a
+                            > with Account, Cloudflare Tunnel, Edit and Zone, DNS, Edit already filled in, then paste it here.
+                            Coresmith keeps it encrypted and never shows it again.
                         </p>
                     </div>
                 {/if}

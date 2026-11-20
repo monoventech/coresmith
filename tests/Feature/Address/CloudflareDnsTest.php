@@ -35,13 +35,41 @@ test('a token Cloudflare turns down, or one that sees no zone, is refused with w
     Http::fake([
         CLOUDFLARE_DNS_API . '/user/tokens/verify' => Http::response(...$verify),
         CLOUDFLARE_DNS_API . '/zones?per_page=1' => Http::response(cloudflareDnsAnswer($zones)),
+        CLOUDFLARE_DNS_API . '/accounts*' => Http::response(cloudflareDnsRefusal('Authentication error', 10000), 403),
     ]);
 
     expect(app(CloudflareDns::class)->refusal('a-token'))->toBe($refusal);
 })->with([
-    'not a token' => [[cloudflareDnsRefusal('Invalid API Token', 1000), 401], [], "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here."],
-    'a revoked token' => [[cloudflareDnsAnswer(['status' => 'disabled'])], [], "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here."],
-    'no zone in sight' => [[cloudflareDnsAnswer(['status' => 'active'])], [], "That token can't see any of your zones. Create one from the Edit zone DNS template, with your domain's zone under Zone Resources."],
+    'not a token' => [[cloudflareDnsRefusal('Invalid API Token', 1000), 401], [], "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one."],
+    'a revoked token' => [[cloudflareDnsAnswer(['status' => 'disabled'])], [], "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one."],
+    'no zone in sight' => [[cloudflareDnsAnswer(['status' => 'active'])], [], "That token can't see any of your zones. In Cloudflare, add your domain's zone under the token's Zone Resources, then try again."],
+]);
+
+test("an account-owned token is checked against the account it belongs to, found from the zones it sees", function () {
+    Http::fake([
+        CLOUDFLARE_DNS_API . '/user/tokens/verify' => Http::response(cloudflareDnsRefusal('Invalid API Token', 1000), 401),
+        CLOUDFLARE_DNS_API . '/zones?per_page=1' => Http::response(cloudflareDnsAnswer([['id' => 'z1', 'name' => 'coresmith.io', 'account' => ['id' => 'acc1']]])),
+        CLOUDFLARE_DNS_API . '/accounts/acc1/tokens/verify' => Http::response(cloudflareDnsAnswer(['id' => 't1', 'status' => 'active'])),
+    ]);
+
+    expect(app(CloudflareDns::class)->refusal('account-token'))->toBeNull();
+
+    Http::assertSent(fn(Request $request): bool => str_ends_with($request->url(), '/accounts/acc1/tokens/verify') && $request->hasHeader('Authorization', 'Bearer account-token'));
+    Http::assertNotSent(fn(Request $request): bool => str_contains($request->url(), '/accounts?'));
+});
+
+test('an account-owned token that sees no zone finds its account from the accounts it sees, and is told about zones or refused', function (string $status, string $refusal) {
+    Http::fake([
+        CLOUDFLARE_DNS_API . '/user/tokens/verify' => Http::response(cloudflareDnsRefusal('Invalid API Token', 1000), 401),
+        CLOUDFLARE_DNS_API . '/zones?per_page=1' => Http::response(cloudflareDnsAnswer([])),
+        CLOUDFLARE_DNS_API . '/accounts?per_page=1' => Http::response(cloudflareDnsAnswer([['id' => 'acc1', 'name' => 'Monoven']])),
+        CLOUDFLARE_DNS_API . '/accounts/acc1/tokens/verify' => Http::response(cloudflareDnsAnswer(['id' => 't1', 'status' => $status])),
+    ]);
+
+    expect(app(CloudflareDns::class)->refusal('account-token'))->toBe($refusal);
+})->with([
+    'active' => ['active', "That token can't see any of your zones. In Cloudflare, add your domain's zone under the token's Zone Resources, then try again."],
+    'disabled' => ['disabled', "Cloudflare doesn't accept that token. Paste the whole token Cloudflare showed you, or create a new one."],
 ]);
 
 test("a host's zone is found by walking up its labels", function () {
