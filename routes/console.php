@@ -204,6 +204,8 @@ Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup'
 
 Schedule::command('coresmith:backup-databases')->dailyAt('02:30')->name('coresmith:backup-databases')->withoutOverlapping();
 
+Schedule::command('coresmith:backup-databases --hourly')->hourlyAt(30)->name('coresmith:backup-databases-hourly')->withoutOverlapping();
+
 Schedule::command('coresmith:weekly-digest')->weeklyOn(1, '08:00')->name('coresmith:weekly-digest')->withoutOverlapping();
 
 Schedule::command('coresmith:check-update')

@@ -8,6 +8,7 @@
         bucket: string
         prefix: string | null
         path_style: boolean
+        frequency: 'daily' | 'hourly'
         last_run: string | null
         failing: number
     }
@@ -21,6 +22,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { NativeSelect } from '@/components/ui/native-select'
     import { Switch } from '@/components/ui/switch'
     import { Form, router } from '@inertiajs/svelte'
 
@@ -31,6 +33,7 @@
     let removing = $state(false)
     let working = $state(false)
     let pathStyle = $state(false)
+    let frequency = $state<'daily' | 'hourly'>('daily')
 
     const endpointHost = $derived.by(() => {
         try {
@@ -42,6 +45,7 @@
 
     function edit() {
         pathStyle = offsite?.path_style ?? false
+        frequency = offsite?.frequency ?? 'daily'
         editing = true
     }
 
@@ -69,8 +73,8 @@
         {/if}
     </div>
     <p class="mb-3 text-[12.5px] text-muted-foreground">
-        Every night at 02:30, each MySQL and PostgreSQL database goes from its server straight to your bucket. Coresmith
-        never holds the dump.
+        {offsite?.frequency === 'hourly' ? 'Every hour' : 'Every night at 02:30'}, each MySQL and PostgreSQL database
+        goes from its server straight to your bucket. Coresmith never holds the dump.
     </p>
     {#if offsite}
         {#if planNote}
@@ -121,6 +125,24 @@
                     >
                 </Dialog.Header>
                 <div class="mt-4 flex flex-col gap-3">
+                    <div>
+                        <Label for="offsite-frequency" class="mb-1.5">How often</Label>
+                        <NativeSelect
+                            id="offsite-frequency"
+                            name="frequency"
+                            bind:value={frequency}
+                            aria-describedby="offsite-frequency-hint"
+                            aria-invalid={errors.frequency ? true : undefined}
+                            options={[
+                                { value: 'daily', label: 'Every night at 02:30' },
+                                { value: 'hourly', label: 'Every hour' }
+                            ]}
+                        />
+                        <FieldError message={errors.frequency} />
+                        <p id="offsite-frequency-hint" class="m-0 mt-1.5 text-[12px] text-muted-foreground">
+                            Hourly backups fill the bucket fast. Set a lifecycle rule to expire old ones.
+                        </p>
+                    </div>
                     <div>
                         <Label for="offsite-endpoint" class="mb-1.5">Endpoint</Label>
                         <Input
@@ -184,7 +206,8 @@
                         <Input
                             id="offsite-access-key"
                             name="access_key_id"
-                            required
+                            required={!offsite}
+                            placeholder={offsite ? 'Saved, never shown' : ''}
                             autocomplete="off"
                             spellcheck="false"
                             class="font-mono text-[13px]"
