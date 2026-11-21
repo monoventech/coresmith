@@ -38,6 +38,25 @@ test.describe('a server', () => {
         )
     })
 
+    test('the tab names the server and the installation, and says a name they share once', async ({ page }) => {
+        await gotoServer(page, 'forge-01')
+
+        await expect(page).toHaveTitle('forge-01 · Coresmith')
+
+        await withProps(page, /\/servers\/[\w.-]+(\/hardening)?$/, (props) => {
+            props.appName = 'Forge-01'
+        })
+        await tabs(page, 'Server sections').getByRole('link', { name: 'Hardening', exact: true }).click()
+        await page.waitForURL(/\/hardening$/)
+
+        await expect(page).toHaveTitle('forge-01 hardening')
+
+        await tabs(page, 'Server sections').getByRole('link', { name: 'Apps', exact: true }).click()
+        await page.waitForURL(/\/servers\/[\w.-]+$/)
+
+        await expect(page).toHaveTitle('forge-01')
+    })
+
     test('each reading card says what its percentage is of, in plain amounts', async ({ page }) => {
         await gotoServer(page, 'forge-01')
 
