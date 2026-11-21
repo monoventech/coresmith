@@ -8,12 +8,9 @@ import { initializeTheme } from '@/lib/theme.svelte'
 import { refreshVisit } from '@/lib/visits'
 import { createInertiaApp } from '@inertiajs/svelte'
 
-const appName = import.meta.env.VITE_APP_NAME || 'Coresmith'
-
 void startSentry()
 
 createInertiaApp({
-    title: (title) => (title ? `${title} · ${appName}` : appName),
     layout: (name) => {
         switch (true) {
             case name === 'Install':
