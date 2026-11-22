@@ -14,7 +14,18 @@ const direct =
 const PAGES: [string, Visit][] = [
     ['General settings', direct('/monoven/settings')],
     ['Fleet', direct('/monoven/dashboard')],
-    ['Billing on Pro', direct('/monoven/settings/billing')]
+    ['Billing on Pro', direct('/monoven/settings/billing')],
+    [
+        'Add server with a private address',
+        async (page) => {
+            await page.goto('/monoven/servers/create')
+            await page.getByLabel('Provider').selectOption('manual')
+            await page.getByLabel('Server name').fill('office-nas')
+            await page.getByLabel('IP address').fill('192.168.0.248')
+            await page.getByRole('button', { name: 'Add server' }).click()
+            await expect(page.getByLabel('IP address')).toHaveAttribute('aria-invalid', 'true')
+        }
+    ]
 ]
 
 const OTHER_TEAM_PAGES: [string, Visit][] = [

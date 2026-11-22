@@ -13,6 +13,7 @@ use App\Enums\Edition;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\Network\OwnAddress;
+use App\Services\Network\PublicAddress;
 use App\Services\SafeName;
 use App\Services\Server\ThisMachine;
 use Illuminate\Foundation\Http\FormRequest;
@@ -50,11 +51,23 @@ final class StoreServerRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator): void {
-            if ($validator->errors()->has('ip_address') || Edition::current()->isCloud() || !app(OwnAddress::class)->is((string) $this->input('ip_address'))) {
+            if ($validator->errors()->has('ip_address')) {
                 return;
             }
 
-            $validator->errors()->add('ip_address', $this->ownMachine());
+            $address = (string) $this->input('ip_address');
+            $cloud = Edition::current()->isCloud();
+
+            $refusal = match (true) {
+                $cloud && !PublicAddress::is($address) => "That's a private address, so Coresmith Cloud can't reach it. Use your server's public IP address.",
+                !app(OwnAddress::class)->is($address) => null,
+                $cloud => "That address belongs to Coresmith Cloud. Use your server's public IP address.",
+                default => $this->ownMachine(),
+            };
+
+            if ($refusal !== null) {
+                $validator->errors()->add('ip_address', $refusal);
+            }
         }, function (Validator $validator): void {
             if ($validator->errors()->hasAny(['ip_address', 'ssh_port', 'team_id'])) {
                 return;
