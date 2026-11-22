@@ -47,7 +47,7 @@ final class NetworkFailure
 
     private static function failingLine(string $output): ?string
     {
-        foreach (array_reverse(preg_split('/\R/', $output) ?: []) as $line) {
+        foreach (array_reverse(preg_split('/\r\n|\n|\r/', $output) ?: []) as $line) {
             if (preg_match(self::RECOVERED, $line) === 1) {
                 continue;
             }
