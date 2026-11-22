@@ -329,6 +329,7 @@
     <div
         class="tint-destructive mb-5 flex items-start gap-3 rounded-xl border px-4.5 py-3.5 max-sm:mb-3.5 max-sm:gap-2.5 max-sm:px-3.5 max-sm:py-3"
         data-testid="failure-banner"
+        role="alert"
     >
         <OctagonAlert class="mt-0.5 size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <div
