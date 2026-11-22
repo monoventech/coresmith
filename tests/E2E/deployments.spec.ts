@@ -427,6 +427,9 @@ test.describe('a deploy that failed with a known reason', () => {
 
         await expect(page.getByTestId('failure-reason')).toContainText('The clone failed, so nothing changed.')
         await expect(page.getByTestId('failure-reason')).toContainText('Branch release/2.0 is not in the repository.')
+        await expect(
+            page.getByRole('alert').filter({ hasText: 'Branch release/2.0 is not in the repository.' })
+        ).toBeVisible()
         await expect(page.getByRole('link', { name: 'Roll back' })).toHaveCount(0)
     })
 
