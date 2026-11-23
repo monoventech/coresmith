@@ -2,6 +2,7 @@
     import { router } from '@inertiajs/svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
+    import { Checkbox } from '@/components/ui/checkbox'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import type { MoveAway } from '@/lib/moves'
@@ -9,35 +10,45 @@
     let { away }: { away: MoveAway } = $props()
 
     let code = $state('')
+    let handOver = $state(false)
     let working = $state(false)
     let error = $state<string | undefined>(undefined)
+    let handOverError = $state<string | undefined>(undefined)
 
     const moving = $derived(away.moving)
+    const machine = $derived(away.machine)
 
     function start(event: SubmitEvent) {
         event.preventDefault()
         error = undefined
+        handOverError = undefined
         router.post(
             route('settings.moving.store'),
-            { code: code.trim() },
+            { code: code.trim(), hand_over: machine !== null && handOver },
             {
                 preserveScroll: true,
                 onStart: () => (working = true),
                 onFinish: () => (working = false),
                 onSuccess: () => {
                     code = ''
+                    handOver = false
                     window.location.assign(route('settings.moving.file'))
                 },
-                onError: (errors: Record<string, string>) => (error = errors.code)
+                onError: (errors: Record<string, string>) => {
+                    error = errors.code
+                    handOverError = errors.hand_over
+                }
             }
         )
     }
 
     function cancel() {
+        error = undefined
         router.delete(route('settings.moving.destroy'), {
             preserveScroll: true,
             onStart: () => (working = true),
-            onFinish: () => (working = false)
+            onFinish: () => (working = false),
+            onError: (errors: Record<string, string>) => (error = errors.move)
         })
     }
 </script>
@@ -49,6 +60,13 @@
             Since {moving.since}, Coresmith has stopped managing this team's servers, and they keep running. Upload the
             move file {moving.where} to finish, or cancel the move to keep the team here.
         </p>
+        {#if machine}
+            <p class="mb-3 text-[12.5px] text-muted-foreground" data-testid="move-away-remove">
+                Once Coresmith Cloud has taken {machine} over, use Remove Coresmith in the danger zone below. Its apps keep
+                running.
+            </p>
+        {/if}
+        <FieldError message={error} />
         <div class="mt-auto flex flex-wrap gap-2.5 pt-3">
             {#if moving.file}
                 <Button size="sm" href={moving.file} download>Download move file</Button>
@@ -79,6 +97,30 @@
                 Create one in Coresmith Cloud, under Settings, General.
             </p>
             <FieldError message={error} />
+            {#if machine}
+                <div class="mt-2" data-testid="move-away-hand-over">
+                    <div class="flex min-h-11 items-center gap-2.5">
+                        <Checkbox
+                            id="move-away-hand-over"
+                            bind:checked={handOver}
+                            aria-describedby="move-away-hand-over-hint"
+                            aria-invalid={handOverError ? true : undefined}
+                        />
+                        <Label
+                            for="move-away-hand-over"
+                            class="flex min-h-11 flex-1 items-center text-[13px] font-normal"
+                            >Hand {machine} over to Coresmith Cloud</Label
+                        >
+                    </div>
+                    <p id="move-away-hand-over-hint" class="m-0 -mt-1.5 pl-6.5 text-[12px] text-muted-foreground">
+                        {machine} is the machine this Coresmith runs on. Coresmith Cloud signs in to it as root with a key,
+                        from its own addresses only, so SSH must be open to them. It then manages {machine}'s SSH like
+                        any server's and turns password logins off, so add your SSH key in Coresmith Cloud first.
+                        Afterwards, remove this Coresmith from {machine}. Its apps keep running.
+                    </p>
+                    <div class="pl-6.5"><FieldError message={handOverError} /></div>
+                </div>
+            {/if}
             <div class="pt-3">
                 <Button type="submit" variant="outline" size="sm" disabled={working}>Download move file</Button>
             </div>

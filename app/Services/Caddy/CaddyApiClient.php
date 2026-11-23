@@ -97,7 +97,7 @@ final class CaddyApiClient
             if ($this->exists($connection, $path)) {
                 $this->request($connection, 'PATCH', $path, $config);
                 $this->updatePolicy($connection, $application);
-            } else {
+            } elseif (!$this->adopt($connection, $application, $config)) {
                 $this->insertSite($connection, $application, $config);
             }
 
@@ -174,11 +174,12 @@ final class CaddyApiClient
             if ($this->exists($connection, $path)) {
                 $this->request($connection, 'PATCH', $path, $route);
                 $this->updateDoorPolicy($connection, $frontDoor, $hosts);
-            } elseif ($this->onCoresmithsMachine($connection)) {
-                $this->request($connection, 'PUT', self::AFTER_CORESMITH_SITE, $route, retry: false);
-                $this->request($connection, 'PUT', self::FIRST_POLICY, $this->doorPolicy($frontDoor, $hosts), retry: false);
             } else {
-                $this->request($connection, 'PUT', self::FIRST_ROUTE, $route, retry: false);
+                $this->request($connection, 'PUT', $this->onCoresmithsMachine($connection) ? self::AFTER_CORESMITH_SITE : self::FIRST_ROUTE, $route, retry: false);
+
+                if ($this->writesPolicies($connection)) {
+                    $this->request($connection, 'PUT', self::FIRST_POLICY, $this->doorPolicy($frontDoor, $hosts), retry: false);
+                }
             }
 
             $this->persistConfig($connection);
@@ -191,7 +192,7 @@ final class CaddyApiClient
             $id = CaddyRouteBuilder::doorRouteId($frontDoor);
             $removed = $this->delete($connection, '/id/' . $id);
 
-            if ($this->onCoresmithsMachine($connection)) {
+            if ($this->writesPolicies($connection)) {
                 $removed = $this->delete($connection, '/id/' . $id . '-tls') || $removed;
             }
 
@@ -206,7 +207,7 @@ final class CaddyApiClient
         $this->changing($connection, function () use ($connection, $application): void {
             $removed = $this->delete($connection, '/id/' . CaddyRouteBuilder::routeId($application));
 
-            if ($this->onCoresmithsMachine($connection)) {
+            if ($this->writesPolicies($connection)) {
                 $removed = $this->delete($connection, '/id/' . self::policyId($application)) || $removed;
             }
 
@@ -218,11 +219,48 @@ final class CaddyApiClient
         });
     }
 
-    private function forgetFormerRoute(SSHConnection $connection, Application $application): bool
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function adopt(SSHConnection $connection, Application $application, array $config): bool
+    {
+        $former = self::formerRoute($application);
+
+        if ($former === null || !$this->exists($connection, '/id/' . $former)) {
+            return false;
+        }
+
+        $this->request($connection, 'PATCH', '/id/' . $former, $config);
+
+        if (!$this->writesPolicies($connection)) {
+            return true;
+        }
+
+        try {
+            $this->request($connection, 'PATCH', '/id/' . $former . '-tls', $this->policy($application));
+        } catch (SSHCommandFailedException $e) {
+            if (!$this->missing($e)) {
+                throw $e;
+            }
+
+            $this->request($connection, 'PUT', self::FIRST_POLICY, $this->policy($application), retry: false);
+        }
+
+        return true;
+    }
+
+    private static function formerRoute(Application $application): ?string
     {
         $former = $application->former_route_id;
 
-        if (!is_string($former) || preg_match(self::FORMER_ROUTE, $former) !== 1 || $former === CaddyRouteBuilder::routeId($application)) {
+        return is_string($former) && preg_match(self::FORMER_ROUTE, $former) === 1 && $former !== CaddyRouteBuilder::routeId($application) ? $former : null;
+    }
+
+    private function forgetFormerRoute(SSHConnection $connection, Application $application): bool
+    {
+        $former = self::formerRoute($application);
+
+        if ($former === null) {
             return false;
         }
 
@@ -292,14 +330,11 @@ final class CaddyApiClient
      */
     private function insertSite(SSHConnection $connection, Application $application, array $config): void
     {
-        if (!$this->onCoresmithsMachine($connection)) {
-            $this->request($connection, 'PUT', self::FIRST_ROUTE, $config, retry: false);
+        $this->request($connection, 'PUT', $this->onCoresmithsMachine($connection) ? self::AFTER_CORESMITH_SITE : self::FIRST_ROUTE, $config, retry: false);
 
-            return;
+        if ($this->writesPolicies($connection)) {
+            $this->request($connection, 'PUT', self::FIRST_POLICY, $this->policy($application), retry: false);
         }
-
-        $this->request($connection, 'PUT', self::AFTER_CORESMITH_SITE, $config, retry: false);
-        $this->request($connection, 'PUT', self::FIRST_POLICY, $this->policy($application), retry: false);
     }
 
     /**
@@ -307,7 +342,7 @@ final class CaddyApiClient
      */
     private function updateDoorPolicy(SSHConnection $connection, ServerFrontDoor $frontDoor, array $hosts): void
     {
-        if (!$this->onCoresmithsMachine($connection)) {
+        if (!$this->writesPolicies($connection)) {
             return;
         }
 
@@ -333,7 +368,7 @@ final class CaddyApiClient
 
     private function updatePolicy(SSHConnection $connection, Application $application): void
     {
-        if (!$this->onCoresmithsMachine($connection)) {
+        if (!$this->writesPolicies($connection)) {
             return;
         }
 
@@ -378,6 +413,11 @@ final class CaddyApiClient
     private function onCoresmithsMachine(SSHConnection $connection): bool
     {
         return (bool) $connection->server()->runs_coresmith;
+    }
+
+    private function writesPolicies(SSHConnection $connection): bool
+    {
+        return $connection->server()->installedByCoresmith();
     }
 
     private function changing(SSHConnection $connection, callable $change): void

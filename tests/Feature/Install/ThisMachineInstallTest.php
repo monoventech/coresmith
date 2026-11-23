@@ -74,12 +74,13 @@ function thisMachineRun(string $base, ?string $request, array $sshd = []): Proce
     thisMachineStub($base, 'chgrp', ':');
 
     $script = preg_replace(
-        ['/^readonly EXCHANGE=.*$/m', '/^readonly KEYS=.*$/m', '/^readonly SSHD_CONFIG=.*$/m', '/^readonly DROP_IN=.*$/m'],
+        ['/^readonly EXCHANGE=.*$/m', '/^readonly KEYS=.*$/m', '/^readonly SSHD_CONFIG=.*$/m', '/^readonly DROP_IN=.*$/m', '/^readonly MOVE_DROP_IN=.*$/m'],
         [
             "readonly EXCHANGE={$base}/exchange",
             "readonly KEYS={$base}/root-ssh/authorized_keys",
             "readonly SSHD_CONFIG={$base}/ssh/sshd_config",
             "readonly DROP_IN={$base}/ssh/sshd_config.d/00-coresmith-local.conf",
+            "readonly MOVE_DROP_IN={$base}/ssh/sshd_config.d/00-coresmith-move.conf",
         ],
         thisMachineHelper(),
     );
@@ -316,6 +317,108 @@ test("removing takes out Coresmith's key and its sshd rule and leaves everything
         ->and(file_get_contents("{$base}/ssh/sshd_config"))->toBe($config)
         ->and(thisMachineAnswer($base))->toBe(['id' => 'two', 'ok' => true])
         ->and(array_count_values(thisMachineCalls($base))['systemctl reload ssh'] ?? 0)->toBe(2);
+});
+
+function thisMachineHandedOver(string $base): void
+{
+    file_put_contents("{$base}/root-ssh/authorized_keys", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOwnerOwnerOwnerOwnerOwnerOwnerOwnerOwnerOw owner@laptop\n" . thisMachineBlock(thisMachineKey()));
+    file_put_contents("{$base}/ssh/sshd_config.d/00-coresmith-local.conf", thisMachineRule());
+}
+
+function thisMachineMoveRule(): string
+{
+    return "Match User root Address 88.99.12.121,2a01:4f8:1c17:43b8::1\n    PermitRootLogin prohibit-password\n    AllowUsers root\n    AllowGroups root\nMatch all\n";
+}
+
+test("handing over lets Coresmith's key and root in from Coresmith Cloud's addresses too, and keeps this machine's own", function () {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+
+    thisMachineRun($base, 'handover1 handover 88.99.12.121,2a01:4f8:1c17:43b8::1');
+
+    expect(thisMachineAnswer($base))->toBe(['id' => 'handover1', 'ok' => true])
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOwnerOwnerOwnerOwnerOwnerOwnerOwnerOwnerOw owner@laptop\n# coresmith-this-machine begin\nfrom=\"127.0.0.1,::1,88.99.12.121,2a01:4f8:1c17:43b8::1\",no-agent-forwarding,no-port-forwarding,no-X11-forwarding " . thisMachineKey() . " coresmith-this-machine\n# coresmith-this-machine end\n")
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBe(thisMachineMoveRule())
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/00-coresmith-local.conf"))->toBe(thisMachineRule())
+        ->and(thisMachineCalls($base))->toContain('systemctl reload ssh');
+});
+
+test('keeping the machine puts root sign-in back to this machine only', function () {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+    thisMachineRun($base, 'handover1 handover 88.99.12.121,2a01:4f8:1c17:43b8::1');
+
+    thisMachineRun($base, 'keep1 keep');
+
+    expect(thisMachineAnswer($base))->toBe(['id' => 'keep1', 'ok' => true])
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOwnerOwnerOwnerOwnerOwnerOwnerOwnerOwnerOw owner@laptop\n" . thisMachineBlock(thisMachineKey()))
+        ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBeFalse();
+});
+
+test('once Coresmith Cloud has taken the machine over, keeping it is refused and the rule that lets Coresmith Cloud in stays', function () {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+    thisMachineRun($base, 'handover1 handover 88.99.12.121,2a01:4f8:1c17:43b8::1');
+    $keys = implode("\n", array_filter(explode("\n", file_get_contents("{$base}/root-ssh/authorized_keys")), fn(string $line): bool => !str_contains($line, thisMachineKey()))) . "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICloudCloudCloudCloudCloudCloudCloudCloudCl coresmith\n";
+    file_put_contents("{$base}/root-ssh/authorized_keys", $keys);
+
+    thisMachineRun($base, 'keep1 keep');
+
+    expect(thisMachineAnswer($base))->toBe(['id' => 'keep1', 'ok' => false, 'error' => "Coresmith Cloud has already taken this machine over, so the move can't be cancelled. Remove Coresmith from it instead."])
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe($keys)
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBe(thisMachineMoveRule());
+});
+
+test('a handover naming anything but a few addresses is refused without touching sshd or root\'s keys', function (string $addresses) {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+    $keys = file_get_contents("{$base}/root-ssh/authorized_keys");
+
+    thisMachineRun($base, "handover1 handover {$addresses}");
+
+    expect(thisMachineAnswer($base)['ok'] ?? null)->toBeFalse()
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe($keys)
+        ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBeFalse()
+        ->and(thisMachineCalls($base))->not->toContain('systemctl reload ssh');
+})->with([
+    'a name' => ['example.com'],
+    'a command' => ['88.99.12.121;reboot'],
+    'an address out of range' => ['88.99.12.300'],
+    'nine addresses' => [implode(',', array_map(fn(int $n): string => "203.0.113.{$n}", range(1, 9)))],
+]);
+
+test("an sshd that still turns root away from Coresmith Cloud's addresses gets the old settings back", function () {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+    $keys = file_get_contents("{$base}/root-ssh/authorized_keys");
+
+    thisMachineRun($base, 'handover1 handover 88.99.12.121', ['effective' => "port 22\npermitrootlogin no\nlistenaddress 0.0.0.0:22\n"]);
+
+    expect(thisMachineAnswer($base)['ok'] ?? null)->toBeFalse()
+        ->and(thisMachineAnswer($base)['error'] ?? null)->toBe('sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.')
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe($keys)
+        ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBeFalse();
+});
+
+test("removing Coresmith's key after a handover leaves the rule that lets Coresmith Cloud in", function () {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+    thisMachineRun($base, 'handover1 handover 88.99.12.121,2a01:4f8:1c17:43b8::1');
+
+    thisMachineRun($base, 'remove1 remove');
+
+    expect(thisMachineAnswer($base))->toBe(['id' => 'remove1', 'ok' => true])
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBe(thisMachineMoveRule())
+        ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-local.conf"))->toBeFalse();
+});
+
+test('a machine without Coresmith\'s key has nothing to hand over', function () {
+    $base = thisMachineBase();
+
+    thisMachineRun($base, 'handover1 handover 88.99.12.121');
+
+    expect(thisMachineAnswer($base)['error'] ?? null)->toBe("Coresmith's key isn't on this machine, so there's nothing to hand over. Add this machine as a server again, then try again.")
+        ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBeFalse();
 });
 
 test('the answer is readable by the coresmith group and replaces a file planted in its place rather than writing through it', function () {

@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use App\Enums\ServerStatus;
+use App\Jobs\CloseUnknownHosts;
 use App\Jobs\SyncApplicationRoute;
 use App\Jobs\TakeOverServer;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Runtime\AsdfManager;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
@@ -154,4 +156,34 @@ test('a server that is not moving is left alone', function () {
     takeOverServerRun($server, $transport);
 
     expect($transport->connected())->toBeFalse()->and($transport->loginAttempted())->toBeFalse();
+});
+
+function takeOverServerMachine(): Server
+{
+    $server = takeOverServerMoving();
+    $server->forceFill(['meta' => ['caddy_admin' => 'socket', 'runtime_user' => AsdfManager::CORESMITH_HOST_USER]])->save();
+    Application::factory()->create(['team_id' => $server->team_id, 'server_id' => $server->id, 'former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+
+    return $server;
+}
+
+test('once the machine Coresmith ran on is taken over, its apps move their routes and unknown hostnames get closed', function () {
+    Queue::fake();
+    $server = takeOverServerMachine();
+    $transport = new FakeSSHTransport;
+
+    $moved = takeOverServerRun($server, $transport);
+
+    expect($moved->takeover['state'])->toBe('moved')
+        ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, '/config/apps/tls'))->all())->toBe([]);
+    Queue::assertPushed(SyncApplicationRoute::class, 1);
+    Queue::assertPushed(CloseUnknownHosts::class, fn(CloseUnknownHosts $job): bool => $job->server->is($server));
+});
+
+test('an ordinary server taken over leaves unknown hostnames to the hourly check', function () {
+    Queue::fake();
+
+    takeOverServerRun(takeOverServerMoving(), new FakeSSHTransport);
+
+    Queue::assertNotPushed(CloseUnknownHosts::class);
 });

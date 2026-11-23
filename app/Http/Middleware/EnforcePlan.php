@@ -53,6 +53,7 @@ final class EnforcePlan
         'settings.billing.move.store',
         'settings.billing.move.destroy',
         'settings.moving.destroy',
+        'settings.removal.store',
         'settings.offsite-backups.destroy',
     ];
 
