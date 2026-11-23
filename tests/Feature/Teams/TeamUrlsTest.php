@@ -291,6 +291,25 @@ test('a verified custom domain picks its team and an unverified one does not', f
         ->assertInertia(fn($page) => $page->where('panel.viaHost', false));
 });
 
+test('on Cloud a team opens only at its path, never on a subdomain or a domain of its own', function () {
+    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+    [$user, $monoven, $acme] = teamUrlsTwoTeams();
+    $user->forceFill(['current_team_id' => $monoven->id])->save();
+    TeamDomain::factory()->for($acme)->verified()->create(['hostname' => 'panel.acme.test']);
+
+    foreach (['http://acme.coresmith.test/deployments', 'http://panel.acme.test/deployments'] as $url) {
+        $this->actingAs($user)
+            ->get($url)
+            ->assertOk()
+            ->assertInertia(fn($page) => $page->where('panel.team.slug', 'monoven')->where('panel.viaHost', false));
+    }
+
+    $this->actingAs($user)
+        ->get('/acme/deployments')
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('panel.team.slug', 'acme')->where('panel.viaHost', false));
+});
+
 test('a team host does not serve another team resources', function () {
     [$user, $monoven, $acme] = teamUrlsTwoTeams();
     TeamDomain::factory()->for($acme)->verified()->create(['hostname' => 'panel.acme.test']);

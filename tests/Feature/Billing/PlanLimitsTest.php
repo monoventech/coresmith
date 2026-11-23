@@ -145,28 +145,21 @@ test('starter is for one person', function () {
     }
 });
 
-test('custom domains need pro or business', function () {
-    planLimitsDns();
-    $starter = Team::factory()->subscribed(Plan::Starter)->owned()->create(['slug' => 'starter']);
-    $this->actingAs(planLimitsOwner($starter));
+test('no cloud plan opens a team on its own domain', function (Closure $factory) {
+    $team = $factory()->owned()->create(['slug' => 'acme']);
+    $this->actingAs(planLimitsOwner($team));
 
-    $this->post('/starter' . route('settings.team-domain.store', [], false), ['hostname' => 'panel.starter.test'])
-        ->assertSessionHas('error', 'Custom domains are part of Pro and Business. Change the plan in Billing settings.');
-    $this->post('/starter' . route('settings.team-domain.verify', [], false))
-        ->assertSessionHas('error', 'Custom domains are part of Pro and Business. Change the plan in Billing settings.');
+    $this->post('/acme' . route('settings.team-domain.store', [], false), ['hostname' => 'panel.acme.test'])->assertNotFound();
+    $this->post('/acme' . route('settings.team-domain.verify', [], false))->assertNotFound();
+    $this->delete('/acme' . route('settings.team-domain.destroy', [], false))->assertNotFound();
 
-    expect($starter->domain()->exists())->toBeFalse();
-
-    foreach (['pro' => Team::factory()->subscribed(Plan::Pro), 'trying' => Team::factory()->onTrial()] as $slug => $factory) {
-        $team = $factory->owned()->create(['slug' => $slug]);
-
-        $this->actingAs(planLimitsOwner($team))
-            ->post("/{$slug}" . route('settings.team-domain.store', [], false), ['hostname' => "panel.{$slug}.test"])
-            ->assertSessionMissing('error');
-
-        expect($team->domain()->exists())->toBeTrue();
-    }
-});
+    expect($team->domain()->exists())->toBeFalse();
+})->with([
+    'trial' => [fn() => Team::factory()->onTrial()],
+    'starter' => [fn() => Team::factory()->subscribed(Plan::Starter)],
+    'pro' => [fn() => Team::factory()->subscribed(Plan::Pro)],
+    'business' => [fn() => Team::factory()->subscribed(Plan::Business)],
+]);
 
 test('single sign-on needs business', function () {
     Http::fake();

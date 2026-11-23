@@ -49,7 +49,6 @@ final class BillingPresenter
             'banner' => $this->banner($team, $status, $canManage),
             'notes' => [
                 'members' => $memberLimit !== null && $team->members()->count() >= $memberLimit ? "{$status->plan?->label()} is for one person." : null,
-                'custom_domain' => $this->note($status, PlanFeature::CustomDomain),
                 'single_sign_on' => $this->note($status, PlanFeature::SingleSignOn),
                 'offsite_backups' => $this->note($status, PlanFeature::OffsiteBackups),
                 'audit_log_export' => $this->note($status, PlanFeature::AuditLogExport),

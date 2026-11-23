@@ -81,6 +81,20 @@ test("Coresmith's own address and a team's custom domain are refused", function 
         ->assertSessionHasErrors(['domain' => "Coresmith uses {$domain} for its own address. Pick another domain."]);
 })->with(['coresmith.example.com', 'deploy.example.org']);
 
+test('on Cloud a team domain saved before holds no name, so an app can use it', function () {
+    config(['coresmith.edition' => 'cloud']);
+    TeamDomain::query()->create(['team_id' => Team::factory()->create()->getKey(), 'hostname' => 'deploy.example.org', 'verification_token' => 'token']);
+    $server = inUseServer();
+    $server->team->forceFill(['trial_ends_at' => now()->addDays(14)])->save();
+    $application = inUseApp($server);
+
+    $this->actingAs(inUseOwner($server->team))
+        ->put(route('servers.applications.update', [$server, $application]), ['domain' => 'deploy.example.org'])
+        ->assertSessionHasNoErrors();
+
+    expect($application->fresh()->domain)->toBe('deploy.example.org');
+});
+
 test('an app that already shares a domain can still save its other settings', function () {
     $server = inUseServer();
     inUseApp($server, ['domain' => 'shared.example.com']);

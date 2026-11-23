@@ -8,10 +8,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
-use App\Enums\PlanFeature;
 use App\Http\Controllers\Controller;
 use App\Models\TeamDomain;
-use App\Services\Billing\PlanGate;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamDomains;
 use Closure;
@@ -20,13 +18,11 @@ use Illuminate\Http\Request;
 
 final class TeamDomainController extends Controller
 {
-    public function store(Request $request, TeamContext $context, TeamDomains $domains, PlanGate $plans): RedirectResponse
+    public function store(Request $request, TeamContext $context, TeamDomains $domains): RedirectResponse
     {
         $team = $context->teamOrFail();
 
         $this->authorize('update', $team);
-
-        $plans->ensureIncludes($team, PlanFeature::CustomDomain, $request->user());
 
         $request->merge(['hostname' => $domains->normalise((string) $request->input('hostname'))]);
 
@@ -47,13 +43,11 @@ final class TeamDomainController extends Controller
         return back()->with('success', 'Saved. Add the two DNS records below, then check them.');
     }
 
-    public function verify(Request $request, TeamContext $context, TeamDomains $domains, PlanGate $plans): RedirectResponse
+    public function verify(TeamContext $context, TeamDomains $domains): RedirectResponse
     {
         $team = $context->teamOrFail();
 
         $this->authorize('update', $team);
-
-        $plans->ensureIncludes($team, PlanFeature::CustomDomain, $request->user());
 
         $domain = $team->domain()->first();
 

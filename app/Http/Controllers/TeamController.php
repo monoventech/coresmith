@@ -50,7 +50,7 @@ final class TeamController extends Controller
 
         $user = $request->user();
         $urls = app(TeamUrls::class);
-        $domain = $team->domain()->first();
+        $domain = $urls->allowsTeamHosts() ? $team->domain()->first() : null;
         $manages = $user->can('manageMembers', $team);
         $shares = $user->can('shareAccess', $team);
         $access = app(TeamAccess::class);
@@ -61,6 +61,7 @@ final class TeamController extends Controller
                 'path' => $urls->pathUrl($team, $request),
                 'subdomain' => $urls->subdomainUrl($team),
                 'domain' => $domain instanceof TeamDomain ? app(TeamDomains::class)->present($domain) : null,
+                'custom_domains' => $urls->allowsTeamHosts(),
             ],
             'sso' => app(SsoConnections::class)->present($team, $user),
             'offsite' => $this->offsite($team),

@@ -141,7 +141,6 @@ test('a starter team learns what it is missing', function () {
 
     expect(billingBannerSummary($team)['notes'])->toBe([
         'members' => 'Starter is for one person.',
-        'custom_domain' => 'Custom domains are part of Pro and Business.',
         'single_sign_on' => 'Single sign-on is part of Business.',
         'offsite_backups' => 'Database backups to S3 are part of Business.',
         'audit_log_export' => 'Audit log export is part of Business.',
@@ -159,7 +158,6 @@ test('a read-only team\'s notes give the reason, not the plan', function (Closur
 
     expect($notes)->toBe([
         'members' => null,
-        'custom_domain' => $title,
         'single_sign_on' => $title,
         'offsite_backups' => $title,
         'audit_log_export' => $title,

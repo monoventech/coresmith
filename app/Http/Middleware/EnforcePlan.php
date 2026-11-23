@@ -43,7 +43,6 @@ final class EnforcePlan
         'cloud-providers.destroy',
         'settings.sso.destroy',
         'settings.sso.enabled',
-        'settings.team-domain.destroy',
         'servers.destroy',
         'servers.cloud.destroy',
         'servers.host-key.reject',

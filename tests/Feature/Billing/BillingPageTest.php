@@ -302,7 +302,7 @@ test('the plan card and the dialog show what the team pays, not the configured p
     expect($page['plan']['line'])->toBe('$15 per month · renews Nov 1')
         ->and($page['plan']['amount'])->toBe('$15')
         ->and($page['plans'][0]['summary'])->toBe('$9 per month · 3 servers · one person')
-        ->and($page['plans'][1]['summary'])->toBe('$15 per month · unlimited servers · teammates and roles · custom domain')
+        ->and($page['plans'][1]['summary'])->toBe('$15 per month · unlimited servers · teammates and roles')
         ->and($page['plans'][2]['summary'])->toStartWith('$39 per month');
 });
 
