@@ -1662,24 +1662,74 @@ test('the install log, which holds the setup link, is readable by root only, bef
         ->and(installScriptFunctions('create_systemd_services'))->toContain("    secure_logs\n");
 });
 
-test("a re-run on Ubuntu leaves Ondřej Surý's PHP archive as it is, so it never needs Launchpad's API again", function (array $sources, bool $added) {
-    $directory = sys_get_temp_dir() . '/coresmith-apt-' . bin2hex(random_bytes(4));
-    mkdir($directory, 0700, true);
+test("a re-run retires Ondřej Surý's deprecated Launchpad archive for PHP and its key, and leaves other archives alone", function (array $sources, array $keys, bool $retired) {
+    $apt = installScriptScratch();
+    $trusted = installScriptScratch();
 
     foreach ($sources as $source) {
-        file_put_contents("{$directory}/{$source}", "Types: deb\n");
+        file_put_contents("{$apt}/{$source}", "Types: deb\n");
     }
 
-    $process = new Process(['bash', '-c', "set -euo pipefail\nOS_ID=ubuntu\nAPT_SOURCES=" . escapeshellarg($directory) . "\nlog() { printf 'log %s\\n' \"\$1\"; }\nrun() { printf 'run %s\\n' \"\$*\"; }\n"
-        . installScriptFunctions('add_php_repository') . "\nadd_php_repository\n"]);
-    $process->run();
-    (new Process(['rm', '-rf', $directory]))->run();
+    foreach ($keys as $key) {
+        file_put_contents("{$trusted}/{$key}", 'key');
+    }
+
+    $process = installScriptRun('APT_SOURCES=' . escapeshellarg($apt) . "\nAPT_TRUSTED=" . escapeshellarg($trusted) . "\n" . installScriptFunctions('retire_php_ppa') . "\nretire_php_ppa\n");
+    $left = [...array_map(basename(...), glob("{$apt}/*")), ...array_map(basename(...), glob("{$trusted}/*"))];
+    (new Process(['rm', '-rf', $apt, $trusted]))->run();
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
-        ->and(str_contains($process->getOutput(), 'run add-apt-repository -y ppa:ondrej/php'))->toBe($added);
+        ->and($left)->toBe(array_values(array_diff([...$sources, ...$keys], ['ondrej-ubuntu-php-noble.sources', 'ondrej-ubuntu-php-jammy.list', 'ondrej-ubuntu-php.gpg'])))
+        ->and(str_contains($process->getOutput(), 'Moving PHP to packages.sury.org'))->toBe($retired);
+})->with([
+    'a fresh machine' => [[], [], false],
+    'Ubuntu 24.04 with the archive set up' => [['ondrej-ubuntu-php-noble.sources', 'ubuntu.sources'], [], true],
+    'Ubuntu 22.04 with the archive and its key' => [['nodesource.list', 'ondrej-ubuntu-php-jammy.list'], ['nodesource.gpg', 'ondrej-ubuntu-php.gpg'], true],
+    'another archive only' => [['nodesource.sources'], ['nodesource.gpg'], false],
+]);
+
+test('Ubuntu and Debian get PHP from packages.sury.org, signed by the key its keyring package installs', function (array $sources, bool $added) {
+    $apt = installScriptScratch();
+
+    foreach ($sources as $name => $content) {
+        file_put_contents("{$apt}/{$name}", $content);
+    }
+
+    $process = installScriptRun('APT_SOURCES=' . escapeshellarg($apt) . "\nrun() { printf 'run %s\\n' \"\$*\"; }\nlsb_release() { printf 'noble\\n'; }\n" . installScriptFunctions('add_php_repository') . "\nadd_php_repository\n");
+    $list = is_file("{$apt}/sury-php.list") ? file_get_contents("{$apt}/sury-php.list") : null;
+    (new Process(['rm', '-rf', $apt]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(preg_match('~^run curl -fsSLo (/\S+)/debsuryorg-archive-keyring\.deb --retry 3 --connect-timeout 20 --max-time 120 https://packages\.sury\.org/debsuryorg-archive-keyring\.deb\nrun dpkg -i \1/debsuryorg-archive-keyring\.deb$~m', $process->getOutput()))->toBe($added ? 1 : 0)
+        ->and($list)->toBe($added ? "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ noble main\n" : null);
 })->with([
     'a fresh machine' => [[], true],
-    'Ubuntu 24.04 with the archive set up' => [['ondrej-ubuntu-php-noble.sources'], false],
-    'Ubuntu 22.04 with the archive set up' => [['ondrej-ubuntu-php-jammy.list'], false],
-    'another archive only' => [['nodesource.sources'], true],
+    'a machine with the source an older installer wrote' => [['sury-php.list' => "deb [signed-by=/usr/share/keyrings/deb.sury.org-archive-keyring.gpg] https://packages.sury.org/php/ bookworm main\n"], true],
+    'a machine whose owner added packages.sury.org' => [['php.list' => "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ noble main\n"], false],
+    'another archive only' => [['nodesource.sources' => "Types: deb\nURIs: https://deb.nodesource.com/node_24.x\n"], true],
 ]);
+
+test("the PHP archive's keyring downloads into a directory only root can open, which is removed afterwards", function () {
+    $apt = installScriptScratch();
+
+    $process = installScriptRun('APT_SOURCES=' . escapeshellarg($apt) . "\nrun() { printf 'run %s\\n' \"\$*\"; if [ \"\$1\" = curl ]; then ls -ld \"\${3%/*}\"; fi; }\nlsb_release() { printf 'noble\\n'; }\n" . installScriptFunctions('add_php_repository') . "\nadd_php_repository\n");
+    (new Process(['rm', '-rf', $apt]))->run();
+    preg_match('~^run curl -fsSLo (/\S+)/debsuryorg-archive-keyring\.deb .*\n(\S+)~m', $process->getOutput(), $download);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($download[2] ?? '')->toMatch('/^drwx------[@+.]?$/')
+        ->and($download[1])->not->toBe('/tmp')
+        ->and(is_dir($download[1]))->toBeFalse();
+});
+
+test('every package refresh in the installer accepts an archive that changed its label', function () {
+    preg_match_all('/apt-get update[^\n]*/', installScriptBody(), $matches);
+
+    expect($matches[0])->not->toBeEmpty()->each->toEndWith(' --allow-releaseinfo-change-label');
+});
+
+test('the installer drops the deprecated archive before its first package refresh, and needs no add-apt-repository', function () {
+    expect(installScriptFunctions('install_system_packages'))->toMatch('/retire_php_ppa\n\s+run apt-get update [^\n]+\n\s+run apt-get install -y -qq ca-certificates curl gnupg lsb-release\n\s+add_php_repository\n\s+run apt-get update /')
+        ->and(installScriptBody())->not->toContain('add-apt-repository')
+        ->not->toContain('software-properties-common');
+});

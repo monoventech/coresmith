@@ -14,7 +14,7 @@ final class AptPackageManager implements PackageManager
 {
     private const NON_INTERACTIVE = 'DEBIAN_FRONTEND=noninteractive';
 
-    private const FAILED_SOURCE = '~^(?:[EW]: Failed to fetch|E: The repository \'|E: Release file for)\s*([a-z][a-z0-9+.-]*://[^\s\']+)~m';
+    private const FAILED_SOURCE = '~^(?:[EW]: Failed to fetch|E: (?:The repository|Repository) \'|E: Release file for)\s*([a-z][a-z0-9+.-]*://[^\s\']+)~m';
 
     public static function failedSource(string $output): ?string
     {
@@ -27,7 +27,7 @@ final class AptPackageManager implements PackageManager
 
     public function update(): string
     {
-        return self::NON_INTERACTIVE . ' apt-get update -y';
+        return self::NON_INTERACTIVE . ' apt-get update -y --allow-releaseinfo-change-label';
     }
 
     public function install(array $packages): string
