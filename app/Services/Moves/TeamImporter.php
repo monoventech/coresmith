@@ -81,11 +81,19 @@ final class TeamImporter
             $this->refuse($problems[0]);
         }
 
-        $into = Edition::current()->isCloud() ? $this->landing($payload, $code, $owner) : null;
+        [$team, $servers] = DB::transaction(function () use ($payload, $code, $owner): array {
+            $locked = MoveCode::query()->lockForUpdate()->findOrFail($code->getKey());
 
-        $this->ensureFits($payload, $into === null);
+            if ($locked->imported_at !== null) {
+                $this->refuse('This move code has already been used. Create a new one, then download the file again from ' . MoveSide::origin() . '.');
+            }
 
-        [$team, $servers] = DB::transaction(fn(): array => $this->create($payload, $code, $owner, $into));
+            $into = Edition::current()->isCloud() ? $this->landing($payload, $locked, $owner) : null;
+
+            $this->ensureFits($payload, $into === null);
+
+            return $this->create($payload, $locked, $owner, $into);
+        });
 
         foreach ($this->records($payload, 'members') as $member) {
             $email = Str::lower(trim((string) ($member['email'] ?? '')));

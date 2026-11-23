@@ -31,10 +31,7 @@ final class TeamMoveController extends Controller
             return back()->with('success', 'Saved. Coresmith Cloud has paused this team. Upload the move file on your self-hosted Coresmith to finish.');
         }
 
-        $moved = $team->fresh();
-        $where = $moved?->moving_edition === Edition::Cloud->value ? 'in Coresmith Cloud' : 'on ' . (parse_url((string) $moved?->moving_to, PHP_URL_HOST) ?: 'the Coresmith the team is moving to');
-
-        return back()->with('success', "Saved. Coresmith has paused this team. Upload the move file {$where} to finish.");
+        return back()->with('success', 'Saved. Coresmith has paused this team. Upload the move file ' . MoveSide::towards($team->refresh()) . ' to finish.');
     }
 
     public function show(): Response

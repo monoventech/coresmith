@@ -319,3 +319,16 @@ test('each moved server remembers which Coresmith it came from, and a file from 
     expect($legacy->servers->pluck('takeover.from')->unique()->all())->toBe(['Coresmith Cloud'])
         ->and($sibling->servers->pluck('takeover.from')->unique()->all())->toBe(['self-hosted Coresmith']);
 });
+
+test('a move code brings a team in once, however the second file came about', function () {
+    $owner = User::factory()->create();
+    $code = teamImporterCode($owner);
+    app(TeamImporter::class)->import(teamImporterPayload(), $code, $owner);
+    $again = teamImporterPayload();
+    $again['servers'] = array_map(fn(array $server): array => [...$server, 'ip_address' => str_replace('203.0.113.', '198.51.100.', (string) $server['ip_address'])], $again['servers']);
+    $teams = Team::query()->count();
+
+    expect(teamImporterRefusal($again, $code, $owner))
+        ->toBe('This move code has already been used. Create a new one, then download the file again from the Coresmith the team is leaving.')
+        ->and(Team::query()->count())->toBe($teams);
+});

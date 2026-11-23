@@ -80,8 +80,8 @@ final class MovePresenter
 
         return ['moving' => [
             'since' => $team->moving_at->setTimezone((string) config('app.timezone', 'UTC'))->format('M j, H:i'),
-            'to' => $this->destination($team),
-            'where' => $this->where($team),
+            'to' => MoveSide::to($team),
+            'where' => MoveSide::towards($team),
             'file' => $team->move_file === null ? null : route('settings.moving.file'),
             'can_cancel' => true,
         ]];
@@ -96,9 +96,9 @@ final class MovePresenter
             return null;
         }
 
-        $to = $this->destination($team);
+        $to = MoveSide::to($team);
         $manages = $user->can('manageBilling', $team);
-        $upload = "Upload the move file {$this->where($team)} to finish.";
+        $upload = 'Upload the move file ' . MoveSide::towards($team) . ' to finish.';
 
         return [
             'banner' => [
@@ -109,21 +109,5 @@ final class MovePresenter
             ],
             'href' => route('settings.general'),
         ];
-    }
-
-    private function where(Team $team): string
-    {
-        return ($team->moving_edition === Edition::Cloud->value ? 'in ' : 'on ') . $this->destination($team);
-    }
-
-    private function destination(Team $team): string
-    {
-        if ($team->moving_edition === Edition::Cloud->value) {
-            return MoveSide::label(Edition::Cloud);
-        }
-
-        $host = parse_url((string) $team->moving_to, PHP_URL_HOST);
-
-        return is_string($host) && $host !== '' ? $host : 'the Coresmith the team is moving to';
     }
 }
