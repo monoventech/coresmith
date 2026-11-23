@@ -12,8 +12,8 @@ test('each plan includes exactly the features it sells', function (Plan $plan, P
     $included = [
         Plan::SelfHosted->value => PlanFeature::cases(),
         Plan::Business->value => PlanFeature::cases(),
-        Plan::Pro->value => [PlanFeature::TeamRoles, PlanFeature::CustomDomain, PlanFeature::Monitors],
-        Plan::Trial->value => [PlanFeature::TeamRoles, PlanFeature::CustomDomain, PlanFeature::Monitors],
+        Plan::Pro->value => [PlanFeature::TeamRoles, PlanFeature::Monitors],
+        Plan::Trial->value => [PlanFeature::TeamRoles, PlanFeature::Monitors],
         Plan::Starter->value => [],
     ];
 
@@ -68,7 +68,7 @@ test('only starter, pro and business can be bought, in that order', function () 
 test('every plan has its label and summary', function () {
     expect(array_map(fn(Plan $plan): string => $plan->label(), Plan::cases()))->toBe(['Trial', 'Starter', 'Pro', 'Business', 'Self-hosted'])
         ->and(Plan::Starter->summary())->toBe('$9 per month · 3 servers · one person')
-        ->and(Plan::Pro->summary())->toBe('$19 per month · unlimited servers · teammates and roles · custom domain')
+        ->and(Plan::Pro->summary())->toBe('$19 per month · unlimited servers · teammates and roles')
         ->and(Plan::Business->summary())->toBe('$39 per month · everything in Pro · single sign-on · database backups to S3 · audit log export')
         ->and(Plan::SelfHosted->summary())->toBe('On your own server · you install, update and back it up')
         ->and(Plan::Trial->summary())->toBe('Pro features on 1 server for 14 days');
@@ -81,7 +81,6 @@ test('every plan has its label and summary', function () {
 test('every feature says which plans have it', function () {
     expect(array_map(fn(PlanFeature $feature): string => $feature->note(), PlanFeature::cases()))->toBe([
         'Teammates and roles are part of Pro and Business.',
-        'Custom domains are part of Pro and Business.',
         'Single sign-on is part of Business.',
         'Database backups to S3 are part of Business.',
         'Audit log export is part of Business.',
@@ -101,6 +100,6 @@ test('every read-only reason says why', function () {
 
 test('a plan can state a price other than the configured one', function () {
     expect(Plan::Starter->summary('$7'))->toBe('$7 per month · 3 servers · one person')
-        ->and(Plan::Pro->summary('$15'))->toBe('$15 per month · unlimited servers · teammates and roles · custom domain')
+        ->and(Plan::Pro->summary('$15'))->toBe('$15 per month · unlimited servers · teammates and roles')
         ->and(Plan::Business->summary('$29'))->toBe('$29 per month · everything in Pro · single sign-on · database backups to S3 · audit log export');
 });

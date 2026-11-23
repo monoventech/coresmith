@@ -18,6 +18,7 @@ use App\Enums\SourceProviderType;
 use App\Services\Database\S3DestinationInput;
 use App\Services\Network\OwnAddress;
 use App\Services\Network\PublicAddress;
+use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
 use Closure;
 use Illuminate\Support\Facades\Validator;
@@ -92,6 +93,7 @@ final class MoveChecks
             'tags' => ['nullable', 'array'],
             'installed_runtimes' => ['nullable', 'array'],
             'meta' => ['nullable', 'array'],
+            'meta.runtime_user' => ['nullable', Rule::in([AsdfManager::CORESMITH_HOST_USER])],
         ];
 
         if (!$this->passes($server, $rules)) {

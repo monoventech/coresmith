@@ -26,7 +26,6 @@ final class PlanChangeGuard
         return array_values(array_filter([
             $this->servers($team, $plan),
             $this->members($team, $plan),
-            $this->domain($team, $plan),
             $this->singleSignOn($team, $plan),
         ]));
     }
@@ -80,16 +79,6 @@ final class PlanChangeGuard
         }
 
         return $this->teamSettings("{$plan->label()} is for one person. Remove the other " . ($others === 1 ? 'member' : "{$others} members") . ' first.');
-    }
-
-    /**
-     * @return array{message: string, links: list<array{label: string, href: string}>}|null
-     */
-    private function domain(Team $team, Plan $plan): ?array
-    {
-        $hostname = $plan->includes(PlanFeature::CustomDomain) ? null : $team->domain()->value('hostname');
-
-        return is_string($hostname) ? $this->teamSettings("{$plan->label()} has no custom domain. Remove {$hostname} first.") : null;
     }
 
     /**

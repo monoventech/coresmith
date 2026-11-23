@@ -11,11 +11,14 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Server\ThisMachine;
+use App\Services\SSH\HostKeyFingerprint;
+use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonInterval;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Sleep;
 use PragmaRX\Google2FA\Google2FA;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Support\FakeSSHTransport;
 
 function removalFolder(): string
 {
@@ -70,6 +73,8 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    SSHConnectionManager::createTransportUsing(null);
+
     foreach ($this->scratchFolders as $folder) {
         File::deleteDirectory($folder);
     }
@@ -158,6 +163,49 @@ test('removal waits for deploys, provisioning and cloud work', function (Closure
         Server::factory()->for($team)->create(['name' => 'anvil-02', 'status' => ServerStatus::Provisioning]);
     }, 'anvil-02 is still provisioning. Wait for it to finish, then try again.'],
 ]);
+
+function removalHandedOver(User $owner, FakeSSHTransport $transport): void
+{
+    Server::factory()->for($owner->teams()->first())->create([
+        'name' => 'forge',
+        'runs_coresmith' => true,
+        'ip_address' => '127.0.0.1',
+        'status' => ServerStatus::Moving,
+        'host_key_fingerprint' => (string) HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY),
+    ]);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+}
+
+test('while the machine Coresmith runs on moves to Coresmith Cloud, removal waits until Cloud has taken it over', function () {
+    $folder = removalFolder();
+    removalHelper($folder);
+    $owner = removalOwner();
+    removalHandedOver($owner, new FakeSSHTransport);
+
+    removalAsk($owner)->assertSessionHasErrors(['removal' => "Coresmith Cloud hasn't taken forge over yet. Finish the move there first, then try again."]);
+
+    expect(file_exists("{$folder}/request"))->toBeFalse();
+});
+
+test("once Coresmith Cloud has taken the machine over, Coresmith's own key no longer opens it and removal goes ahead", function () {
+    $folder = removalFolder();
+    removalHelper($folder);
+    $owner = removalOwner();
+    removalHandedOver($owner, (new FakeSSHTransport)->failLogin());
+
+    removalAsk($owner)->assertRedirect(route('settings.removal.show'));
+});
+
+test('Coresmith can be removed while the owner\'s team is moving, since that is how a move with this machine ends', function () {
+    $folder = removalFolder();
+    removalHelper($folder);
+    $owner = removalOwner();
+    $owner->teams()->first()->forceFill(['moving_at' => now(), 'moving_to' => 'https://app.coresmith.io', 'moving_edition' => 'cloud', 'move_file' => "{}\n"])->save();
+
+    removalAsk($owner)->assertRedirect(route('settings.removal.show'));
+
+    expect((string) file_get_contents("{$folder}/request"))->toMatch('/^[A-Za-z0-9]{32} uninstall\n$/');
+});
 
 test('without the helper, the owner is told to run the installer once', function () {
     config(['coresmith.removal.state_path' => sys_get_temp_dir() . '/coresmith-uninstall-missing-' . bin2hex(random_bytes(4))]);

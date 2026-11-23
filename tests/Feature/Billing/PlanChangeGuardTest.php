@@ -56,7 +56,7 @@ test('starter is for one person, so the other members go first', function (int $
     'one other' => [1, 'Starter is for one person. Remove the other member first.'],
 ]);
 
-test('a custom domain goes before a plan without one', function (bool $verified) {
+test('a team domain saved before Cloud dropped them never blocks a plan change', function (bool $verified) {
     $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
     $domain = TeamDomain::factory()->for($team)->create(['hostname' => 'deploy.example.test']);
 
@@ -64,10 +64,7 @@ test('a custom domain goes before a plan without one', function (bool $verified)
         $domain->forceFill(['verified_at' => now()])->save();
     }
 
-    expect(planChangeGuard()->blockers($team, Plan::Starter))->toBe([[
-        'message' => 'Starter has no custom domain. Remove deploy.example.test first.',
-        'links' => [['label' => 'Team settings', 'href' => route('teams.index')]],
-    ]]);
+    expect(planChangeGuard()->blockers($team, Plan::Starter))->toBe([]);
 })->with(['verified' => [true], 'waiting for dns' => [false]]);
 
 test('single sign-on goes before a plan without it', function () {
@@ -84,13 +81,11 @@ test('every blocker is listed, in order', function () {
     $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
     Server::factory()->for($team)->count(4)->create(['status' => ServerStatus::Active]);
     CloudBilling::member($team, TeamRole::Admin);
-    TeamDomain::factory()->for($team)->create(['hostname' => 'deploy.example.test']);
     TeamSsoConnection::factory()->for($team)->create();
 
     expect(array_column(planChangeGuard()->blockers($team, Plan::Starter), 'message'))->toBe([
         'Starter includes 3 servers and this team has 4. Detach 1 first.',
         'Starter is for one person. Remove the other member first.',
-        'Starter has no custom domain. Remove deploy.example.test first.',
         'Starter has no single sign-on. Remove it first, once everyone can sign in with a password.',
     ]);
 });

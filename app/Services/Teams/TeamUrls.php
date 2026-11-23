@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Teams;
 
+use App\Enums\Edition;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use Illuminate\Http\Request;
@@ -19,18 +20,23 @@ final class TeamUrls
         return strtolower((string) parse_url((string) config('app.url'), PHP_URL_HOST));
     }
 
+    public function allowsTeamHosts(): bool
+    {
+        return Edition::current()->isSelfHosted();
+    }
+
     public function tenantDomain(): ?string
     {
         $domain = strtolower(trim((string) config('coresmith.tenant_domain'), ". \t\n\r\0\x0B"));
 
-        return $domain === '' ? null : $domain;
+        return $domain === '' || !$this->allowsTeamHosts() ? null : $domain;
     }
 
     public function teamForHost(string $host): ?Team
     {
         $host = strtolower(rtrim($host, '.'));
 
-        if ($host === '' || $host === $this->mainHost() || filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        if ($host === '' || $host === $this->mainHost() || !$this->allowsTeamHosts() || filter_var($host, FILTER_VALIDATE_IP) !== false) {
             return null;
         }
 

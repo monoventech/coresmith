@@ -20,6 +20,11 @@ test('runtimes belong to the coresmith user, except on the machine Coresmith run
         ->and(Server::factory()->create(['runs_coresmith' => true])->fresh()->runtimeUser())->toBe('coresmith-runtime');
 });
 
+test('a server that came from the machine Coresmith ran on keeps its runtime user, and no other user can be named that way', function () {
+    expect(Server::factory()->create(['meta' => ['runtime_user' => 'coresmith-runtime']])->fresh()->runtimeUser())->toBe('coresmith-runtime')
+        ->and(Server::factory()->create(['meta' => ['runtime_user' => 'root']])->fresh()->runtimeUser())->toBe('coresmith');
+});
+
 test('a server defaults to pending status', function () {
     expect(Server::factory()->create()->fresh()->status)->toBe(ServerStatus::Pending);
 });

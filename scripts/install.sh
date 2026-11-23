@@ -29,7 +29,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="0.8.33"
+readonly CORESMITH_VERSION="0.8.34"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoventech/coresmith.git}"
 readonly CORESMITH_ROOT="/opt/coresmith"
 readonly RELEASES_DIR="$CORESMITH_ROOT/releases"
@@ -1929,10 +1929,17 @@ readonly EXCHANGE=/var/lib/coresmith-this-machine
 readonly KEYS=/root/.ssh/authorized_keys
 readonly SSHD_CONFIG=/etc/ssh/sshd_config
 readonly DROP_IN=/etc/ssh/sshd_config.d/00-coresmith-local.conf
+readonly MOVE_DROP_IN=/etc/ssh/sshd_config.d/00-coresmith-move.conf
 readonly BEGIN='# coresmith-this-machine begin'
 readonly END='# coresmith-this-machine end'
-readonly KEY_OPTIONS='from="127.0.0.1,::1",no-agent-forwarding,no-port-forwarding,no-X11-forwarding'
-readonly REQUEST='^([A-Za-z0-9]{1,64}) (add (ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})|remove)$'
+readonly KEY_LIMITS='no-agent-forwarding,no-port-forwarding,no-X11-forwarding'
+readonly KEY_OPTIONS="from=\"127.0.0.1,::1\",${KEY_LIMITS}"
+readonly KEY_PATTERN='^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43}$'
+readonly IPV4='^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$'
+readonly IPV6='^[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}$'
+readonly NO_KEY="Coresmith's key isn't on this machine, so there's nothing to hand over. Add this machine as a server again, then try again."
+readonly TAKEN_OVER="Coresmith Cloud has already taken this machine over, so the move can't be cancelled. Remove Coresmith from it instead."
+readonly REQUEST='^([A-Za-z0-9]{1,64}) (add (ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})|remove|handover ([0-9A-Fa-f.:,]+)|keep)$'
 readonly REQUEST_ID='^([A-Za-z0-9]{1,64}) '
 readonly FINGERPRINT='^SHA256:[A-Za-z0-9+/]{43}$'
 readonly KEY_KIND='^[A-Z0-9-]{1,16}$'
@@ -1977,6 +1984,7 @@ save() {
     copy_out "$KEYS" keys
     copy_out "$SSHD_CONFIG" sshd_config
     copy_out "$DROP_IN" drop_in
+    copy_out "$MOVE_DROP_IN" move_drop_in
 }
 
 restore() {
@@ -1984,6 +1992,7 @@ restore() {
     copy_back "$KEYS" keys
     copy_back "$SSHD_CONFIG" sshd_config
     copy_back "$DROP_IN" drop_in
+    copy_back "$MOVE_DROP_IN" move_drop_in
 }
 
 fail() {
@@ -2157,6 +2166,92 @@ remove() {
     answer '"ok":true'
 }
 
+block_key() {
+    awk -v start="$BEGIN" -v stop="$END" '$0 == start { inside = 1; next } $0 == stop { inside = 0; next } inside && $NF == "coresmith-this-machine" { print $2 " " $3; exit }' "$KEYS"
+}
+
+move_rule() {
+    printf '%s\n' "Match User root Address $1" '    PermitRootLogin prohibit-password' '    AllowUsers root' '    AllowGroups root' 'Match all'
+}
+
+root_from() {
+    EFFECTIVE="$(sshd -T -C "user=root,host=localhost,addr=$1" 2>/dev/null)" || fail "sshd didn't report its settings, so the old ones are back. Run sshd -T to see why."
+
+    case "$(awk '$1 == "permitrootlogin" { print $2; exit }' <<<"$EFFECTIVE")" in
+    prohibit-password | without-password | yes) ;;
+    *) fail "sshd still turns root away from $1, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes." ;;
+    esac
+
+    if { lists allowusers && ! names_root allowusers; } || { lists allowgroups && ! names_root allowgroups; } || names_root denyusers || names_root denygroups; then
+        fail "sshd's allow or deny lists still keep root out from $1, so the old settings are back. Check AllowUsers, AllowGroups, DenyUsers and DenyGroups in /etc/ssh/sshd_config and the files it includes."
+    fi
+}
+
+handover() {
+    local address key
+    local -a addresses
+
+    IFS=',' read -r -a addresses <<<"$1"
+
+    if [ "${#addresses[@]}" -lt 1 ] || [ "${#addresses[@]}" -gt 8 ]; then
+        fail "$REFUSED"
+    fi
+
+    for address in "${addresses[@]}"; do
+        [[ "$address" =~ $IPV4 || "$address" =~ $IPV6 ]] || fail "$REFUSED"
+    done
+
+    has_block "$KEYS" || fail "$NO_KEY"
+    key="$(block_key)"
+    [[ "$key" =~ $KEY_PATTERN ]] || fail "$NO_KEY"
+    reads_drop_ins || fail "sshd here doesn't read /etc/ssh/sshd_config.d, so Coresmith can't add the rule that lets Coresmith Cloud in. Add Include /etc/ssh/sshd_config.d/*.conf at the top of /etc/ssh/sshd_config, then try again."
+
+    save
+    {
+        strip "$KEYS"
+        printf '%s\nfrom="127.0.0.1,::1,%s",%s %s coresmith-this-machine\n%s\n' "$BEGIN" "$1" "$KEY_LIMITS" "$key" "$END"
+    } >"$WORK/keys.new"
+    write_keys "$WORK/keys.new"
+    mkdir -p -- "${MOVE_DROP_IN%/*}"
+    move_rule "$1" >"$MOVE_DROP_IN"
+
+    sshd -t >/dev/null 2>&1 || fail 'sshd refused the new settings, so the old ones are back. Run sshd -t to see why.'
+
+    for address in "${addresses[@]}"; do
+        root_from "$address"
+    done
+
+    reload_sshd
+    answer '"ok":true'
+}
+
+keep() {
+    local key=''
+
+    if has_block "$KEYS"; then
+        key="$(block_key)"
+    fi
+
+    if [ -e "$MOVE_DROP_IN" ] && [[ ! "$key" =~ $KEY_PATTERN ]]; then
+        fail "$TAKEN_OVER"
+    fi
+
+    save
+
+    if [[ "$key" =~ $KEY_PATTERN ]]; then
+        {
+            strip "$KEYS"
+            printf '%s\n%s %s coresmith-this-machine\n%s\n' "$BEGIN" "$KEY_OPTIONS" "$key" "$END"
+        } >"$WORK/keys.new"
+        write_keys "$WORK/keys.new"
+    fi
+
+    rm -f -- "$MOVE_DROP_IN"
+    sshd -t >/dev/null 2>&1 || fail 'sshd refused the new settings, so the old ones are back. Run sshd -t to see why.'
+    reload_sshd
+    answer '"ok":true'
+}
+
 handle_request() {
     local request
 
@@ -2178,11 +2273,12 @@ handle_request() {
         fail "$REFUSED"
     fi
 
-    if [ "${BASH_REMATCH[2]}" = remove ]; then
-        remove
-    else
-        add "${BASH_REMATCH[3]}"
-    fi
+    case "${BASH_REMATCH[2]}" in
+    remove) remove ;;
+    keep) keep ;;
+    handover\ *) handover "${BASH_REMATCH[4]}" ;;
+    *) add "${BASH_REMATCH[3]}" ;;
+    esac
 }
 
 trap finish EXIT

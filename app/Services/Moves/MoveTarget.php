@@ -13,11 +13,15 @@ use Carbon\CarbonImmutable;
 
 final readonly class MoveTarget
 {
+    /**
+     * @param  list<string>  $addresses
+     */
     public function __construct(
         public string $id,
         public string $publicKey,
         public CarbonImmutable $until,
         public string $panel,
         public Edition $edition = Edition::SelfHosted,
+        public array $addresses = [],
     ) {}
 }

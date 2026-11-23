@@ -84,11 +84,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('teams.destroy');
     Route::put('settings/team/name', [TeamNameController::class, 'update'])->name('settings.team-name.update');
     Route::put('settings/team/url', [TeamUrlController::class, 'update'])->name('settings.team-url.update');
-    Route::post('settings/team/domain', [TeamDomainController::class, 'store'])->name('settings.team-domain.store');
+    Route::post('settings/team/domain', [TeamDomainController::class, 'store'])->middleware('self-hosted')->name('settings.team-domain.store');
     Route::post('settings/team/domain/verify', [TeamDomainController::class, 'verify'])
-        ->middleware('throttle:12,1,domain-verify')
+        ->middleware(['self-hosted', 'throttle:12,1,domain-verify'])
         ->name('settings.team-domain.verify');
-    Route::delete('settings/team/domain', [TeamDomainController::class, 'destroy'])->name('settings.team-domain.destroy');
+    Route::delete('settings/team/domain', [TeamDomainController::class, 'destroy'])->middleware('self-hosted')->name('settings.team-domain.destroy');
     Route::get('settings/team/audit-log', AuditLogController::class)
         ->middleware('throttle:6,1,audit-export')
         ->name('settings.audit-log');

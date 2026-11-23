@@ -13,6 +13,7 @@ use App\Services\Caddy\CaddyApiClient;
 use App\Services\Caddy\CaddyInstaller;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Caddy\RouteConfigValidator;
+use App\Services\Runtime\AsdfManager;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -128,6 +129,36 @@ test('updating a site patches by route id', function () {
 
     expect($transport->commands()[0])->toContain('-X PATCH')
         ->and($transport->commands()[0])->toContain('/id/app-' . $app->id);
+});
+
+test('an app that moved here takes the route and certificate policy it had out of Caddy once its own route is in place', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+
+    caddyClient()->putSite(caddyConnection($transport), $app);
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toMatch("~-X PATCH 'http://localhost:2019/id/app-{$app->id}'.*-X DELETE 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'.*-X DELETE 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'~s")
+        ->and($app->fresh()->former_route_id)->toBeNull();
+});
+
+test('an app that never moved takes nothing else out of Caddy', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyClient()->putSite(caddyConnection($transport), routableApp());
+
+    expect(caddyCalls($transport, '-X DELETE'))->toBe(0);
+});
+
+test('taking down a site that moved here takes the route it had out too', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+
+    caddyClient()->removeSite(caddyConnection($transport), $app);
+
+    expect(implode("\n", $transport->commands()))->toContain("/id/app-{$app->id}'")
+        ->toContain("-X DELETE 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'")
+        ->and($app->fresh()->former_route_id)->toBeNull();
 });
 
 test('removing a site deletes by route id and sends no payload', function () {
@@ -388,4 +419,75 @@ test("changes to Caddy on Coresmith's machine wait for one another, so an addres
 
     expect(fn() => caddyClient()->addSite($connection, routableApp()))->toThrow(LockTimeoutException::class)
         ->and($transport->commands())->toBe([]);
+});
+
+function caddyHandedOverConnection(FakeSSHTransport $transport): SSHConnection
+{
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'meta' => ['caddy_admin' => 'socket', 'runtime_user' => AsdfManager::CORESMITH_HOST_USER]]);
+
+    return (new SSHConnection($server, $transport))->connect();
+}
+
+function caddyPolicyPayload(Application $application, string $id): string
+{
+    return '-d ' . escapeshellarg((string) json_encode(['@id' => $id . '-tls', 'subjects' => ['app.example.com']], JSON_UNESCAPED_SLASHES));
+}
+
+test("a machine Coresmith installed keeps a certificate policy for each app, since Coresmith's on-demand policy is its only catch-all", function () {
+    $transport = new FakeSSHTransport;
+    $application = routableApp();
+
+    caddyClient()->addSite(caddyHandedOverConnection($transport), $application);
+
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/http/servers/coresmith/routes/0'))->toContain('"@id":"app-' . $application->getKey() . '"')
+        ->and(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()))
+        ->and(collect($transport->commands())->last())->toContain(CaddyInstaller::CONFIG_FILE);
+});
+
+test('updating an app on a machine Coresmith installed updates its policy, and removing it takes the policy out', function () {
+    $application = routableApp();
+    $updating = new FakeSSHTransport;
+    $removing = new FakeSSHTransport;
+
+    caddyClient()->updateSite(caddyHandedOverConnection($updating), $application);
+    caddyClient()->removeSite(caddyHandedOverConnection($removing), $application);
+
+    expect(caddyThisMachineCommand($updating, 'PATCH', '/id/app-' . $application->getKey() . '-tls'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()))
+        ->and(caddyThisMachineCommand($removing, 'DELETE', '/id/app-' . $application->getKey() . '-tls'))->not->toBeNull();
+});
+
+test('an app that moved onto a machine Coresmith installed takes over its route and policy in place, so no host is ever covered twice', function () {
+    $application = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $transport = (new FakeSSHTransport)->respondTo("-X GET --unix-socket /run/caddy-admin/admin.sock 'http://localhost/id/app-{$application->getKey()}'", 'curl: (22) The requested URL returned error: 404', 22);
+
+    caddyClient()->putSite(caddyHandedOverConnection($transport), $application);
+
+    expect(caddyThisMachineCommand($transport, 'PATCH', '/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'))->toContain('"@id":"app-' . $application->getKey() . '"')
+        ->and(caddyThisMachineCommand($transport, 'PATCH', '/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()))
+        ->and(caddyCalls($transport, '-X PUT'))->toBe(0)
+        ->and($application->fresh()->former_route_id)->toBeNull();
+});
+
+test('a moved app whose policy is already gone gets a new one', function () {
+    $application = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $transport = (new FakeSSHTransport)
+        ->respondTo("-X GET --unix-socket /run/caddy-admin/admin.sock 'http://localhost/id/app-{$application->getKey()}'", 'curl: (22) The requested URL returned error: 404', 22)
+        ->respondTo("-X PATCH --unix-socket /run/caddy-admin/admin.sock 'http://localhost/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'", 'curl: (22) The requested URL returned error: 404', 22);
+
+    caddyClient()->putSite(caddyHandedOverConnection($transport), $application);
+
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()));
+});
+
+test('on an ordinary server a moved app takes over its route in place and writes no policy', function () {
+    $application = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $transport = (new FakeSSHTransport)->respondTo("-X GET 'http://localhost:2019/id/app-{$application->getKey()}'", 'curl: (22) The requested URL returned error: 404', 22);
+
+    caddyClient()->putSite(caddyConnection($transport), $application);
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain("-X PATCH 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'")
+        ->not->toContain('/config/apps/tls/automation/policies')
+        ->not->toContain("-X PATCH 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'")
+        ->and(caddyCalls($transport, '-X PUT'))->toBe(0);
 });

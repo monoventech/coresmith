@@ -174,6 +174,19 @@ test('a server already on this panel stops the import and nothing is created', f
         ->and(Team::query()->count())->toBe($teams);
 });
 
+test('each app remembers the route it had where it came from, so the takeover can replace it, and a reference that is not an id is dropped', function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['applications'][0]['ref'] = '01jbx4z3v8m2q7k6t5r9w0y1ce';
+    $payload['webhook_endpoints'][0]['application'] = '01jbx4z3v8m2q7k6t5r9w0y1ce';
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    expect($team->applications()->where('slug', 'acme-site')->value('former_route_id'))->toBe('app-01jbx4z3v8m2q7k6t5r9w0y1ce')
+        ->and($team->applications()->where('slug', 'acme-api')->value('former_route_id'))->toBeNull()
+        ->and($team->applications()->where('slug', 'acme-docs')->value('former_route_id'))->toBeNull();
+});
+
 test('an app slug used on another server here still moves', function () {
     $owner = User::factory()->create();
     Application::factory()->create(['slug' => 'acme-docs']);

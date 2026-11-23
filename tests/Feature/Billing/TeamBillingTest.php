@@ -82,7 +82,7 @@ test('a paid plan is active', function () {
         ->and($status->plan)->toBe(Plan::Pro)
         ->and($status->renewsAt)->not->toBeNull()
         ->and($status->serverLimit())->toBeNull()
-        ->and($status->allows(PlanFeature::CustomDomain))->toBeTrue()
+        ->and($status->allows(PlanFeature::TeamRoles))->toBeTrue()
         ->and($status->allows(PlanFeature::SingleSignOn))->toBeFalse();
 });
 

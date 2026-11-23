@@ -6,6 +6,7 @@ use App\Enums\Edition;
 use App\Models\MoveCode;
 use App\Models\User;
 use App\Services\Moves\MoveCodes;
+use App\Services\Network\LocalAddresses;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\CloudBilling;
@@ -63,6 +64,34 @@ test('a code says which Coresmith receives the team', function () {
     expect(moveCodesClaims($selfHosted)['edition'])->toBe('self-hosted')
         ->and(moveCodesClaims($cloud)['edition'])->toBe('cloud')
         ->and($codes->read($cloud)->edition)->toBe(Edition::Cloud);
+});
+
+test("a code from Coresmith Cloud names Cloud's public addresses, and a self-hosted code names none", function () {
+    app()->instance(LocalAddresses::class, new class implements LocalAddresses
+    {
+        public function all(): array
+        {
+            return ['127.0.0.1', '::1', '10.0.0.2', '88.99.12.121', '2a01:4f8:1c17:43b8::1', 'fe80::1'];
+        }
+    });
+    $codes = app(MoveCodes::class);
+    $selfHosted = $codes->text($codes->create(User::factory()->create()));
+    CloudBilling::enable();
+    $cloud = $codes->text($codes->create(User::factory()->create()));
+
+    expect(moveCodesClaims($cloud)['reach'])->toBe(['88.99.12.121', '2a01:4f8:1c17:43b8::1'])
+        ->and($codes->read($cloud)->addresses)->toBe(['88.99.12.121', '2a01:4f8:1c17:43b8::1'])
+        ->and(moveCodesClaims($selfHosted))->not->toHaveKey('reach')
+        ->and($codes->read($selfHosted)->addresses)->toBe([]);
+});
+
+test('reading a code keeps only the public addresses in it', function () {
+    $codes = app(MoveCodes::class);
+    $claims = moveCodesClaims($codes->text($codes->create(User::factory()->create())));
+    $claims['reach'] = ['88.99.12.121', 'not an address', '10.0.0.5', '"; rm -rf /', 42, '2a01:4f8:1c17:43b8::1'];
+    $text = MoveCodes::PREFIX . rtrim(strtr(base64_encode((string) json_encode($claims, JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
+
+    expect($codes->read($text)->addresses)->toBe(['88.99.12.121', '2a01:4f8:1c17:43b8::1']);
 });
 
 test('a code from before codes named their Coresmith reads as self-hosted', function () {

@@ -47,13 +47,46 @@ test.describe('changing the plan on coresmith cloud', () => {
         }
 
         await expect(consequences).toContainText('Remove the other 2 members first.')
-        await expect(consequences).toContainText('Remove deploy.bigfleet.test first.')
         await expect(dialog(page).getByRole('button', { name: 'Save' })).toBeDisabled()
 
         await dialog(page).getByRole('radio', { name: 'Business', exact: true }).click()
 
         await expect(dialog(page).getByTestId('plan-blocker')).toHaveCount(0)
         await expect(dialog(page).getByRole('button', { name: 'Save' })).toBeEnabled()
+    })
+
+    test('on a narrow screen a plan line breaks between items, never inside one', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 780 })
+        await page.goto('/fleet/settings/billing')
+        await page.getByRole('button', { name: 'Change plan' }).click()
+
+        await expect(dialog(page).locator('#plan-business-summary')).toHaveText(
+            '$39 per month · everything in Pro · single sign-on · database backups to S3 · audit log export'
+        )
+
+        const items = dialog(page).getByTestId('plan-summary-item')
+        const split = await items.evaluateAll((elements) =>
+            elements
+                .filter((element) => {
+                    const probe = element.cloneNode(true) as HTMLElement
+                    probe.style.cssText = 'position: absolute; visibility: hidden; white-space: nowrap'
+                    element.parentElement?.append(probe)
+                    const fits = probe.getBoundingClientRect().width <= (element.parentElement?.clientWidth ?? 0)
+                    probe.remove()
+
+                    return (
+                        fits &&
+                        element.getBoundingClientRect().height >= 2 * parseFloat(getComputedStyle(element).fontSize)
+                    )
+                })
+                .map((element) => element.textContent)
+        )
+
+        expect(split).toEqual([])
+
+        for (const text of await items.allTextContents()) {
+            expect(text.startsWith('·')).toBe(false)
+        }
     })
 
     test('moving to self-host ends the plan at the period end', async ({ page }, testInfo) => {

@@ -460,6 +460,17 @@ test('the team page lists a redirect uri for every address the team opens on', f
             ]));
 });
 
+test('on Cloud the only redirect uri is Coresmith\'s own, whatever the team saved before', function () {
+    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+    $team = ssoTeam();
+    $owner = ssoMember($team, TeamRole::Owner);
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
+
+    $this->actingAs($owner)
+        ->get('/acme/settings/team')
+        ->assertInertia(fn($page) => $page->where('sso.redirect_uris', ['http://localhost/sso/callback']));
+});
+
 test('an unverified custom domain and a missing tenant domain add no redirect uri', function () {
     config(['coresmith.tenant_domain' => null]);
     $team = ssoTeam();
