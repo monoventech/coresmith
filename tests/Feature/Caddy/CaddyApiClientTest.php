@@ -130,6 +130,36 @@ test('updating a site patches by route id', function () {
         ->and($transport->commands()[0])->toContain('/id/app-' . $app->id);
 });
 
+test('an app that moved here takes the route and certificate policy it had out of Caddy once its own route is in place', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+
+    caddyClient()->putSite(caddyConnection($transport), $app);
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toMatch("~-X PATCH 'http://localhost:2019/id/app-{$app->id}'.*-X DELETE 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'.*-X DELETE 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'~s")
+        ->and($app->fresh()->former_route_id)->toBeNull();
+});
+
+test('an app that never moved takes nothing else out of Caddy', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyClient()->putSite(caddyConnection($transport), routableApp());
+
+    expect(caddyCalls($transport, '-X DELETE'))->toBe(0);
+});
+
+test('taking down a site that moved here takes the route it had out too', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+
+    caddyClient()->removeSite(caddyConnection($transport), $app);
+
+    expect(implode("\n", $transport->commands()))->toContain("/id/app-{$app->id}'")
+        ->toContain("-X DELETE 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'")
+        ->and($app->fresh()->former_route_id)->toBeNull();
+});
+
 test('removing a site deletes by route id and sends no payload', function () {
     $transport = new FakeSSHTransport;
     $app = routableApp();
