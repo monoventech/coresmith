@@ -44,6 +44,7 @@ use App\Services\Deployment\GitFailure;
 use App\Services\Deployment\LiveAnswer;
 use App\Services\Deployment\LiveCheck;
 use App\Services\Deployment\LogSanitizer;
+use App\Services\Deployment\NetworkFailure;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\RepositoryCache;
 use App\Services\Deployment\SharedStorage;
@@ -1407,7 +1408,8 @@ final class DeployApplication implements ShouldQueue
 
                     $this->failureReason = app(RegistryAuthFailure::class)->reason($result->output, $application)
                         ?? $application->type->language()->explain($phase, $result->output, $stack)
-                        ?? $this->failureReason;
+                        ?? $this->failureReason
+                        ?? NetworkFailure::reason($result->output, $attempt);
 
                     $result->throw();
                 }

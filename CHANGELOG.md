@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.33 (2026-11-23)
+
+### Added
+- feat: a self-hosted team moves to Coresmith Cloud, and Cloud only connects to customers' public addresses (#167)
+
+### Fixed
+- fix: PHP comes from packages.sury.org on Ubuntu and Debian, a re-run retires the deprecated PPA, and package refreshes accept an archive that changed its label (#168)
+- fix: a deploy that fails on a download names the host and what it answered, and the failure banner is announced (#166)
+- fix: tab titles join the page and the installation's name with a middle dot, and leave the name off when the page already says it (#165)
+
+### Changed
+- After a restart, the weekly clean-up reads when it last ran from its own log (#164)
+
 ## v0.8.32 (2026-11-20)
 
 ### Changed

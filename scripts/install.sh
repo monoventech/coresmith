@@ -29,7 +29,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="0.8.32"
+readonly CORESMITH_VERSION="0.8.33"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoventech/coresmith.git}"
 readonly CORESMITH_ROOT="/opt/coresmith"
 readonly RELEASES_DIR="$CORESMITH_ROOT/releases"
@@ -61,6 +61,7 @@ readonly REVERB_LOG="/var/log/coresmith-reverb.log"
 readonly FPM_ERROR_LOG="/var/log/coresmith-fpm-error.log"
 readonly PHP_VERSION="8.5"
 readonly APT_SOURCES="/etc/apt/sources.list.d"
+readonly APT_TRUSTED="/etc/apt/trusted.gpg.d"
 
 if [ -t 1 ]; then
     readonly RED=$'\033[0;31m' GREEN=$'\033[0;32m' YELLOW=$'\033[1;33m'
@@ -545,18 +546,37 @@ ensure_database_password() {
 
 # ── Phase 1: packages ────────────────────────────────────────────────────────
 
-add_php_repository() {
-    local source
+retire_php_ppa() {
+    local file retired=false
 
-    for source in "$APT_SOURCES"/ondrej-ubuntu-php-*.sources "$APT_SOURCES"/ondrej-ubuntu-php-*.list; do
-        if [ -f "$source" ]; then
-            log "Ondřej Surý's PHP archive is already set up."
+    for file in "$APT_SOURCES"/ondrej-ubuntu-php-*.sources "$APT_SOURCES"/ondrej-ubuntu-php-*.list "$APT_TRUSTED/ondrej-ubuntu-php.gpg"; do
+        if [ -f "$file" ]; then
+            rm -f "$file"
+            retired=true
+        fi
+    done
+
+    if $retired; then
+        log "Moving PHP to packages.sury.org, since Ondřej Surý's PPA for PHP is deprecated."
+    fi
+}
+
+add_php_repository() {
+    local source download list="$APT_SOURCES/sury-php.list"
+
+    for source in "$APT_SOURCES"/*.list "$APT_SOURCES"/*.sources; do
+        if [ "$source" != "$list" ] && [ -f "$source" ] && grep -q 'packages\.sury\.org/php' "$source"; then
+            log "PHP already comes from packages.sury.org."
 
             return 0
         fi
     done
 
-    run add-apt-repository -y ppa:ondrej/php
+    download="$(mktemp -d)"
+    run curl -fsSLo "$download/debsuryorg-archive-keyring.deb" --retry 3 --connect-timeout 20 --max-time 120 https://packages.sury.org/debsuryorg-archive-keyring.deb
+    run dpkg -i "$download/debsuryorg-archive-keyring.deb"
+    rm -rf "$download"
+    echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" >"$list"
 }
 
 install_system_packages() {
@@ -565,19 +585,11 @@ install_system_packages() {
     case "$PKG_MANAGER" in
     apt)
         export DEBIAN_FRONTEND=noninteractive
-        run apt-get update -qq
-        run apt-get install -y -qq ca-certificates curl gnupg lsb-release software-properties-common
-
-        if [ "$OS_ID" = "ubuntu" ]; then
-            add_php_repository
-        elif [ "$OS_ID" = "debian" ]; then
-            curl -fsSLo /tmp/debsuryorg-archive-keyring.deb https://packages.sury.org/debsuryorg-archive-keyring.deb
-            run dpkg -i /tmp/debsuryorg-archive-keyring.deb
-            echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-archive-keyring.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" \
-                >/etc/apt/sources.list.d/sury-php.list
-        fi
-
-        run apt-get update -qq
+        retire_php_ppa
+        run apt-get update -qq --allow-releaseinfo-change-label
+        run apt-get install -y -qq ca-certificates curl gnupg lsb-release
+        add_php_repository
+        run apt-get update -qq --allow-releaseinfo-change-label
         run apt-get install -y -qq \
             "php${PHP_VERSION}-fpm" "php${PHP_VERSION}-cli" "php${PHP_VERSION}-mbstring" \
             "php${PHP_VERSION}-xml" "php${PHP_VERSION}-curl" "php${PHP_VERSION}-zip" \
@@ -706,7 +718,7 @@ install_caddy() {
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
             >/etc/apt/sources.list.d/caddy-stable.list
         printf 'Package: caddy\nPin: origin dl.cloudsmith.io\nPin-Priority: 1001\n' >/etc/apt/preferences.d/caddy
-        run apt-get update -qq
+        run apt-get update -qq --allow-releaseinfo-change-label
         run apt-get install -y -qq caddy
         ;;
     dnf | yum)

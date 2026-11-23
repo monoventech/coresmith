@@ -39,7 +39,7 @@ test.describe('the team', () => {
         })
         await gotoSettings(page, 'Team')
 
-        await expect(page).toHaveTitle('Team - Beelink')
+        await expect(page).toHaveTitle('Team · Beelink')
 
         await page.getByTestId('team-card').getByRole('button', { name: 'Rename' }).click()
 

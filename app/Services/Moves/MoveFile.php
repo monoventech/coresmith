@@ -39,7 +39,7 @@ final class MoveFile
         $header = json_decode($file, true);
 
         if (!is_array($header) || !is_int($header['format'] ?? null) || !is_string($header['code'] ?? null) || !is_string($header['sealed'] ?? null)) {
-            $this->refuse("This isn't a Coresmith move file. Download it again from Coresmith Cloud.");
+            $this->refuse("This isn't a Coresmith move file. Download it again from " . MoveSide::origin() . '.');
         }
 
         if ($header['format'] > self::FORMAT) {
@@ -48,15 +48,15 @@ final class MoveFile
         }
 
         if (!hash_equals((string) $code->id, $header['code'])) {
-            $this->refuse('This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.');
+            $this->refuse('This move file was made for a different move code. Paste the code from here into ' . MoveSide::origin() . ' and download the file again.');
         }
 
         if ($code->imported_at !== null || $code->secret_key === null) {
-            $this->refuse('This move code has already been used. Create a new one, then download the file again in Coresmith Cloud.');
+            $this->refuse('This move code has already been used. Create a new one, then download the file again from ' . MoveSide::origin() . '.');
         }
 
         if (!$code->expires_at->isFuture()) {
-            $this->refuse('This move code has expired. Create a new one, then download the file again in Coresmith Cloud.');
+            $this->refuse('This move code has expired. Create a new one, then download the file again from ' . MoveSide::origin() . '.');
         }
 
         $sealed = base64_decode($header['sealed'], true);
@@ -71,7 +71,7 @@ final class MoveFile
         $payload = $plain === false ? null : json_decode($plain, true);
 
         if (!is_array($payload)) {
-            $this->refuse("This move file can't be opened. Download it again from Coresmith Cloud.");
+            $this->refuse("This move file can't be opened. Download it again from " . MoveSide::origin() . '.');
         }
 
         return $payload;

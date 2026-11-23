@@ -134,6 +134,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware(['cloud', 'throttle:10,1,team-move-cancel'])
         ->name('settings.billing.move.destroy');
 
+    Route::post('settings/moving', [TeamMoveController::class, 'store'])
+        ->middleware(['self-hosted', 'throttle:10,1,team-move'])
+        ->name('settings.moving.store');
+    Route::get('settings/moving', [TeamMoveController::class, 'show'])->middleware('self-hosted')->name('settings.moving.file');
+    Route::delete('settings/moving', [TeamMoveController::class, 'destroy'])
+        ->middleware(['self-hosted', 'throttle:10,1,team-move-cancel'])
+        ->name('settings.moving.destroy');
+
     Route::post('settings/moves', [MoveCodeController::class, 'store'])->middleware('throttle:10,1,move-code')->name('settings.moves.store');
     Route::post('settings/moves/{moveCode}/file', [MoveCodeController::class, 'upload'])
         ->middleware('throttle:20,1,move-file')

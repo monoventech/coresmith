@@ -572,6 +572,27 @@ test('dependencies that hit a registry timeout are installed once more', functio
         ->and($deployment->fresh()->log)->toContain('deps hit a network error (attempt 1 of 2)');
 });
 
+test('dependencies whose download host keeps answering 504 name it and say to deploy again', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('composer install', 'Error: laravel-vite-plugin: Failed to fetch "https://fonts.bunny.net/css2?family=Instrument+Sans:wght@400;500;600&display=swap&subset=latin": 504 Gateway Timeout', 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, 'composer install'))))->toBe(2)
+        ->and($deployment->fresh()->failure_reason)->toBe('The trouble is at fonts.bunny.net, which answered 504 Gateway Timeout both times. Deploy again in a few minutes.');
+});
+
+test('a build that cannot reach a host it downloads from names it after its one try', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'node_version' => '24.15.0']))->create();
+    $transport = healthyDeployTransport()
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['package.json' => '{"scripts":{"build":"vite build"}}'], ['bun.lock']))
+        ->respondTo('bun run build', "error during build:\n[vite-plugin-webfont-dl] connect ETIMEDOUT 142.250.187.234:443 while fetching https://fonts.googleapis.com/css2?family=Inter&display=swap", 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->failure_reason)->toBe("The server couldn't reach fonts.googleapis.com. Deploy again in a few minutes, and if it still fails, check the server's firewall allows outbound connections.");
+});
+
 test('a build error is not retried', function () {
     $deployment = Deployment::factory()->for(deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'node_version' => '24.15.0']))->create();
     $transport = healthyDeployTransport()

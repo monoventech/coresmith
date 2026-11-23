@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
-use App\Enums\Edition;
 use App\Models\ApiToken;
 use App\Models\User;
 use App\Services\Billing\PlanGate;
@@ -54,6 +53,7 @@ final class EnforcePlan
         'settings.billing.portal',
         'settings.billing.move.store',
         'settings.billing.move.destroy',
+        'settings.moving.destroy',
         'settings.offsite-backups.destroy',
     ];
 
@@ -67,7 +67,7 @@ final class EnforcePlan
     {
         $user = $request->user();
 
-        if (Edition::current()->isSelfHosted() || !$user instanceof User) {
+        if (!$user instanceof User) {
             return $next($request);
         }
 

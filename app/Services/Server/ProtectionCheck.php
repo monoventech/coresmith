@@ -73,9 +73,8 @@ final class ProtectionCheck
         $lines[] = '[ -f ' . SecurityHardening::JOURNAL_CAP . ' ] && echo capped || echo uncapped';
         $lines[] = 'systemctl is-enabled coresmith-maintenance.timer 2>/dev/null || echo missing';
         $lines[] = 'systemctl show coresmith-maintenance.service -p ExecMainExitTimestamp -p ExecMainStatus 2>/dev/null || true';
-        $lines[] = 'systemctl show coresmith-maintenance.timer -p LastTriggerUSec 2>/dev/null || true';
         $lines[] = 'journalctl --disk-usage 2>/dev/null || true';
-        $lines[] = "journalctl -u coresmith-maintenance.service -o cat --no-pager -n 50 2>/dev/null | grep '^coresmith-freed ' | tail -n 1 || true";
+        $lines[] = "journalctl -u coresmith-maintenance.service -o short-iso --no-pager -n 50 2>/dev/null | grep ' coresmith-freed ' | tail -n 1 || true";
 
         if (!$server->runs_coresmith) {
             $lines[] = "echo '== ssh'";
@@ -124,13 +123,15 @@ final class ProtectionCheck
     {
         $values = [];
         $freed = null;
+        $logged = null;
         $journal = null;
 
         foreach ($lines as $line) {
-            if (preg_match('/^(ExecMainExitTimestamp|ExecMainStatus|LastTriggerUSec)=(.*)$/', $line, $match) === 1) {
+            if (preg_match('/^(ExecMainExitTimestamp|ExecMainStatus)=(.*)$/', $line, $match) === 1) {
                 $values[$match[1]] = trim($match[2]);
-            } elseif (preg_match('/^coresmith-freed (-?\d+)$/', $line, $match) === 1) {
-                $freed = (int) $match[1];
+            } elseif (preg_match('/^(\S+) .*\scoresmith-freed (-?\d+)$/', $line, $match) === 1) {
+                $logged = $match[1];
+                $freed = (int) $match[2];
             } elseif (preg_match('/take up ([\d.]+[BKMGT]?) /', $line, $match) === 1) {
                 $journal = $match[1];
             }
@@ -140,7 +141,7 @@ final class ProtectionCheck
 
         return [
             'maintenance' => in_array('capped', $lines, true) && in_array('enabled', $lines, true) ? 'on' : 'off',
-            'maintenance_ran' => $exited ?? self::systemdTime($values['LastTriggerUSec'] ?? null),
+            'maintenance_ran' => $exited ?? self::systemdTime($logged),
             'maintenance_failed' => $exited !== null && (int) ($values['ExecMainStatus'] ?? 0) !== 0,
             'maintenance_freed' => $freed,
             'journal' => $journal,

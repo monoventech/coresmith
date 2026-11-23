@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\Edition;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Models\Application;
@@ -58,6 +59,7 @@ final class SetupController extends Controller
             'complete' => $progress->complete(),
             'github' => fn(): ?array => $step === 0 ? $this->github($github, $team, $user) : null,
             'team' => ['id' => $team->id],
+            'move_href' => Edition::current()->isCloud() && $user->can('manageBilling', $team) && !$team->servers()->exists() ? route('settings.general') . '#move-team' : null,
             'cloud' => fn(): ?array => $step === 1 ? $cloud->choices($team, $user, $account) : null,
             ...($step === 1 ? ['catalog' => Inertia::defer(function () use ($cloud, $team, $account): ?array {
                 $selected = $cloud->selectedAccount($team, $account);

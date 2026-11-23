@@ -8,6 +8,7 @@ use App\Models\InstanceSetting;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\BillingPresenter;
+use App\Services\Moves\MovePresenter;
 use App\Services\Panel\Breadcrumbs;
 use App\Services\Panel\CommandPalette;
 use App\Services\Panel\ExplorerPresenter;
@@ -151,8 +152,12 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $team = $user instanceof User ? app(TeamContext::class)->team() : null;
 
-        if (Edition::current()->isSelfHosted() || !$user instanceof User || $team === null) {
+        if (!$user instanceof User || $team === null) {
             return null;
+        }
+
+        if (Edition::current()->isSelfHosted()) {
+            return app(MovePresenter::class)->banner($team, $user);
         }
 
         return app(BillingPresenter::class)->summary($team, $user);
