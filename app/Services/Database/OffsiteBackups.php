@@ -17,9 +17,11 @@ use App\Models\BackupDestination;
 use App\Models\ManagedDatabase;
 use App\Services\Billing\TeamBilling;
 use App\Services\Deployment\LogSanitizer;
+use App\Services\Network\OutboundAddress;
 use App\Services\SSH\SSHConnection;
 use Aws\S3\S3Client;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Throwable;
 
 final class OffsiteBackups
@@ -36,7 +38,7 @@ final class OffsiteBackups
 
     public const LIST_SECONDS = 10;
 
-    public function __construct(private readonly LogSanitizer $sanitizer) {}
+    public function __construct(private readonly LogSanitizer $sanitizer, private readonly OutboundAddress $outbound) {}
 
     public function objectKey(BackupDestination $destination, ManagedDatabase $database, string $dumpPath): string
     {
@@ -78,7 +80,15 @@ final class OffsiteBackups
         $token = null;
 
         for ($page = 0; $page < self::LIST_PAGES; $page++) {
-            $response = Http::timeout(self::LIST_SECONDS)->get($this->presigned($destination, 'ListObjectsV2', ['Prefix' => $prefix, ...($token === null ? [] : ['ContinuationToken' => $token])]));
+            $url = $this->presigned($destination, 'ListObjectsV2', ['Prefix' => $prefix, ...($token === null ? [] : ['ContinuationToken' => $token])]);
+
+            try {
+                $options = $this->outbound->options($url);
+            } catch (RuntimeException $refused) {
+                throw OffsiteListFailed::unreachable($refused->getMessage());
+            }
+
+            $response = Http::withOptions($options)->timeout(self::LIST_SECONDS)->get($url);
             $xml = @simplexml_load_string($response->body());
 
             if (!$response->successful() || $xml === false || $xml->getName() !== 'ListBucketResult') {

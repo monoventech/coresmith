@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Moves\MoveCodes;
 use App\Services\Moves\MoveFile;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\CloudBilling;
 
 function moveFileRefusal(callable $open): string
 {
@@ -37,7 +38,7 @@ test('a move file sealed to another code is refused', function () {
     $file = app(MoveFile::class)->seal(['team' => ['name' => 'Acme']], $codes->read($codes->text($other)));
 
     expect(moveFileRefusal(fn() => app(MoveFile::class)->open($file, $mine->fresh())))
-        ->toBe('This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.');
+        ->toBe('This move file was made for a different move code. Paste the code from here into the Coresmith the team is leaving and download the file again.');
 });
 
 test('a move file whose sealed part was changed is refused', function () {
@@ -49,7 +50,7 @@ test('a move file whose sealed part was changed is refused', function () {
     $header['sealed'] = base64_encode($sealed);
 
     expect(moveFileRefusal(fn() => app(MoveFile::class)->open((string) json_encode($header), $code->fresh())))
-        ->toBe("This move file can't be opened. Download it again from Coresmith Cloud.");
+        ->toBe("This move file can't be opened. Download it again from the Coresmith the team is leaving.");
 });
 
 test('a move file from a newer coresmith asks for an update', function () {
@@ -64,7 +65,7 @@ test('a file that is not a move file is refused', function (string $file) {
     $code = app(MoveCodes::class)->create(User::factory()->create());
 
     expect(moveFileRefusal(fn() => app(MoveFile::class)->open($file, $code->fresh())))
-        ->toBe("This isn't a Coresmith move file. Download it again from Coresmith Cloud.");
+        ->toBe("This isn't a Coresmith move file. Download it again from the Coresmith the team is leaving.");
 })->with([
     'empty' => '',
     'text' => 'hello',
@@ -82,7 +83,15 @@ test('a move file cannot be opened once its code is used or expired', function (
     $this->travel(25)->hours();
 
     expect(moveFileRefusal(fn() => app(MoveFile::class)->open($usedFile, $used->fresh())))
-        ->toBe('This move code has already been used. Create a new one, then download the file again in Coresmith Cloud.')
+        ->toBe('This move code has already been used. Create a new one, then download the file again from the Coresmith the team is leaving.')
         ->and(moveFileRefusal(fn() => app(MoveFile::class)->open($expiredFile, $expired->fresh())))
-        ->toBe('This move code has expired. Create a new one, then download the file again in Coresmith Cloud.');
+        ->toBe('This move code has expired. Create a new one, then download the file again from the Coresmith the team is leaving.');
+});
+
+test('Coresmith Cloud sends a refused file back to the self-hosted Coresmith it came from', function () {
+    CloudBilling::enable();
+    $code = app(MoveCodes::class)->create(User::factory()->create());
+
+    expect(moveFileRefusal(fn() => app(MoveFile::class)->open('not a move file', $code)))
+        ->toBe("This isn't a Coresmith move file. Download it again from your self-hosted Coresmith.");
 });

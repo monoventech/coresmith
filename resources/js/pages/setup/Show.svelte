@@ -28,6 +28,7 @@
         server = null,
         application = null,
         create_application_href = null,
+        move_href = null,
         cloud = null,
         catalog
     }: {
@@ -48,6 +49,7 @@
             deploy_href: string
         } | null
         create_application_href: string | null
+        move_href?: string | null
         cloud: CloudChoices | null
         catalog?: CloudCatalog | null
     } = $props()
@@ -145,11 +147,21 @@
 {/snippet}
 
 <h1 class="type-h1 m-0 mb-1.5">Set up Coresmith</h1>
-<p class="type-body-sm mb-7 text-muted-foreground">
+<p class={cn('type-body-sm text-muted-foreground', move_href ? 'mb-1.5' : 'mb-7')}>
     {complete
         ? 'Every step is done. The Setup link has gone, and this page stays here for reference.'
         : 'Four steps from a fresh install to your first deploy. You can leave and pick this up anytime.'}
 </p>
+{#if move_href}
+    <p class="type-body-sm mb-7 text-muted-foreground" data-testid="setup-move">
+        Coming from self-hosted Coresmith?
+        <Link
+            href={move_href}
+            class="focus-ring rounded-sm font-medium text-primary-strong no-underline underline-offset-4 hover:underline"
+            >Move your team here instead</Link
+        >.
+    </p>
+{/if}
 
 <nav class="mb-6 flex flex-wrap items-center gap-1" aria-label="Setup steps">
     {#each steps as item, index (item.label)}

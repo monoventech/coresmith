@@ -832,7 +832,23 @@ final class E2ESeeder extends Seeder
 
             $move = $codes->create($mover);
             $move->forceFill(['file' => app(MoveFile::class)->seal($this->arrivals($code, $index), $codes->read($codes->text($move)))])->save();
+
+            $this->leaving($mover, "Leaving {$code}", "leaving-{$code}", '203.0.113.' . (160 + $index));
+            $this->leaving($mover, "Homelab {$code}", "homelab-{$code}", '192.168.0.' . (10 + $index));
+            $away = $this->leaving($mover, "On The Way {$code}", "on-the-way-{$code}", '203.0.113.' . (170 + $index));
+            $away->forceFill(['moving_at' => now()->subHour(), 'moving_to' => 'https://app.coresmith.io', 'moving_edition' => 'cloud', 'move_file' => "{\"format\":1}\n"])->save();
+            $away->servers()->update(['status' => ServerStatus::Moving->value]);
         }
+    }
+
+    private function leaving(User $owner, string $name, string $slug, string $ip): Team
+    {
+        $team = Team::factory()->create(['name' => $name, 'slug' => $slug, 'owner_id' => $owner->getKey()]);
+        $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        $server = Server::factory()->for($team)->active()->create(['name' => "{$slug}-01", 'ip_address' => $ip, 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $slug, true)), 0, 43)]);
+        Application::factory()->for($team)->for($server)->create(['name' => "{$slug}-site", 'slug' => "{$slug}-site", 'system_user' => 'coresmith-app-' . substr(md5($slug), 0, 8)]);
+
+        return $team;
     }
 
     /**

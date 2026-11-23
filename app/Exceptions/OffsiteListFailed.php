@@ -8,10 +8,16 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use App\Services\Network\OutboundAddress;
 use RuntimeException;
 
 final class OffsiteListFailed extends RuntimeException
 {
+    public static function unreachable(string $why): self
+    {
+        return new self($why === OutboundAddress::UNRESOLVED ? "Coresmith Cloud couldn't find an address for its endpoint." : "Its endpoint points at a private address, so Coresmith Cloud can't reach it.");
+    }
+
     public static function refused(?string $said): self
     {
         return new self($said === null || trim($said) === '' ? "S3 didn't answer with a listing." : 'S3 said: ' . rtrim(trim($said), '.') . '.');

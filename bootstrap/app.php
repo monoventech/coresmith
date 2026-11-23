@@ -9,6 +9,7 @@ use App\Http\Middleware\EnforceTokenAbility;
 use App\Http\Middleware\EnsureCloudEdition;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureInstalled;
+use App\Http\Middleware\EnsureSelfHostedEdition;
 use App\Http\Middleware\EnsureTeamContext;
 use App\Http\Middleware\FrontDoorVisitorAddress;
 use App\Http\Middleware\HandleAppearance;
@@ -50,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'token.can' => EnforceTokenAbility::class,
             'setup.token' => RequireSetupToken::class,
             'cloud' => EnsureCloudEdition::class,
+            'self-hosted' => EnsureSelfHostedEdition::class,
             'verified' => EnsureEmailIsVerified::class,
             'plan' => EnforcePlan::class,
         ]);

@@ -9,10 +9,12 @@ declare(strict_types=1);
 namespace App\Services\Billing;
 
 use App\Enums\Edition;
+use App\Enums\Plan;
 use App\Enums\PlanFeature;
 use App\Exceptions\PlanRefusal;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Moves\MoveSide;
 use Closure;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
@@ -28,6 +30,8 @@ final class PlanGate
     public function creatingServer(Team $team, User $user, Closure $create): mixed
     {
         if (Edition::current()->isSelfHosted()) {
+            $this->ensureWritable($team, $user);
+
             return $create();
         }
 
@@ -67,12 +71,12 @@ final class PlanGate
 
     public function ensureWritable(Team $team, User $user): void
     {
-        if (Edition::current()->isSelfHosted()) {
-            return;
+        if ($team->moving_at !== null) {
+            throw PlanRefusal::moving($this->canManage($team, $user), MoveSide::label(Edition::tryFrom((string) $team->moving_edition) ?? Edition::SelfHosted));
         }
 
-        if ($team->moving_at !== null) {
-            throw PlanRefusal::moving($this->canManage($team, $user));
+        if (Edition::current()->isSelfHosted()) {
+            return;
         }
 
         $status = $this->billing->status($team);
@@ -84,11 +88,11 @@ final class PlanGate
 
     public function ensureCanAddServer(Team $team, User $user): void
     {
+        $this->ensureWritable($team, $user);
+
         if (Edition::current()->isSelfHosted()) {
             return;
         }
-
-        $this->ensureWritable($team, $user);
 
         $status = $this->billing->status($team);
         $limit = $status->serverLimit();
@@ -99,13 +103,42 @@ final class PlanGate
         }
     }
 
+    public function moveRefusal(Team $team, User $user, string $name, int $servers, int $people): ?string
+    {
+        if (Edition::current()->isSelfHosted()) {
+            return null;
+        }
+
+        $status = $this->billing->status($team);
+
+        if ($status->readOnly() || $status->plan === null) {
+            return PlanRefusal::readOnly($status, $this->canManage($team, $user))->getMessage();
+        }
+
+        $limit = $status->serverLimit();
+
+        if ($limit !== null && $servers > $limit) {
+            return $status->plan === Plan::Trial
+                ? "{$name} has {$servers} servers, and the trial includes {$limit}. Choose a plan that fits in Billing, then move the team."
+                : "{$name} has {$servers} servers, and {$status->plan->label()} includes {$limit}. Choose Pro or Business in Billing, then move the team.";
+        }
+
+        $members = $status->memberLimit();
+
+        if ($members !== null && $people > $members) {
+            return "{$name} has {$people} people, and {$status->plan->label()} is for one person. Choose Pro or Business in Billing, then move the team.";
+        }
+
+        return null;
+    }
+
     public function ensureCanAddMember(Team $team, User $user): void
     {
+        $this->ensureWritable($team, $user);
+
         if (Edition::current()->isSelfHosted()) {
             return;
         }
-
-        $this->ensureWritable($team, $user);
 
         $status = $this->billing->status($team);
         $limit = $status->memberLimit();

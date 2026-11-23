@@ -23,6 +23,8 @@ use App\Services\Git\GitHub\ManifestBuilder;
 use App\Services\Network\AddressResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\CloudBilling;
 use Tests\Support\CloudFixtures;
 use Tests\Support\FakeCloudApiFactory;
 
@@ -415,4 +417,24 @@ test('a finished setup says so and stays on the last step', function () {
 
 test('setup requires authentication', function () {
     $this->get(route('setup.show'))->assertRedirect(route('login'));
+});
+
+test('setup on Coresmith Cloud offers to bring a self-hosted team while the team has no servers', function () {
+    CloudBilling::enable();
+    $team = Team::factory()->onTrial()->owned()->create();
+    $owner = User::query()->findOrFail($team->owner_id);
+
+    $this->actingAs($owner)->get(route('setup.show'))
+        ->assertInertia(fn(Assert $page) => $page->where('move_href', route('settings.general') . '#move-team'));
+
+    Server::factory()->for($team)->create();
+
+    $this->actingAs($owner)->get(route('setup.show'))->assertInertia(fn(Assert $page) => $page->where('move_href', null));
+});
+
+test('setup on a self-hosted Coresmith has no move link', function () {
+    $team = Team::factory()->owned()->create();
+
+    $this->actingAs(User::query()->findOrFail($team->owner_id))->get(route('setup.show'))
+        ->assertInertia(fn(Assert $page) => $page->where('move_href', null));
 });

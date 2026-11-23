@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Moves;
 
+use App\Enums\Edition;
 use Carbon\CarbonImmutable;
 
 final readonly class MoveTarget
@@ -17,5 +18,6 @@ final readonly class MoveTarget
         public string $publicKey,
         public CarbonImmutable $until,
         public string $panel,
+        public Edition $edition = Edition::SelfHosted,
     ) {}
 }

@@ -24,7 +24,7 @@ use Tests\Support\CloudBilling;
 function moveHttpCloudTeam(): Team
 {
     $team = Team::factory()->onTrial()->owned()->create(['name' => 'Acme', 'slug' => 'acme']);
-    $server = Server::factory()->active()->create(['team_id' => $team->id, 'name' => 'web-01', 'host_key_fingerprint' => 'SHA256:web']);
+    $server = Server::factory()->active()->create(['team_id' => $team->id, 'name' => 'web-01', 'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW']);
     Application::factory()->create(['team_id' => $team->id, 'server_id' => $server->id]);
 
     return $team->fresh();
@@ -38,8 +38,12 @@ function moveHttpOwner(Team $team): User
 function moveHttpCodeText(?User $user = null): string
 {
     $codes = app(MoveCodes::class);
+    $edition = config('coresmith.edition');
+    config(['coresmith.edition' => 'self-hosted']);
+    $text = $codes->text($codes->create($user ?? User::factory()->create()));
+    config(['coresmith.edition' => $edition]);
 
-    return $codes->text($codes->create($user ?? User::factory()->create()));
+    return $text;
 }
 
 function moveHttpPanelOwner(): User
@@ -57,7 +61,7 @@ function moveHttpPayload(): array
         'team' => ['name' => 'Acme', 'slug' => 'acme'],
         'members' => [],
         'cloud_providers' => [],
-        'servers' => [['ref' => 's1', 'cloud_provider' => null, 'name' => 'web-01', 'ip_address' => '203.0.113.50', 'ssh_port' => 22, 'ssh_user' => 'root', 'ssh_private_key' => $key->privateKey, 'ssh_public_key' => $key->publicKey, 'host_key_fingerprint' => 'SHA256:web', 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8]],
+        'servers' => [['ref' => 's1', 'cloud_provider' => null, 'name' => 'web-01', 'ip_address' => '203.0.113.50', 'ssh_port' => 22, 'ssh_user' => 'root', 'ssh_private_key' => $key->privateKey, 'ssh_public_key' => $key->publicKey, 'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW', 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8]],
         'source_providers' => [],
         'applications' => [['ref' => 'a1', 'server' => 's1', 'source_provider' => null, 'name' => 'site', 'slug' => 'acme-site-moved', 'type' => 'php', 'system_user' => 'coresmith-app-site', 'base_port' => 8100, 'status' => 'active']],
         'webhook_endpoints' => [],
@@ -153,10 +157,10 @@ describe('on coresmith cloud', function () {
             ->where('billing.banner.action', 'See the move'));
     });
 
-    test('coresmith cloud does not make move codes', function () {
+    test('a cloud team that already has servers makes no move code', function () {
         $team = moveHttpCloudTeam();
 
-        $this->actingAs(moveHttpOwner($team))->post(route('settings.moves.store'))->assertNotFound();
+        $this->actingAs(moveHttpOwner($team))->post(route('settings.moves.store'))->assertForbidden();
     });
 });
 
@@ -171,7 +175,7 @@ describe('on a self-hosted panel', function () {
 
         $this->actingAs($owner)->from(route('settings.general'))->post(route('settings.moves.store'))
             ->assertRedirect(route('settings.general'))
-            ->assertSessionHas('success', 'Saved. Paste the move code into Coresmith Cloud.');
+            ->assertSessionHas('success', 'Saved. Paste the move code into the Coresmith the team is leaving.');
 
         $this->actingAs($owner)->get(route('settings.general'))->assertInertia(fn(Assert $page) => $page
             ->where('moves.code.text', fn(string $text): bool => str_starts_with($text, 'csmove1_'))
@@ -206,7 +210,7 @@ describe('on a self-hosted panel', function () {
         $other = app(MoveCodes::class)->create(User::factory()->create());
 
         $this->actingAs($owner)->post(route('settings.moves.upload', $code), ['file' => moveHttpUploaded($code, $other)])
-            ->assertSessionHasErrors(['file' => 'This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.']);
+            ->assertSessionHasErrors(['file' => 'This move file was made for a different move code. Paste the code from here into the Coresmith the team is leaving and download the file again.']);
 
         expect($code->fresh()->file)->toBeNull();
     });

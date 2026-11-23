@@ -23,11 +23,18 @@ final class TeamMove
         private readonly TeamExporter $exporter,
         private readonly MoveFile $files,
         private readonly PlanChanges $plans,
+        private readonly MoveReach $reach,
     ) {}
 
     public function start(Team $team, User $user, string $code): void
     {
         $target = $this->codes->read($code);
+        $refusal = $this->reach->refusal($team, $target);
+
+        if ($refusal !== null) {
+            throw ValidationException::withMessages(['code' => $refusal]);
+        }
+
         $file = $this->files->seal($this->exporter->payload($team, $user), $target);
         $subscription = $team->subscription('default');
 
@@ -36,7 +43,7 @@ final class TeamMove
         }
 
         DB::transaction(function () use ($team, $target, $file): void {
-            $team->forceFill(['moving_at' => now(), 'moving_to' => $target->panel, 'move_file' => $file])->save();
+            $team->forceFill(['moving_at' => now(), 'moving_to' => $target->panel, 'moving_edition' => $target->edition->value, 'move_file' => $file])->save();
             $team->servers()->where('status', ServerStatus::Active->value)->update(['status' => ServerStatus::Moving->value]);
         });
 
@@ -56,7 +63,7 @@ final class TeamMove
         }
 
         DB::transaction(function () use ($team): void {
-            $team->forceFill(['moving_at' => null, 'moving_to' => null, 'move_file' => null])->save();
+            $team->forceFill(['moving_at' => null, 'moving_to' => null, 'moving_edition' => null, 'move_file' => null])->save();
             $team->servers()->where('status', ServerStatus::Moving->value)->update(['status' => ServerStatus::Active->value]);
         });
 

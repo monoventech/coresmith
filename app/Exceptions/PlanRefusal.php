@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use App\Enums\Edition;
 use App\Enums\Plan;
 use App\Enums\PlanFeature;
 use App\Enums\ReadOnlyReason;
@@ -55,9 +56,13 @@ final class PlanRefusal extends RuntimeException
         return new self($feature->note() . ' ' . ($canManage ? 'Change the plan in Billing settings.' : 'Ask an owner to change the plan.'), 'feature', 403);
     }
 
-    public static function moving(bool $canManage): self
+    public static function moving(bool $canManage, string $to = 'self-hosted Coresmith'): self
     {
-        return new self('This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer changes it. ' . ($canManage ? 'Cancel the move in Billing settings to make changes here again.' : 'Ask an owner if it should stay here.'), 'moving', 409);
+        $cloud = Edition::current()->isCloud();
+        $here = $cloud ? 'Coresmith Cloud' : 'Coresmith';
+        $where = $cloud ? 'Billing settings' : 'Settings, General';
+
+        return new self("This team is moving to {$to}, so {$here} no longer changes it. " . ($canManage ? "Cancel the move in {$where} to make changes here again." : 'Ask an owner if it should stay here.'), 'moving', 409);
     }
 
     public static function inactive(): self
