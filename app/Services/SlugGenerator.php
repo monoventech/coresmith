@@ -26,14 +26,14 @@ final class SlugGenerator
     {
         $base = $this->normalise($name === null || trim($name) === '' ? $this->randomName() : $name);
 
-        if (!$this->taken($base)) {
+        if (!$this->taken($base, $server)) {
             return $base;
         }
 
         do {
             $suffix = '-' . Str::lower(Str::random(3));
             $candidate = $this->normalise(Str::substr($base, 0, self::MAX_SLUG_LENGTH - strlen($suffix)) . $suffix);
-        } while ($this->taken($candidate));
+        } while ($this->taken($candidate, $server));
 
         return $candidate;
     }
@@ -56,9 +56,10 @@ final class SlugGenerator
         return self::ADJECTIVES[array_rand(self::ADJECTIVES)] . '-' . self::NOUNS[array_rand(self::NOUNS)];
     }
 
-    private function taken(string $slug): bool
+    private function taken(string $slug, Server $server): bool
     {
         return Application::withTrashed()
+            ->where('server_id', $server->getKey())
             ->where('slug', $slug)
             ->exists();
     }

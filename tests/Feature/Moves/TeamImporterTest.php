@@ -174,12 +174,14 @@ test('a server already on this panel stops the import and nothing is created', f
         ->and(Team::query()->count())->toBe($teams);
 });
 
-test('an app whose address is taken on this panel stops the import', function () {
+test('an app slug used on another server here still moves', function () {
     $owner = User::factory()->create();
     Application::factory()->create(['slug' => 'acme-docs']);
 
-    expect(teamImporterRefusal(teamImporterPayload(), teamImporterCode($owner), $owner))
-        ->toBe('An app called acme-docs is already here. Remove it first, then upload the file again.');
+    $team = app(TeamImporter::class)->import(teamImporterPayload(), teamImporterCode($owner), $owner);
+
+    expect(Application::query()->where('slug', 'acme-docs')->count())->toBe(2)
+        ->and($team->applications()->where('slug', 'acme-docs')->exists())->toBeTrue();
 });
 
 test('the preview says what moves and what needs reconnecting', function () {

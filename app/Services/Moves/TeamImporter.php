@@ -221,12 +221,6 @@ final class TeamImporter
         if ($taken !== null) {
             $this->refuse("{$taken} is already a server here. Remove it first, then upload the file again.");
         }
-
-        $slug = Application::withTrashed()->whereIn('slug', array_column($this->records($payload, 'applications'), 'slug'))->value('slug');
-
-        if ($slug !== null) {
-            $this->refuse("An app called {$slug} is already here. Remove it first, then upload the file again.");
-        }
     }
 
     /**
