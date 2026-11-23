@@ -1700,7 +1700,7 @@ test('Ubuntu and Debian get PHP from packages.sury.org, signed by the key its ke
     (new Process(['rm', '-rf', $apt]))->run();
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
-        ->and(preg_match('~^run curl -fsSLo (/\S+)/debsuryorg-archive-keyring\.deb https://packages\.sury\.org/debsuryorg-archive-keyring\.deb\nrun dpkg -i \1/debsuryorg-archive-keyring\.deb$~m', $process->getOutput()))->toBe($added ? 1 : 0)
+        ->and(preg_match('~^run curl -fsSLo (/\S+)/debsuryorg-archive-keyring\.deb --retry 3 --connect-timeout 20 --max-time 120 https://packages\.sury\.org/debsuryorg-archive-keyring\.deb\nrun dpkg -i \1/debsuryorg-archive-keyring\.deb$~m', $process->getOutput()))->toBe($added ? 1 : 0)
         ->and($list)->toBe($added ? "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ noble main\n" : null);
 })->with([
     'a fresh machine' => [[], true],

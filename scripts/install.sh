@@ -573,7 +573,7 @@ add_php_repository() {
     done
 
     download="$(mktemp -d)"
-    run curl -fsSLo "$download/debsuryorg-archive-keyring.deb" https://packages.sury.org/debsuryorg-archive-keyring.deb
+    run curl -fsSLo "$download/debsuryorg-archive-keyring.deb" --retry 3 --connect-timeout 20 --max-time 120 https://packages.sury.org/debsuryorg-archive-keyring.deb
     run dpkg -i "$download/debsuryorg-archive-keyring.deb"
     rm -rf "$download"
     echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" >"$list"
