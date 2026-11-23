@@ -12,6 +12,8 @@ use App\Enums\Edition;
 use App\Models\MoveCode;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Network\LocalAddresses;
+use App\Services\Network\PublicAddress;
 use App\Services\Teams\TeamUrls;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
@@ -22,7 +24,9 @@ final class MoveCodes
 
     public const HOURS = 24;
 
-    public function __construct(private readonly TeamUrls $urls) {}
+    private const MAX_ADDRESSES = 8;
+
+    public function __construct(private readonly TeamUrls $urls, private readonly LocalAddresses $addresses) {}
 
     public function create(User $user, ?Team $team = null): MoveCode
     {
@@ -53,6 +57,10 @@ final class MoveCodes
             'edition' => Edition::current()->value,
         ];
 
+        if (Edition::current()->isCloud()) {
+            $claims['reach'] = self::publicAddresses($this->addresses->all());
+        }
+
         return self::PREFIX . rtrim(strtr(base64_encode((string) json_encode($claims, JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
     }
 
@@ -71,7 +79,16 @@ final class MoveCodes
             $this->refuse('This move code has expired. Create a new one in Settings, General on ' . MoveSide::destination() . '.');
         }
 
-        return new MoveTarget($claims['id'], $key, $until, $claims['panel'], Edition::tryFrom((string) ($claims['edition'] ?? '')) ?? Edition::SelfHosted);
+        return new MoveTarget($claims['id'], $key, $until, $claims['panel'], Edition::tryFrom((string) ($claims['edition'] ?? '')) ?? Edition::SelfHosted, self::publicAddresses(is_array($claims['reach'] ?? null) ? $claims['reach'] : []));
+    }
+
+    /**
+     * @param  array<mixed>  $addresses
+     * @return list<string>
+     */
+    private static function publicAddresses(array $addresses): array
+    {
+        return array_slice(array_values(array_unique(array_filter($addresses, fn(mixed $address): bool => is_string($address) && PublicAddress::is($address)))), 0, self::MAX_ADDRESSES);
     }
 
     /**

@@ -68,7 +68,18 @@ test('a server whose connection details are broken is refused', function (array 
     'a fingerprint that is not SHA256' => [['host_key_fingerprint' => 'MD5:xx']],
     'a private key that does not parse' => [['ssh_private_key' => 'not a key']],
     'an address that is not one' => [['ip_address' => 'web-01.example.com']],
+    'a runtime user Coresmith does not use' => [['meta' => ['cpu_cores' => 2, 'runtime_user' => 'root']]],
 ]);
+
+test('the machine Coresmith ran on moves with the runtime user its apps already use', function () {
+    $payload = moveChecksWith('servers', ['meta' => ['cpu_cores' => 2, 'runtime_user' => 'coresmith-runtime']]);
+
+    expect(app(MoveChecks::class)->problems($payload))->toBe([]);
+
+    CloudBilling::enable();
+
+    expect(app(MoveChecks::class)->problems($payload))->toBe([]);
+});
 
 test('an app whose settings are broken is refused', function (array $changes) {
     CloudBilling::enable();

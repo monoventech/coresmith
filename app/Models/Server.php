@@ -122,7 +122,7 @@ class Server extends Model
 
     public function runtimeUser(): string
     {
-        return $this->runs_coresmith ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;
+        return $this->runs_coresmith || (((array) $this->meta)['runtime_user'] ?? null) === AsdfManager::CORESMITH_HOST_USER ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;
     }
 
     public function applications(): HasMany
