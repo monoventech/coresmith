@@ -21,7 +21,6 @@ use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\SshKey;
 use App\Models\Team;
-use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
@@ -194,13 +193,6 @@ test('a read-only team can still leave, secure itself, shrink and pay', function
         $test->delete(route('teams.invitations.destroy', [$team, $invitation]))->assertRedirect();
 
         expect(TeamInvitation::query()->find($invitation->id))->toBeNull();
-    }],
-    'remove the domain' => [function ($test, Team $team, User $owner) {
-        TeamDomain::factory()->for($team)->create();
-
-        $test->delete(route('settings.team-domain.destroy'))->assertRedirect();
-
-        expect(TeamDomain::query()->where('team_id', $team->id)->exists())->toBeFalse();
     }],
     'remove single sign-on' => [function ($test, Team $team, User $owner) {
         TeamSsoConnection::factory()->for($team)->create();

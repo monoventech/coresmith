@@ -20,6 +20,7 @@
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
     import { getInitials } from '@/lib/initials'
+    import { cn } from '@/lib/utils'
     import { Form, page, router } from '@inertiajs/svelte'
     import { X } from '@lucide/svelte'
 
@@ -45,6 +46,7 @@
             failure: string | null
             records: { type: string; name: string; value: string }[]
         } | null
+        custom_domains: boolean
     }
 
     let {
@@ -247,9 +249,11 @@
     </div>
 {/if}
 
-<div class="mt-4 grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
+<div class={cn('mt-4 grid items-stretch gap-4', address.custom_domains && 'grid-cols-2 max-[900px]:grid-cols-1')}>
     <TeamAddressCard slug={team.slug} path={address.path} subdomain={address.subdomain} canUpdate={can.update} />
-    <CustomDomainCard domain={address.domain} canUpdate={can.update} planNote={billing?.notes.custom_domain} />
+    {#if address.custom_domains}
+        <CustomDomainCard domain={address.domain} canUpdate={can.update} />
+    {/if}
 </div>
 
 <div class="mt-4">

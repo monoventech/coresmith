@@ -169,9 +169,7 @@ test('the cloud browser seed has a fleet too big for starter', function () {
 
     expect(app(TeamBilling::class)->status($fleet)->plan)->toBe(Plan::Pro)
         ->and($fleet->servers()->count())->toBe(5)
-        ->and($fleet->members()->count())->toBe(3)
-        ->and($fleet->domain?->hostname)->toBe('deploy.bigfleet.test')
-        ->and($fleet->domain?->isVerified())->toBeTrue();
+        ->and($fleet->members()->count())->toBe(3);
 });
 
 test('the cloud browser seed has a business team with a history', function () {

@@ -39,7 +39,8 @@ final readonly class DomainClaims
      */
     public function byCoresmith(array $names): array
     {
-        $used = [$this->urls->mainHost(), ...TeamDomain::query()->whereIn('hostname', $names)->pluck('hostname')->all()];
+        $teamDomains = $this->urls->allowsTeamHosts() ? TeamDomain::query()->whereIn('hostname', $names)->pluck('hostname')->all() : [];
+        $used = [$this->urls->mainHost(), ...$teamDomains];
 
         return array_values(array_intersect($names, $used));
     }

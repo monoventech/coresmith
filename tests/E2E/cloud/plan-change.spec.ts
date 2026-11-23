@@ -47,7 +47,6 @@ test.describe('changing the plan on coresmith cloud', () => {
         }
 
         await expect(consequences).toContainText('Remove the other 2 members first.')
-        await expect(consequences).toContainText('Remove deploy.bigfleet.test first.')
         await expect(dialog(page).getByRole('button', { name: 'Save' })).toBeDisabled()
 
         await dialog(page).getByRole('radio', { name: 'Business', exact: true }).click()
