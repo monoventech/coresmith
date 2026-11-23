@@ -83,6 +83,17 @@ test('a server Coresmith Cloud could not reach stops the move before anything pa
     'the machine Coresmith runs on' => [fn(Server $server) => $server->forceFill(['ip_address' => '127.0.0.1', 'runs_coresmith' => true])->save(), "web-01 is the machine Coresmith runs on, which can't move to Coresmith Cloud. Remove it from the team, then try again."],
 ]);
 
+test('the machine Coresmith runs on stops a move to another self-hosted Coresmith before anything pauses', function () {
+    $team = moveAwayTeam();
+    moveAwayServer($team)->forceFill(['ip_address' => '127.0.0.1', 'runs_coresmith' => true])->save();
+
+    $this->actingAs(moveAwayOwner($team))->post(route('settings.moving.store'), ['code' => moveAwayCode('self-hosted', 'https://panel.example.com')])
+        ->assertSessionHasErrors(['code' => "web-01 is the machine Coresmith runs on, which can't move to another Coresmith. Remove it from the team, then try again."]);
+
+    expect($team->fresh()->moving_at)->toBeNull()
+        ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Active);
+});
+
 test('a code from another self-hosted Coresmith takes a server on a home network', function () {
     $team = moveAwayTeam();
     moveAwayServer($team)->forceFill(['ip_address' => '192.168.0.10'])->save();

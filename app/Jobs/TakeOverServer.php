@@ -12,6 +12,7 @@ use App\Enums\ServerStatus;
 use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\ServerHasNoAddress;
 use App\Exceptions\SSHAuthenticationException;
+use App\Models\Application;
 use App\Models\Server;
 use App\Services\SafeName;
 use App\Services\Server\SecurityHardening;
@@ -88,6 +89,8 @@ final class TakeOverServer implements ShouldQueue
         ])->save();
 
         activity()->performedOn($server)->log('server_taken_over');
+
+        $server->applications()->whereNotNull('former_route_id')->each(fn(Application $application) => SyncApplicationRoute::dispatch($application));
     }
 
     private function addKey(string $user, string $publicKey): string
