@@ -64,13 +64,13 @@ final class OutboundAddress
         $host = (string) $this->host($url);
 
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-            return [];
+            return ['allow_redirects' => false];
         }
 
         $port = parse_url($url, PHP_URL_PORT) ?: (strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'http' ? 80 : 443);
         $pinned = implode(',', array_map(fn(string $address): string => str_contains($address, ':') ? "[{$address}]" : $address, $this->addresses($host)));
 
-        return ['curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$pinned}"]]];
+        return ['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$pinned}"]]];
     }
 
     private function host(string $url): ?string

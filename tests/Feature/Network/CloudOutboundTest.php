@@ -84,8 +84,8 @@ test('requests Coresmith Cloud makes are pinned to the addresses it checked', fu
     CloudBilling::enable();
     $outbound = app(OutboundAddress::class);
 
-    expect($outbound->options('https://s3.example.com/lab-backups?list-type=2'))->toBe(['curl' => [CURLOPT_RESOLVE => ['s3.example.com:443:203.0.113.5']]])
-        ->and($outbound->options('https://203.0.113.20/lab-backups'))->toBe([]);
+    expect($outbound->options('https://s3.example.com/lab-backups?list-type=2'))->toBe(['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ['s3.example.com:443:203.0.113.5']]])
+        ->and($outbound->options('https://203.0.113.20/lab-backups'))->toBe(['allow_redirects' => false]);
 
     config(['coresmith.edition' => 'self-hosted']);
 
@@ -113,4 +113,20 @@ test('single sign-on on Coresmith Cloud refuses a provider on a private network'
 
 test('single sign-on on self-hosted Coresmith still reaches a provider on the office network', function () {
     expect(app(UrlGuard::class)->issuerRefusal('https://10.0.0.5/realms/acme'))->toBeNull();
+});
+
+test('listing backups never follows the endpoint somewhere else', function () {
+    CloudBilling::enable();
+    Http::preventStrayRequests();
+    Http::fake([
+        's3.example.com/*' => Http::response('', 301, ['Location' => 'http://169.254.169.254/latest/meta-data/']),
+        '169.254.169.254/*' => Http::response('<ListBucketResult></ListBucketResult>', 200),
+    ]);
+    $team = Team::factory()->subscribed(Plan::Business)->create();
+    $destination = BackupDestination::factory()->create(['team_id' => $team->id, 'endpoint' => 'https://s3.example.com', 'path_style' => true]);
+    $database = ManagedDatabase::factory()->for($team)->create();
+
+    expect(fn() => app(OffsiteBackups::class)->listed($destination, $database))->toThrow(OffsiteListFailed::class);
+
+    Http::assertNotSent(fn($request): bool => str_contains($request->url(), '169.254.169.254'));
 });
