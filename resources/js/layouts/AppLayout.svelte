@@ -37,6 +37,11 @@
     const explorer = $derived(page.props.explorer as ExplorerProps | null)
     const inline = $derived(explorerInline())
     const onBilling = $derived(appPath(page.url, panel?.base).startsWith('/settings/billing'))
+    const onBannerPage = $derived(
+        billing?.href
+            ? page.url.split(/[?#]/)[0] === billing.href.replace(/^https?:\/\/[^/]+/, '').split(/[?#]/)[0]
+            : false
+    )
     const live = $derived(
         `${panel?.team?.id ?? ''}:${panel?.live.streaming ? 'on' : 'off'}:${panel?.live.socket?.key ?? ''}`
     )
@@ -124,7 +129,7 @@
                     </div>
                 {/if}
 
-                {#if billing?.banner && !onBilling}
+                {#if billing?.banner && !onBilling && !onBannerPage}
                     <BillingBanner banner={billing.banner} href={billing.href} />
                 {/if}
 

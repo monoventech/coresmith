@@ -111,7 +111,12 @@ asMover.describe('moving a team to coresmith cloud', () => {
 
             expect((await download).suggestedFilename()).toBe(`${slug}.coresmith-move`)
             await expect(card).toContainText('Moving to Coresmith Cloud')
+            await expect(page.getByText('This team is moving to Coresmith Cloud.')).toHaveCount(0)
+
+            await page.goto(`/${slug}/dashboard`)
             await expect(page.getByText('This team is moving to Coresmith Cloud.')).toBeVisible()
+            await page.getByRole('link', { name: 'See the move' }).click()
+            await page.waitForURL(new RegExp(`/${slug}/settings$`))
 
             await card.getByRole('button', { name: 'Cancel the move' }).click()
 
