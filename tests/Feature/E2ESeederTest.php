@@ -207,3 +207,20 @@ test('the browser seed shares Atlas with the developer with everything in it hel
         ->and($access->applications($lena, $team)->pluck('name')->all())->toBe(['side-notes'])
         ->and($access->canSeeProject($lena, $atlas))->toBeTrue();
 });
+
+test('the self-hosted browser seed gives every mover a team to send, one Cloud could not reach, and one on its way', function () {
+    e2eSeedRun();
+
+    foreach (E2ESeeder::PROJECTS as $code) {
+        $mover = User::query()->where('email', E2ESeeder::moverEmail($code))->firstOrFail();
+        $leaving = Team::query()->where('slug', "leaving-{$code}")->firstOrFail();
+        $homelab = Team::query()->where('slug', "homelab-{$code}")->firstOrFail();
+        $away = Team::query()->where('slug', "on-the-way-{$code}")->firstOrFail();
+
+        expect($leaving->owner_id)->toBe($mover->id)
+            ->and($leaving->moving_at)->toBeNull()
+            ->and($homelab->servers()->value('ip_address'))->toStartWith('192.168.0.')
+            ->and($away->moving_edition)->toBe('cloud')
+            ->and($away->servers()->pluck('status')->all())->toBe([ServerStatus::Moving]);
+    }
+});

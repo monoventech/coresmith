@@ -51,6 +51,8 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
         }
     ],
     ['Fleet on a free plan that is ending', direct('/free-soon/dashboard')],
+    ['Moving a self-hosted team into a trial that is too small', direct('/arriving-big/settings')],
+    ['Setup with the way in from self-hosted', direct('/arriving-big/setup')],
     ['General settings on a team its owner can delete', direct('/trial/settings')],
     [
         'Delete team dialog',

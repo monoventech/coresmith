@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto'
 import { asMover, blockingViolations, expect, own, test, toast, useTheme } from './support/fixtures'
 
 test.use({ reducedMotion: 'reduce' })
@@ -79,4 +80,70 @@ test('an owner of the panel makes a move code to paste into coresmith cloud', as
 
     await expect(toast(page)).toContainText('Removed.')
     await expect(card.getByRole('button', { name: 'Create a move code' })).toBeVisible()
+})
+
+function cloudMoveCode(): string {
+    const raw = generateKeyPairSync('x25519').publicKey.export({ format: 'der', type: 'spki' }).subarray(-32)
+    const claims = {
+        v: 1,
+        id: '01JMOVEAWAYE2E000000000000',
+        key: Buffer.from(raw).toString('base64'),
+        until: Math.floor(Date.now() / 1000) + 24 * 3600,
+        panel: 'https://app.coresmith.io',
+        edition: 'cloud'
+    }
+
+    return `csmove1_${Buffer.from(JSON.stringify(claims)).toString('base64url')}`
+}
+
+asMover.describe('moving a team to coresmith cloud', () => {
+    asMover(
+        'a code from coresmith cloud pauses the team, downloads its file and can be undone',
+        async ({ page }, testInfo) => {
+            const slug = own(testInfo, 'leaving')
+
+            await page.goto(`/${slug}/settings`)
+            const card = page.getByTestId('move-away-card')
+            await card.getByLabel('Move code').fill(cloudMoveCode())
+
+            const download = page.waitForEvent('download')
+            await card.getByRole('button', { name: 'Download move file' }).click()
+
+            expect((await download).suggestedFilename()).toBe(`${slug}.coresmith-move`)
+            await expect(card).toContainText('Moving to Coresmith Cloud')
+            await expect(page.getByText('This team is moving to Coresmith Cloud.')).toBeVisible()
+
+            await card.getByRole('button', { name: 'Cancel the move' }).click()
+
+            await expect(toast(page)).toContainText('Saved. Coresmith manages this team again.')
+            await expect(card).toContainText('Move this team to Coresmith Cloud')
+        }
+    )
+
+    asMover('a server coresmith cloud could not reach is named before anything pauses', async ({ page }, testInfo) => {
+        const slug = own(testInfo, 'homelab')
+
+        await page.goto(`/${slug}/settings`)
+        const card = page.getByTestId('move-away-card')
+        await card.getByLabel('Move code').fill(cloudMoveCode())
+        await card.getByRole('button', { name: 'Download move file' }).click()
+
+        await expect(card.getByRole('alert')).toContainText(`${slug}-01 is at 192.168.0.`)
+        await expect(card.getByRole('alert')).toContainText("which Coresmith Cloud can't reach")
+        await expect(card).toContainText('Move this team to Coresmith Cloud')
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        asMover(`the move-away card is accessible before and during a move in ${theme}`, async ({ page }, testInfo) => {
+            await useTheme(page, theme)
+
+            await page.goto(`/${own(testInfo, 'homelab')}/settings`)
+            await expect(page.getByTestId('move-away-card')).toContainText('Move this team to Coresmith Cloud')
+            expect(await blockingViolations(page), `before, ${theme}`).toEqual([])
+
+            await page.goto(`/${own(testInfo, 'on-the-way')}/settings`)
+            await expect(page.getByTestId('move-away-card')).toContainText('Moving to Coresmith Cloud')
+            expect(await blockingViolations(page), `during, ${theme}`).toEqual([])
+        })
+    }
 })

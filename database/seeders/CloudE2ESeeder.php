@@ -27,10 +27,14 @@ use App\Models\TeamInvoice;
 use App\Models\User;
 use App\Services\Billing\TrialHistory;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Moves\MoveCodes;
+use App\Services\Moves\MoveFile;
+use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamAccess;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 final class CloudE2ESeeder extends Seeder
 {
@@ -90,9 +94,11 @@ final class CloudE2ESeeder extends Seeder
             $this->leftoverTeam($tenant->owner, $code);
             $this->partingTeam($code);
             $this->moveTeams($tenant->owner, $code);
+            $this->arrivingTeams($tenant->owner, $code);
         }
 
         $this->movingTeam($tenant->owner, 'Moved Away', 'moved-away');
+        $this->arriving($tenant->owner, 'Arriving Big', 'arriving-big', 'big', 2);
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
     }
@@ -148,6 +154,68 @@ final class CloudE2ESeeder extends Seeder
         $team = $this->ownedTeam($owner, $name, $slug);
         $team->forceFill(['trial_ends_at' => now()->addDays(9), 'moving_at' => now()->subHour(), 'moving_to' => 'https://panel.example.com', 'move_file' => '{"format":1}'])->save();
         Server::factory()->for($team)->create(['name' => "{$slug}-01", 'status' => ServerStatus::Moving, 'os_name' => 'ubuntu', 'os_version' => '24.04', 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $slug, true)), 0, 43)]);
+    }
+
+    private function arrivingTeams(User $owner, string $code): void
+    {
+        $this->arriving($owner, "Arriving {$code}", "arriving-{$code}", $code, 1);
+
+        $fresh = $this->ownedTeam($owner, "Fresh {$code}", "fresh-{$code}");
+        $fresh->forceFill(['trial_ends_at' => now()->addDays(9)])->save();
+    }
+
+    private function arriving(User $owner, string $name, string $slug, string $code, int $servers): void
+    {
+        $team = $this->ownedTeam($owner, $name, $slug);
+        $team->forceFill(['trial_ends_at' => now()->addDays(9)])->save();
+        $codes = app(MoveCodes::class);
+        $move = $codes->create($owner, $team);
+        $move->forceFill(['file' => app(MoveFile::class)->seal($this->selfHostedTeam($code, $servers), $codes->read($codes->text($move)))])->save();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selfHostedTeam(string $code, int $servers): array
+    {
+        $records = [];
+        $offset = array_search($code, array_values(self::PROJECTS), true);
+        $base = 100 + 10 * (is_int($offset) ? $offset : 5);
+
+        foreach (range(1, $servers) as $n) {
+            $key = (new KeyPairGenerator)->generate("arrivals-{$code}-{$n}");
+            $records[] = [
+                'ref' => "s{$n}", 'cloud_provider' => null, 'tags' => [], 'name' => "arrivals-{$code}-0{$n}", 'ip_address' => '203.0.113.' . ($base + $n), 'ssh_port' => 22, 'ssh_user' => 'root',
+                'ssh_private_key' => $key->privateKey, 'ssh_public_key' => $key->publicKey, 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', "arrivals-{$code}-{$n}", true)), 0, 43),
+                'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => [], 'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 80],
+                'audit_logging_enabled' => false, 'region' => 'home',
+            ];
+        }
+
+        return [
+            'id' => (string) Str::uuid(),
+            'made_at' => now()->toIso8601String(),
+            'from' => 'https://coresmith.example.com',
+            'edition' => 'self-hosted',
+            'team' => ['name' => "Arrivals {$code}", 'slug' => "arrivals-{$code}"],
+            'members' => [],
+            'cloud_providers' => [],
+            'servers' => $records,
+            'source_providers' => [],
+            'projects' => [],
+            'applications' => [[
+                'ref' => 'a1', 'server' => 's1', 'source_provider' => null, 'name' => 'shop', 'slug' => "arrivals-{$code}-shop", 'type' => ApplicationType::Php->value,
+                'framework' => 'laravel', 'repository_url' => 'https://github.com/arrivals/shop', 'system_user' => "coresmith-app-ar{$code}", 'base_port' => 8100,
+                'php_version' => '8.5.5', 'status' => ApplicationStatus::Active->value,
+            ]],
+            'webhook_endpoints' => [],
+            'databases' => [[
+                'server' => 's1', 'type' => DatabaseType::Mysql->value, 'name' => 'shop', 'db_user' => 'shop', 'db_password' => Str::random(24), 'host' => '127.0.0.1', 'port' => 3306,
+                'status' => 'active', 'privilege_level' => 'full', 'extensions' => [], 'is_external' => false,
+            ]],
+            'backup_destination' => null,
+            'package_credentials' => [],
+        ];
     }
 
     private function trialTeam(User $owner): void
