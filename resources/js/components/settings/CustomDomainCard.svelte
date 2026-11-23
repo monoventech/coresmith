@@ -1,6 +1,5 @@
 <script lang="ts">
     import DnsRecords from '@/components/DnsRecords.svelte'
-    import PlanNote from '@/components/settings/PlanNote.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
@@ -19,11 +18,7 @@
         records: DnsRecord[]
     }
 
-    let {
-        domain = null,
-        canUpdate,
-        planNote = null
-    }: { domain?: Domain | null; canUpdate: boolean; planNote?: string | null } = $props()
+    let { domain = null, canUpdate }: { domain?: Domain | null; canUpdate: boolean } = $props()
 
     let adding = $state(false)
     let removing = $state(false)
@@ -70,9 +65,7 @@
         <p class="mb-3 text-[12.5px] text-muted-foreground">
             Open this team on a domain you own, like deploy.example.com. Coresmith issues the certificate.
         </p>
-        {#if planNote}
-            <PlanNote note={planNote} />
-        {:else if canUpdate}
+        {#if canUpdate}
             <div class="mt-auto self-start pt-2">
                 <Button variant="outline" size="sm" onclick={() => (adding = true)}>Add a domain</Button>
             </div>

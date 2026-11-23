@@ -95,7 +95,7 @@ enum Plan: string
     {
         return match ($this) {
             self::SelfHosted, self::Business => true,
-            self::Pro, self::Trial => in_array($feature, [PlanFeature::TeamRoles, PlanFeature::CustomDomain, PlanFeature::Monitors], true),
+            self::Pro, self::Trial => in_array($feature, [PlanFeature::TeamRoles, PlanFeature::Monitors], true),
             self::Starter => false,
         };
     }
@@ -106,7 +106,7 @@ enum Plan: string
 
         return match ($this) {
             self::Starter => "{$price} per month · {$this->serverLimit()} servers · one person",
-            self::Pro => "{$price} per month · unlimited servers · teammates and roles · custom domain",
+            self::Pro => "{$price} per month · unlimited servers · teammates and roles",
             self::Business => "{$price} per month · everything in Pro · single sign-on · database backups to S3 · audit log export",
             self::SelfHosted => 'On your own server · you install, update and back it up',
             self::Trial => 'Pro features on ' . $this->serverLimit() . ' server for ' . (int) config('coresmith.billing.trial_days', 14) . ' days',

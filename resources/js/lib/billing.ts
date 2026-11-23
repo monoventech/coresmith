@@ -4,7 +4,6 @@
 
 export type BillingNotes = {
     members: string | null
-    custom_domain: string | null
     single_sign_on: string | null
     offsite_backups: string | null
     audit_log_export: string | null

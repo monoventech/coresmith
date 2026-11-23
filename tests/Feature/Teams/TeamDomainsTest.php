@@ -170,6 +170,7 @@ test('the team page shows the team address, and the subdomain when the instance 
             ->where('address.path', 'http://localhost/acme')
             ->where('address.subdomain', null)
             ->where('address.domain', null)
+            ->where('address.custom_domains', true)
             ->where('can.update', true));
 
     config(['coresmith.tenant_domain' => 'coresmith.test']);
@@ -177,6 +178,30 @@ test('the team page shows the team address, and the subdomain when the instance 
     $this->actingAs($user)
         ->get('http://localhost/acme/settings/team')
         ->assertInertia(fn($page) => $page->where('address.subdomain', 'http://acme.coresmith.test'));
+});
+
+test('on Cloud the team page offers no subdomain or custom domain, even one saved before', function () {
+    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+    [$user, $team] = teamDomainsOwner();
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
+
+    $this->actingAs($user)
+        ->get('/acme/settings/team')
+        ->assertInertia(fn($page) => $page
+            ->where('address.path', 'http://localhost/acme')
+            ->where('address.subdomain', null)
+            ->where('address.domain', null)
+            ->where('address.custom_domains', false));
+});
+
+test('on Cloud caddy may issue a certificate for Coresmith itself and no team host', function () {
+    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+    $team = Team::factory()->create(['slug' => 'acme']);
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
+
+    $this->get(route('caddy.ask', ['domain' => 'localhost']))->assertOk();
+    $this->get(route('caddy.ask', ['domain' => 'panel.acme.test']))->assertNotFound();
+    $this->get(route('caddy.ask', ['domain' => 'acme.coresmith.test']))->assertNotFound();
 });
 
 test('caddy may issue certificates for the panel, verified domains and team subdomains only', function () {

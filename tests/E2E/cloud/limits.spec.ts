@@ -50,13 +50,13 @@ test.describe('plan limits on coresmith cloud', () => {
         await expect(note.getByRole('link', { name: 'Change plan' })).toBeVisible()
     })
 
-    test('starter has no custom domain', async ({ page }) => {
-        await page.goto('/solo/settings/team')
+    test('no plan puts a team on a domain of its own', async ({ page }) => {
+        for (const team of ['solo', 'monoven']) {
+            await page.goto(`/${team}/settings/team`)
 
-        await expect(
-            page.getByTestId('plan-note').filter({ hasText: 'Custom domains are part of Pro and Business.' })
-        ).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Add a domain' })).toHaveCount(0)
+            await expect(page.getByTestId('team-address-card')).toBeVisible()
+            await expect(page.getByTestId('custom-domain-card')).toHaveCount(0)
+        }
     })
 
     test('pro has no single sign-on', async ({ page }) => {

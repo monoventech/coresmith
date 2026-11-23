@@ -21,7 +21,6 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\Team;
-use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
 use App\Models\TeamInvoice;
 use App\Models\User;
@@ -279,7 +278,6 @@ final class CloudE2ESeeder extends Seeder
         $team->forceFill(['stripe_id' => 'cus_e2e_fleet'])->save();
 
         Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create();
-        TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'deploy.bigfleet.test']);
 
         foreach (['Ines Okafor' => 'fleet-ops@cloud.test', 'Tomas Reyes' => 'fleet-dev@cloud.test'] as $name => $email) {
             $team->members()->attach(User::factory()->create(['name' => $name, 'email' => $email]), ['role' => TeamRole::Member->value]);

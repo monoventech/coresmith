@@ -122,7 +122,7 @@ final class SsoConnections
     public function redirectUris(Team $team): array
     {
         $uris = [$this->urls->canonical(SignIn::CALLBACK_PATH)];
-        $domain = $team->domain()->first();
+        $domain = $this->urls->allowsTeamHosts() ? $team->domain()->first() : null;
 
         if ($domain instanceof TeamDomain && $domain->isVerified()) {
             $uris[] = 'https://' . $domain->hostname . SignIn::CALLBACK_PATH;
