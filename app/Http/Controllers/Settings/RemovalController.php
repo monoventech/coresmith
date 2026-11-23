@@ -20,17 +20,21 @@ use App\Services\Address\InstallationAddress;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Install\Removal;
 use App\Services\Server\ThisMachine;
+use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 final class RemovalController extends Controller
 {
-    public function store(RemoveCoresmithRequest $request, Removal $removal): RedirectResponse
+    private const SIGN_IN_SECONDS = 10;
+
+    public function store(RemoveCoresmithRequest $request, Removal $removal, SSHConnectionManager $ssh): RedirectResponse
     {
-        $refusal = $this->busy() ?? match (true) {
+        $refusal = $this->busy() ?? $this->handingOver($ssh) ?? match (true) {
             !$removal->installed() => "Coresmith's removal helper isn't installed. Run the installer once, then try again: " . ThisMachine::INSTALLER,
             $removal->started() => 'Coresmith is already being removed.',
             default => null,
@@ -75,6 +79,23 @@ final class RemovalController extends Controller
     {
         abort_if(Edition::current()->isCloud(), 404);
         abort_unless($request->user()->managesInstance(), 403);
+    }
+
+    private function handingOver(SSHConnectionManager $ssh): ?string
+    {
+        $machine = Server::query()->where('runs_coresmith', true)->where('status', ServerStatus::Moving->value)->first();
+
+        if ($machine === null) {
+            return null;
+        }
+
+        try {
+            $ssh->brief($machine, self::SIGN_IN_SECONDS)->connect()->disconnect();
+        } catch (Throwable) {
+            return null;
+        }
+
+        return "Coresmith Cloud hasn't taken {$machine->name} over yet. Finish the move there first, then try again.";
     }
 
     private function busy(): ?string

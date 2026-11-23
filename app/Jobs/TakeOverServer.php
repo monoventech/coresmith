@@ -90,6 +90,10 @@ final class TakeOverServer implements ShouldQueue
 
         activity()->performedOn($server)->log('server_taken_over');
 
+        if ($server->installedByCoresmith()) {
+            CloseUnknownHosts::dispatch($server);
+        }
+
         $server->applications()->whereNotNull('former_route_id')->each(fn(Application $application) => SyncApplicationRoute::dispatch($application));
     }
 

@@ -25,6 +25,7 @@ export type Moves = {
 }
 
 export type MoveAway = {
+    machine: string | null
     moving: {
         since: string
         to: string

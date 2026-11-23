@@ -23,6 +23,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Runtime\AsdfManager;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -34,7 +35,7 @@ final class TeamExporter
     /**
      * @return array<string, mixed>
      */
-    public function payload(Team $team, User $owner): array
+    public function payload(Team $team, User $owner, ?string $machineAddress = null): array
     {
         $servers = $team->servers()->orderBy('id')->get();
         $applications = $team->applications()->orderBy('id')->get();
@@ -58,6 +59,7 @@ final class TeamExporter
                 'cloud_provider' => $server->cloud_provider_id,
                 'tags' => $server->tags,
                 ...MoveColumns::read($server, MoveColumns::SERVERS),
+                ...($server->runs_coresmith && $machineAddress !== null ? ['ip_address' => $machineAddress, 'meta' => [...(array) $server->meta, 'runtime_user' => AsdfManager::CORESMITH_HOST_USER]] : []),
             ])->values()->all(),
             'source_providers' => $providers->map(fn(SourceProvider $provider): array => [
                 'ref' => $provider->id,

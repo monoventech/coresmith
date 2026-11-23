@@ -23,9 +23,9 @@ final class TeamMoveController extends Controller
     {
         $team = $this->billingTeam();
         $paste = 'Paste the move code from Settings, General on ' . MoveSide::destination() . '.';
-        $validated = $request->validate(['code' => ['required', 'string', 'max:4000']], ['code.required' => $paste, 'code.string' => $paste, 'code.max' => $paste]);
+        $validated = $request->validate(['code' => ['required', 'string', 'max:4000'], 'hand_over' => ['sometimes', 'boolean']], ['code.required' => $paste, 'code.string' => $paste, 'code.max' => $paste]);
 
-        $moves->start($team, $request->user(), $validated['code']);
+        $moves->start($team, $request->user(), $validated['code'], $request->boolean('hand_over'));
 
         if (Edition::current()->isCloud()) {
             return back()->with('success', 'Saved. Coresmith Cloud has paused this team. Upload the move file on your self-hosted Coresmith to finish.');

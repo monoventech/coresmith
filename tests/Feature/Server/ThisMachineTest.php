@@ -116,6 +116,37 @@ test('an older answer still sitting there is never taken for the answer to a new
     expect(app(ThisMachine::class)->add(thisMachineServiceServer())->port)->toBe(22);
 });
 
+test("handing the machine over asks the helper to let Coresmith Cloud's addresses in, and keeping it asks for them to go", function () {
+    $folder = thisMachineServiceFolder();
+    $asked = [];
+    thisMachineServiceHelper($folder, function (string $what) use (&$asked): array {
+        $asked[] = $what;
+
+        return ['ok' => true];
+    });
+
+    app(ThisMachine::class)->handOver(['88.99.12.121', '2a01:4f8:1c17:43b8::1']);
+    app(ThisMachine::class)->keep();
+
+    expect($asked)->toBe(['handover 88.99.12.121,2a01:4f8:1c17:43b8::1', 'keep']);
+});
+
+test('a helper from before handovers says to run the installer again', function () {
+    thisMachineServiceHelper(thisMachineServiceFolder(), fn(string $what): array => ['ok' => false, 'error' => "The request wasn't one Coresmith's helper accepts, so nothing changed."]);
+
+    expect(fn() => app(ThisMachine::class)->handOver(['88.99.12.121']))
+        ->toThrow(ThisMachineRefused::class, "This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.")
+        ->and(fn() => app(ThisMachine::class)->keep())
+        ->toThrow(ThisMachineRefused::class, "This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.");
+});
+
+test('the helper turning a handover down is passed on in its words', function () {
+    thisMachineServiceHelper(thisMachineServiceFolder(), fn(string $what): array => ['ok' => false, 'error' => 'sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.']);
+
+    expect(fn() => app(ThisMachine::class)->handOver(['88.99.12.121']))
+        ->toThrow(ThisMachineRefused::class, 'sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.');
+});
+
 test('removing asks the helper to take the key and the rule off', function () {
     $folder = thisMachineServiceFolder();
     $asked = null;
