@@ -30,7 +30,9 @@ function planLimitsOwner(Team $team): User
 
 function planLimitsServer(Team $team, string $name = 'web-new'): array
 {
-    return ['team_id' => $team->id, 'name' => $name, 'ip_address' => '203.0.113.' . random_int(10, 250), 'ssh_port' => 22, 'ssh_user' => 'root'];
+    static $next = 0;
+
+    return ['team_id' => $team->id, 'name' => $name, 'ip_address' => '203.0.113.' . (10 + $next++ % 240), 'ssh_port' => 22, 'ssh_user' => 'root'];
 }
 
 function planLimitsServers(Team $team, int $count): void
