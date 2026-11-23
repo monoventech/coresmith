@@ -196,6 +196,17 @@ test("once Coresmith Cloud has taken the machine over, Coresmith's own key no lo
     removalAsk($owner)->assertRedirect(route('settings.removal.show'));
 });
 
+test('Coresmith can be removed while the owner\'s team is moving, since that is how a move with this machine ends', function () {
+    $folder = removalFolder();
+    removalHelper($folder);
+    $owner = removalOwner();
+    $owner->teams()->first()->forceFill(['moving_at' => now(), 'moving_to' => 'https://app.coresmith.io', 'moving_edition' => 'cloud', 'move_file' => "{}\n"])->save();
+
+    removalAsk($owner)->assertRedirect(route('settings.removal.show'));
+
+    expect((string) file_get_contents("{$folder}/request"))->toMatch('/^[A-Za-z0-9]{32} uninstall\n$/');
+});
+
 test('without the helper, the owner is told to run the installer once', function () {
     config(['coresmith.removal.state_path' => sys_get_temp_dir() . '/coresmith-uninstall-missing-' . bin2hex(random_bytes(4))]);
 
