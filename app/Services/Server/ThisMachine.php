@@ -27,6 +27,8 @@ final class ThisMachine
 
     private const PINNABLE_KEYS = ['ED25519', 'RSA'];
 
+    private const UNKNOWN_REQUEST = "The request wasn't one Coresmith's helper accepts, so nothing changed.";
+
     private const FINGERPRINT = '/^SHA256:[A-Za-z0-9+\/]{43}$/';
 
     public function installed(): bool
@@ -56,6 +58,23 @@ final class ThisMachine
     public function remove(int $seconds = self::ANSWER_SECONDS): void
     {
         $this->ask('remove', $seconds);
+    }
+
+    /**
+     * @param  list<string>  $addresses
+     */
+    public function handOver(array $addresses, int $seconds = self::ANSWER_SECONDS): void
+    {
+        try {
+            $this->ask('handover ' . implode(',', $addresses), $seconds);
+        } catch (ThisMachineRefused $refused) {
+            throw $refused->getMessage() === self::UNKNOWN_REQUEST ? new ThisMachineRefused("This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.") : $refused;
+        }
+    }
+
+    public function keep(int $seconds = self::ANSWER_SECONDS): void
+    {
+        $this->ask('keep', $seconds);
     }
 
     /**
