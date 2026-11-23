@@ -13,7 +13,9 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Moves\MoveCodes;
 use App\Services\Moves\TeamMove;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\CloudBilling;
 
@@ -31,7 +33,7 @@ function moveAwayOwner(Team $team): User
     return User::query()->findOrFail($team->owner_id);
 }
 
-function moveAwayCode(string $edition = 'cloud', string $panel = 'https://app.coresmith.io'): string
+function moveAwayCode(string $edition = 'cloud', string $panel = 'https://app.coresmith.io', array $reach = ['88.99.12.121']): string
 {
     $claims = [
         'v' => 1,
@@ -42,6 +44,10 @@ function moveAwayCode(string $edition = 'cloud', string $panel = 'https://app.co
         'edition' => $edition,
     ];
 
+    if ($edition === 'cloud' && $reach !== []) {
+        $claims['reach'] = $reach;
+    }
+
     return MoveCodes::PREFIX . rtrim(strtr(base64_encode((string) json_encode($claims, JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
 }
 
@@ -49,6 +55,57 @@ function moveAwayServer(Team $team): Server
 {
     return $team->servers()->firstOrFail();
 }
+
+function moveAwayMachine(Team $team, ?string $ipv4 = '203.0.113.50'): Server
+{
+    $server = moveAwayServer($team);
+    $server->forceFill(['ip_address' => '127.0.0.1', 'runs_coresmith' => true, 'public_addresses' => ['ipv4' => $ipv4]])->save();
+
+    return $server;
+}
+
+/**
+ * @return list<string>
+ */
+function moveAwayHelperFolders(?string $folder = null): array
+{
+    static $folders = [];
+
+    if ($folder !== null) {
+        $folders[] = $folder;
+    }
+
+    return $folders;
+}
+
+/**
+ * @param  Closure(string): array<string, mixed>  $answer
+ */
+function moveAwayHelper(Closure $answer): void
+{
+    $folder = sys_get_temp_dir() . '/coresmith-move-helper-' . bin2hex(random_bytes(4));
+    File::ensureDirectoryExists($folder);
+    moveAwayHelperFolders($folder);
+    config(['coresmith.this_machine.state_path' => $folder]);
+    Sleep::fake(syncWithCarbon: true);
+    Sleep::whenFakingSleep(function () use ($folder, $answer): void {
+        $request = @file_get_contents("{$folder}/request");
+
+        if ($request === false) {
+            return;
+        }
+
+        [$id, $what] = explode(' ', trim($request), 2);
+        unlink("{$folder}/request");
+        file_put_contents("{$folder}/result.json", json_encode(['id' => $id, ...$answer($what)]));
+    });
+}
+
+afterEach(function () {
+    foreach (moveAwayHelperFolders() as $folder) {
+        File::deleteDirectory($folder);
+    }
+});
 
 test('a code from Coresmith Cloud pauses the team and its move file downloads', function () {
     $team = moveAwayTeam();
@@ -80,7 +137,7 @@ test('a server Coresmith Cloud could not reach stops the move before anything pa
 })->with([
     'a home network' => [fn(Server $server) => $server->forceFill(['ip_address' => '192.168.0.10'])->save(), "web-01 is at 192.168.0.10, which Coresmith Cloud can't reach. Give it a public address or remove it from the team, then try again."],
     'IPv4 through Cloudflare' => [fn(Server $server) => ServerTunnel::query()->create(['server_id' => $server->id, 'state' => 'open']), "web-01 uses IPv4 through Cloudflare, which only works on self-hosted Coresmith. Turn it off on the server's page, then try again."],
-    'the machine Coresmith runs on' => [fn(Server $server) => $server->forceFill(['ip_address' => '127.0.0.1', 'runs_coresmith' => true])->save(), "web-01 is the machine Coresmith runs on, which can't move to Coresmith Cloud. Remove it from the team, then try again."],
+    'the machine Coresmith runs on, without its owner agreeing' => [fn(Server $server) => $server->forceFill(['ip_address' => '127.0.0.1', 'runs_coresmith' => true])->save(), 'web-01 is the machine Coresmith runs on. Agree to hand it over below, or remove it from the team, then try again.'],
 ]);
 
 test('the machine Coresmith runs on stops a move to another self-hosted Coresmith before anything pauses', function () {
@@ -91,6 +148,76 @@ test('the machine Coresmith runs on stops a move to another self-hosted Coresmit
         ->assertSessionHasErrors(['code' => "web-01 is the machine Coresmith runs on, which can't move to another Coresmith. Remove it from the team, then try again."]);
 
     expect($team->fresh()->moving_at)->toBeNull()
+        ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Active);
+});
+
+test('with its owner agreeing, the machine Coresmith runs on lets Coresmith Cloud in before the team pauses', function () {
+    $team = moveAwayTeam();
+    moveAwayMachine($team);
+    $asked = [];
+    moveAwayHelper(function (string $what) use (&$asked): array {
+        $asked[] = $what;
+
+        return ['ok' => true];
+    });
+
+    $this->actingAs(moveAwayOwner($team))->post(route('settings.moving.store'), ['code' => moveAwayCode(), 'hand_over' => '1'])
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success');
+
+    expect($asked)->toBe(['handover 88.99.12.121'])
+        ->and($team->fresh()->moving_at)->not->toBeNull()
+        ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Moving);
+});
+
+test('a helper that turns the handover down leaves the team as it was', function () {
+    $team = moveAwayTeam();
+    moveAwayMachine($team);
+    moveAwayHelper(fn(string $what): array => ['ok' => false, 'error' => 'sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.']);
+
+    $this->actingAs(moveAwayOwner($team))->post(route('settings.moving.store'), ['code' => moveAwayCode(), 'hand_over' => '1'])
+        ->assertSessionHasErrors(['code' => 'sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.']);
+
+    expect($team->fresh()->moving_at)->toBeNull()
+        ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Active);
+});
+
+test('the machine Coresmith runs on stays when it can not be handed over', function (?string $ipv4, array $reach, string $refusal) {
+    $team = moveAwayTeam();
+    moveAwayMachine($team, $ipv4);
+    $asked = [];
+    moveAwayHelper(function (string $what) use (&$asked): array {
+        $asked[] = $what;
+
+        return ['ok' => true];
+    });
+
+    $this->actingAs(moveAwayOwner($team))->post(route('settings.moving.store'), ['code' => moveAwayCode(reach: $reach), 'hand_over' => '1'])
+        ->assertSessionHasErrors(['code' => $refusal]);
+
+    expect($asked)->toBe([])
+        ->and($team->fresh()->moving_at)->toBeNull();
+})->with([
+    'a code from before Coresmith Cloud named its addresses' => ['203.0.113.50', [], "That code is from before Coresmith Cloud could take over the machine Coresmith runs on. Create a new one in Coresmith Cloud, then try again."],
+    'no public IPv4 address' => [null, ['88.99.12.121'], "web-01 has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again."],
+    'a private address' => ['192.168.0.248', ['88.99.12.121'], "web-01 has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again."],
+]);
+
+test('cancelling a move that handed the machine over puts root sign-in back', function () {
+    $team = moveAwayTeam();
+    moveAwayMachine($team);
+    $asked = [];
+    moveAwayHelper(function (string $what) use (&$asked): array {
+        $asked[] = $what;
+
+        return ['ok' => true];
+    });
+    $this->actingAs(moveAwayOwner($team))->post(route('settings.moving.store'), ['code' => moveAwayCode(), 'hand_over' => '1']);
+
+    $this->delete(route('settings.moving.destroy'))->assertSessionHasNoErrors();
+
+    expect($asked)->toBe(['handover 88.99.12.121', 'keep'])
+        ->and($team->fresh()->moving_at)->toBeNull()
         ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Active);
 });
 

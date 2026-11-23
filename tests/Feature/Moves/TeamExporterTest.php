@@ -114,6 +114,18 @@ test('the export names how each app reaches its repository but never carries a g
         ->and(json_encode($payload))->not->toContain('ghs_never_moves');
 });
 
+test('a machine handed over goes out at its public address with the runtime user its apps use', function () {
+    $team = teamExporterTeam();
+    $machine = Server::factory()->active()->for($team)->create(['name' => 'this-machine', 'ip_address' => '127.0.0.1', 'runs_coresmith' => true, 'meta' => ['cpu_cores' => 2]]);
+
+    $servers = collect(app(TeamExporter::class)->payload($team, User::factory()->create(), '203.0.113.50')['servers'])->keyBy('ref');
+
+    expect($servers[$machine->id]['ip_address'])->toBe('203.0.113.50')
+        ->and($servers[$machine->id]['meta'])->toBe(['cpu_cores' => 2, 'runtime_user' => 'coresmith-runtime'])
+        ->and(collect($servers)->firstWhere('name', 'web-01')['ip_address'])->toBe('203.0.113.10')
+        ->and(collect($servers)->firstWhere('name', 'web-01')['meta'] ?? [])->not->toHaveKey('runtime_user');
+});
+
 test('the export leaves billing, history and sign-in settings behind', function () {
     $team = teamExporterTeam();
     Deployment::factory()->succeeded()->create(['application_id' => $team->applications()->first()->id, 'commit_message' => 'history stays behind']);
