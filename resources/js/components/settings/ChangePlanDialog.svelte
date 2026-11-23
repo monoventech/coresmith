@@ -100,6 +100,15 @@
     }
 </script>
 
+{#snippet summary(id: string, text: string)}
+    {@const items = text.split(' · ')}
+    <span {id} class="text-[12px] text-muted-foreground"
+        >{#each items as item, index (index)}<span class="inline-block" data-testid="plan-summary-item"
+                >{item}{#if index < items.length - 1}&nbsp;·&nbsp;{/if}</span
+            >{/each}</span
+    >
+{/snippet}
+
 <Dialog.Root bind:open>
     <Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <Dialog.Header>
@@ -124,9 +133,7 @@
                     />
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span id={`plan-${option.key}-label`} class="text-[14px] font-medium">{option.label}</span>
-                        <span id={`plan-${option.key}-summary`} class="text-[12px] text-muted-foreground"
-                            >{option.summary}</span
-                        >
+                        {@render summary(`plan-${option.key}-summary`, option.summary)}
                     </span>
                     {#if option.current}
                         <span class="text-[12px] font-medium text-primary-strong">current</span>
@@ -148,9 +155,10 @@
                 />
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span id="plan-self-hosted-label" class="text-[14px] font-medium">Self-hosted</span>
-                    <span id="plan-self-hosted-summary" class="text-[12px] text-muted-foreground"
-                        >On your own server · you install, update and back it up</span
-                    >
+                    {@render summary(
+                        'plan-self-hosted-summary',
+                        'On your own server · you install, update and back it up'
+                    )}
                 </span>
             </label>
         </RadioGroup.Root>
