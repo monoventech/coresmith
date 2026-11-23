@@ -11,10 +11,13 @@ namespace App\Services\Moves;
 use App\Enums\Edition;
 use App\Models\Server;
 use App\Models\Team;
+use App\Services\Network\LocalAddresses;
 use App\Services\Network\PublicAddress;
 
 final class MoveReach
 {
+    public function __construct(private readonly LocalAddresses $local) {}
+
     /**
      * @return array<string, string>
      */
@@ -68,6 +71,7 @@ final class MoveReach
             !$handOver => ['hand_over' => "{$server->name} is the machine Coresmith runs on. Agree to hand it over, or remove it from the team, then try again."],
             $target->addresses === [] => ['code' => 'That code is from before Coresmith Cloud could take over the machine Coresmith runs on. Create a new one in Coresmith Cloud, then try again.'],
             self::machineAddress($server) === null => ['hand_over' => "{$server->name} has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again."],
+            !in_array(self::machineAddress($server), $this->local->all(), true) => ['hand_over' => "{$server->name} reaches the internet through another device, such as a home router, so Coresmith Cloud can't reach it. Remove it from the team, then try again."],
             $server->tunnel !== null => ['hand_over' => self::tunnelRefusal($server)],
             default => [],
         };

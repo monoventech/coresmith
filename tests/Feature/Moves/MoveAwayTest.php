@@ -13,6 +13,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Moves\MoveCodes;
 use App\Services\Moves\TeamMove;
+use App\Services\Network\LocalAddresses;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -56,10 +57,20 @@ function moveAwayServer(Team $team): Server
     return $team->servers()->firstOrFail();
 }
 
-function moveAwayMachine(Team $team, ?string $ipv4 = '203.0.113.50'): Server
+function moveAwayMachine(Team $team, ?string $ipv4 = '203.0.113.50', bool $direct = true): Server
 {
     $server = moveAwayServer($team);
     $server->forceFill(['ip_address' => '127.0.0.1', 'runs_coresmith' => true, 'public_addresses' => ['ipv4' => $ipv4]])->save();
+    $local = ['127.0.0.1', '::1', '192.168.0.248', ...($direct && $ipv4 !== null ? [$ipv4] : [])];
+    app()->instance(LocalAddresses::class, new class($local) implements LocalAddresses
+    {
+        public function __construct(private readonly array $local) {}
+
+        public function all(): array
+        {
+            return $this->local;
+        }
+    });
 
     return $server;
 }
@@ -193,9 +204,9 @@ test('a helper that turns the handover down leaves the team as it was', function
         ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Active);
 });
 
-test('the machine Coresmith runs on stays when it can not be handed over', function (?string $ipv4, array $reach, string $field, string $refusal) {
+test('the machine Coresmith runs on stays when it can not be handed over', function (?string $ipv4, array $reach, string $field, string $refusal, bool $direct = true) {
     $team = moveAwayTeam();
-    moveAwayMachine($team, $ipv4);
+    moveAwayMachine($team, $ipv4, $direct);
     $asked = [];
     moveAwayHelper(function (string $what) use (&$asked): array {
         $asked[] = $what;
@@ -212,6 +223,7 @@ test('the machine Coresmith runs on stays when it can not be handed over', funct
     'a code from before Coresmith Cloud named its addresses' => ['203.0.113.50', [], 'code', 'That code is from before Coresmith Cloud could take over the machine Coresmith runs on. Create a new one in Coresmith Cloud, then try again.'],
     'no public IPv4 address' => [null, ['88.99.12.121'], 'hand_over', "web-01 has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again."],
     'a private address' => ['192.168.0.248', ['88.99.12.121'], 'hand_over', "web-01 has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again."],
+    'a public address that belongs to a home router' => ['198.51.100.7', ['88.99.12.121'], 'hand_over', "web-01 reaches the internet through another device, such as a home router, so Coresmith Cloud can't reach it. Remove it from the team, then try again.", false],
 ]);
 
 test('cancelling a move that handed the machine over puts root sign-in back', function () {
