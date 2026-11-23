@@ -212,3 +212,18 @@ test("Cloud's card previews the team with what blocks it", function () {
         ->where('moves.code.preview.plan', 'Arrivals has 2 servers, and the trial includes 1. Choose a plan that fits in Billing, then move the team.')
         ->where('moves.billing', route('settings.billing')));
 });
+
+test("a new code on Cloud replaces only that team's unused code", function () {
+    $team = moveToCloudTeam();
+    $owner = moveToCloudOwner($team);
+    $other = Team::factory()->onTrial()->create(['owner_id' => $owner->id]);
+    $other->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $kept = moveToCloudCode($owner, $other, MovePayloads::selfHosted());
+    $replaced = moveToCloudCode($owner, $team, MovePayloads::selfHosted());
+
+    $this->actingAs($owner)->post(route('settings.moves.store'))->assertSessionHasNoErrors();
+
+    expect(MoveCode::query()->find($kept->id))->not->toBeNull()
+        ->and(MoveCode::query()->find($replaced->id))->toBeNull()
+        ->and(MoveCode::query()->where('team_id', $team->id)->count())->toBe(1);
+});

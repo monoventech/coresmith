@@ -28,8 +28,10 @@ final class MoveCodeController extends Controller
     {
         $this->ensureAllowed($request);
 
-        MoveCode::query()->where('user_id', $request->user()->getKey())->whereNull('imported_at')->delete();
-        $codes->create($request->user(), Edition::current()->isCloud() ? $this->currentTeam() : null);
+        $team = Edition::current()->isCloud() ? $this->currentTeam() : null;
+
+        MoveCode::query()->where('user_id', $request->user()->getKey())->when($team !== null, fn($query) => $query->where('team_id', $team?->getKey()))->whereNull('imported_at')->delete();
+        $codes->create($request->user(), $team);
 
         return back()->with('success', 'Saved. Paste the move code into ' . MoveSide::origin() . '.');
     }
