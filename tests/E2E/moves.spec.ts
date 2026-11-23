@@ -173,7 +173,7 @@ asMover.describe('handing over the machine coresmith runs on', () => {
         const handOver = card.getByRole('checkbox', { name: 'Hand forge over to Coresmith Cloud' })
 
         await expect(card.getByTestId('move-away-hand-over')).toContainText(
-            'forge is the machine this Coresmith runs on. Coresmith Cloud takes it over by signing in as root with a key, from its own addresses only, so SSH must be open to them. When the move is done, remove Coresmith from forge. Its apps keep running.'
+            "forge is the machine this Coresmith runs on. Coresmith Cloud signs in to it as root with a key, from its own addresses only, so SSH must be open to them. It then manages forge's SSH like any server's and turns password logins off, so add your SSH key in Coresmith Cloud first. Afterwards, remove this Coresmith from forge. Its apps keep running."
         )
         await expect(handOver).not.toBeChecked()
 

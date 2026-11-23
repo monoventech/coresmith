@@ -113,9 +113,10 @@
                         >
                     </div>
                     <p id="move-away-hand-over-hint" class="m-0 -mt-1.5 pl-6.5 text-[12px] text-muted-foreground">
-                        {machine} is the machine this Coresmith runs on. Coresmith Cloud takes it over by signing in as root
-                        with a key, from its own addresses only, so SSH must be open to them. When the move is done, remove
-                        Coresmith from {machine}. Its apps keep running.
+                        {machine} is the machine this Coresmith runs on. Coresmith Cloud signs in to it as root with a key,
+                        from its own addresses only, so SSH must be open to them. It then manages {machine}'s SSH like
+                        any server's and turns password logins off, so add your SSH key in Coresmith Cloud first.
+                        Afterwards, remove this Coresmith from {machine}. Its apps keep running.
                     </p>
                     <div class="pl-6.5"><FieldError message={handOverError} /></div>
                 </div>
