@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.34 (2026-11-23)
+
+### Fixed
+- fix: the Change plan dialog breaks a plan's line between items, so on a phone no item splits in two and no line starts with a dot (#172)
+- fix: a move never sends the machine Coresmith runs on to another self-hosted Coresmith, and the receiver replaces the routes each moved app had (#171)
+
+### Changed
+- Hand the machine Coresmith runs on over to Coresmith Cloud when its team moves (#173)
+- Cloud teams open only at app.coresmith.io/<team>; custom domains and team subdomains are self-hosted only (#170)
+
 ## v0.8.33 (2026-11-23)
 
 ### Added
