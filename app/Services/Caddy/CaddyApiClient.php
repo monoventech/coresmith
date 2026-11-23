@@ -17,6 +17,7 @@ use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHResult;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Sleep;
+use stdClass;
 
 final class CaddyApiClient
 {
@@ -125,6 +126,41 @@ final class CaddyApiClient
                 $this->request($connection, 'POST', self::ROUTES_PATH, CaddyInstaller::unknownHostsRoute(), retry: false);
             }
 
+            $this->persistConfig($connection);
+        });
+    }
+
+    public function putCatchAllPolicy(SSHConnection $connection): void
+    {
+        $issuers = CaddyInstaller::issuers(InstanceSetting::get('notification_email'));
+        $policy = $issuers === null ? new stdClass : ['issuers' => $issuers];
+
+        $this->changing($connection, function () use ($connection, $policy): void {
+            $policies = json_decode($this->run($connection, $this->curl($connection->server(), 'GET', self::POLICIES_PATH))->output, true);
+
+            if (!is_array($policies) || !array_is_list($policies)) {
+                $this->request($connection, 'POST', self::POLICIES_PATH, [$policy], retry: false);
+                $this->persistConfig($connection);
+
+                return;
+            }
+
+            foreach ($policies as $index => $existing) {
+                if (!is_array($existing) || ($existing['subjects'] ?? []) !== []) {
+                    continue;
+                }
+
+                if (($existing['on_demand'] ?? false) !== true && !str_starts_with((string) ($existing['@id'] ?? ''), 'coresmith-')) {
+                    return;
+                }
+
+                $this->request($connection, 'PUT', self::POLICIES_PATH . '/' . $index, $policy, retry: false);
+                $this->persistConfig($connection);
+
+                return;
+            }
+
+            $this->request($connection, 'POST', self::POLICIES_PATH, $policy, retry: false);
             $this->persistConfig($connection);
         });
     }
@@ -461,17 +497,17 @@ final class CaddyApiClient
     }
 
     /**
-     * @param  array<string, mixed>|string|null  $payload
+     * @param  array<int|string, mixed>|stdClass|string|null  $payload
      */
-    private function request(SSHConnection $connection, string $method, string $path, array|string|null $payload = null, ?bool $retry = null): void
+    private function request(SSHConnection $connection, string $method, string $path, array|stdClass|string|null $payload = null, ?bool $retry = null): void
     {
         $this->run($connection, $this->curl($connection->server(), $method, $path, $payload), retry: $retry ?? in_array($method, self::IDEMPOTENT_METHODS, true));
     }
 
     /**
-     * @param  array<string, mixed>|string|null  $payload
+     * @param  array<int|string, mixed>|stdClass|string|null  $payload
      */
-    private function curl(Server $server, string $method, string $path, array|string|null $payload = null): string
+    private function curl(Server $server, string $method, string $path, array|stdClass|string|null $payload = null): string
     {
         $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . self::address($server->caddyAdminOnSocket(), $path);
 

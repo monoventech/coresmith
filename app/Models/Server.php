@@ -120,9 +120,14 @@ class Server extends Model
         return !$this->runs_coresmith && (((array) $this->meta)['caddy_unknown_hosts'] ?? null) === 'closed';
     }
 
+    public function installedByCoresmith(): bool
+    {
+        return $this->runs_coresmith || (((array) $this->meta)['runtime_user'] ?? null) === AsdfManager::CORESMITH_HOST_USER;
+    }
+
     public function runtimeUser(): string
     {
-        return $this->runs_coresmith || (((array) $this->meta)['runtime_user'] ?? null) === AsdfManager::CORESMITH_HOST_USER ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;
+        return $this->installedByCoresmith() ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;
     }
 
     public function applications(): HasMany

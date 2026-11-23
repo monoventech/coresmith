@@ -14,6 +14,7 @@ use App\Exceptions\ServerHasNoAddress;
 use App\Exceptions\SSHAuthenticationException;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Caddy\CaddyApiClient;
 use App\Services\SafeName;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\KeyPairGenerator;
@@ -40,7 +41,7 @@ final class TakeOverServer implements ShouldQueue
         $this->onQueue('server-tasks');
     }
 
-    public function handle(SSHConnectionManager $ssh, KeyPairGenerator $keys, SecurityHardening $hardening): void
+    public function handle(SSHConnectionManager $ssh, KeyPairGenerator $keys, SecurityHardening $hardening, CaddyApiClient $caddy): void
     {
         $server = $this->server->fresh();
 
@@ -90,7 +91,23 @@ final class TakeOverServer implements ShouldQueue
 
         activity()->performedOn($server)->log('server_taken_over');
 
+        if ($server->installedByCoresmith()) {
+            $this->issueCertificates($ssh, $caddy, $server);
+            CloseUnknownHosts::dispatch($server);
+        }
+
         $server->applications()->whereNotNull('former_route_id')->each(fn(Application $application) => SyncApplicationRoute::dispatch($application));
+    }
+
+    private function issueCertificates(SSHConnectionManager $ssh, CaddyApiClient $caddy, Server $server): void
+    {
+        try {
+            $caddy->putCatchAllPolicy($ssh->for($server));
+        } catch (Throwable $e) {
+            report($e);
+        } finally {
+            $ssh->disconnect($server);
+        }
     }
 
     private function addKey(string $user, string $publicKey): string

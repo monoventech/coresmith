@@ -419,3 +419,82 @@ test("changes to Caddy on Coresmith's machine wait for one another, so an addres
     expect(fn() => caddyClient()->addSite($connection, routableApp()))->toThrow(LockTimeoutException::class)
         ->and($transport->commands())->toBe([]);
 });
+
+function caddyPoliciesAnswer(mixed $policies): FakeSSHTransport
+{
+    return (new FakeSSHTransport)->respondTo("-X GET --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/apps/tls/automation/policies'", (string) json_encode($policies));
+}
+
+function caddyCatchAllPayload(mixed $payload): string
+{
+    return '-d ' . escapeshellarg((string) json_encode($payload, JSON_UNESCAPED_SLASHES));
+}
+
+test("the machine Coresmith ran on gets this Coresmith's certificate policy ahead of Coresmith's on-demand one, so its apps keep their certificates while both are there", function () {
+    InstanceSetting::put('notification_email', 'ops@example.com');
+    $transport = caddyPoliciesAnswer([
+        ['@id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls', 'subjects' => ['app.example.com']],
+        ['@id' => 'coresmith-site-tls', 'subjects' => ['coresmith.example.com']],
+        ['@id' => 'coresmith-any-tls', 'on_demand' => true],
+    ]);
+
+    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/2'))->toContain(caddyCatchAllPayload(['issuers' => CaddyInstaller::issuers('ops@example.com')]))
+        ->and(caddyCalls($transport, '-X POST'))->toBe(0)
+        ->and(collect($transport->commands())->last())->toContain(CaddyInstaller::CONFIG_FILE);
+});
+
+test("a machine whose Coresmith is already gone gets this Coresmith's certificate policy after its apps' own", function (array $policies) {
+    InstanceSetting::put('notification_email', 'ops@example.com');
+    $transport = caddyPoliciesAnswer($policies);
+
+    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+
+    expect(caddyThisMachineCommand($transport, 'POST', '/config/apps/tls/automation/policies'))->toContain(caddyCatchAllPayload(['issuers' => CaddyInstaller::issuers('ops@example.com')]))
+        ->and(caddyCalls($transport, '-X PUT'))->toBe(0)
+        ->and(collect($transport->commands())->last())->toContain(CaddyInstaller::CONFIG_FILE);
+})->with([
+    'apps only' => [[['@id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls', 'subjects' => ['app.example.com']]]],
+    'no policies left' => [[]],
+]);
+
+test('a machine with no certificate policies at all is given a list holding this one', function () {
+    InstanceSetting::put('notification_email', 'ops@example.com');
+    $transport = caddyPoliciesAnswer(null);
+
+    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+
+    expect(caddyThisMachineCommand($transport, 'POST', '/config/apps/tls/automation/policies'))->toContain(caddyCatchAllPayload([['issuers' => CaddyInstaller::issuers('ops@example.com')]]));
+});
+
+test('without a notification email the policy keeps Caddy\'s own certificate authorities', function () {
+    $transport = caddyPoliciesAnswer([['@id' => 'coresmith-any-tls', 'on_demand' => true]]);
+
+    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->toContain("-d '{}'");
+});
+
+test('a certificate policy for every hostname that is already in place is left alone', function () {
+    $transport = caddyPoliciesAnswer([
+        ['@id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls', 'subjects' => ['app.example.com']],
+        ['issuers' => [['module' => 'acme', 'email' => 'earlier@example.com']]],
+        ['@id' => 'coresmith-any-tls', 'on_demand' => true],
+    ]);
+
+    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+
+    expect($transport->commands())->toHaveCount(1);
+});
+
+test("Coresmith's own certificate policies don't count as one, since removing Coresmith takes them out", function () {
+    $transport = caddyPoliciesAnswer([
+        ['@id' => 'coresmith-site-tls-2', 'issuers' => [['module' => 'internal']]],
+        ['@id' => 'coresmith-any-tls', 'on_demand' => true],
+    ]);
+
+    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->not->toBeNull();
+});
