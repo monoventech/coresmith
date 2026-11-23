@@ -9,13 +9,13 @@
     let working = $state(false)
 
     const failed = $derived(!move.away && move.state === 'failed')
-    const title = $derived(move.away ? 'Moving to self-hosted Coresmith' : failed ? 'The move stopped' : 'Moving here')
+    const title = $derived(move.away ? `Moving to ${move.other}` : failed ? 'The move stopped' : 'Moving here')
     const body = $derived(
         move.away
-            ? 'Coresmith Cloud has stopped managing this server while its team moves to self-hosted Coresmith. It keeps running.'
+            ? `Coresmith has stopped managing this server while its team moves to ${move.other}. It keeps running.`
             : failed
               ? (move.error ?? 'Taking this server over stopped.')
-              : 'Coresmith is taking this server over from Coresmith Cloud, without setting it up again. Its apps keep serving the whole time.'
+              : `Coresmith is taking this server over from ${move.other}, without setting it up again. Its apps keep serving the whole time.`
     )
 
     function retry() {

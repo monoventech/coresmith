@@ -8,12 +8,14 @@ declare(strict_types=1);
 
 namespace App\Services\Panel;
 
+use App\Enums\Edition;
 use App\Enums\ServerStatus;
 use App\Jobs\RebootServer;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\User;
+use App\Services\Moves\MoveSide;
 use App\Services\Projects\AppTags;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\Server\HardwareFacts;
@@ -83,6 +85,9 @@ final class ServerPresenter
                 'state' => (string) ($server->takeover['state'] ?? 'waiting'),
                 'error' => $server->takeover['error'] ?? null,
                 'can_retry' => $server->team?->moving_at === null && ($server->takeover['state'] ?? null) === 'failed' && $canUpdate,
+                'other' => $server->team?->moving_at !== null
+                    ? MoveSide::label(Edition::tryFrom((string) $server->team->moving_edition) ?? Edition::SelfHosted)
+                    : (string) ($server->takeover['from'] ?? MoveSide::label(Edition::Cloud)),
             ],
             'cloud' => $this->cloud->server($server, $user),
             'tabs' => [

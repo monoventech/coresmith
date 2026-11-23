@@ -305,3 +305,15 @@ test('package credentials arrive sealed and keep their project', function () {
         ->and($credentials[0]->getRawOriginal('secret'))->not->toContain('nova-license')
         ->and($credentials[1]->project?->name)->toBe('Storefront');
 });
+
+test('each moved server remembers which Coresmith it came from, and a file from before files said so came from Coresmith Cloud', function () {
+    $owner = User::factory()->create();
+    $legacy = app(TeamImporter::class)->import(teamImporterPayload(), teamImporterCode($owner), $owner);
+    $payload = teamImporterPayload();
+    $payload['edition'] = 'self-hosted';
+    $payload['servers'] = array_map(fn(array $server): array => [...$server, 'ip_address' => str_replace('203.0.113.', '198.51.100.', (string) $server['ip_address'])], $payload['servers']);
+    $sibling = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    expect($legacy->servers->pluck('takeover.from')->unique()->all())->toBe(['Coresmith Cloud'])
+        ->and($sibling->servers->pluck('takeover.from')->unique()->all())->toBe(['self-hosted Coresmith']);
+});

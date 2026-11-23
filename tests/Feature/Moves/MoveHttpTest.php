@@ -206,7 +206,7 @@ describe('on a self-hosted panel', function () {
         $other = app(MoveCodes::class)->create(User::factory()->create());
 
         $this->actingAs($owner)->post(route('settings.moves.upload', $code), ['file' => moveHttpUploaded($code, $other)])
-            ->assertSessionHasErrors(['file' => 'This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.']);
+            ->assertSessionHasErrors(['file' => 'This move file was made for a different move code. Paste the code from here into the Coresmith the team is leaving and download the file again.']);
 
         expect($code->fresh()->file)->toBeNull();
     });

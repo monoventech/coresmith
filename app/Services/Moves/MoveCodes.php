@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Moves;
 
+use App\Enums\Edition;
 use App\Models\MoveCode;
 use App\Models\User;
 use App\Services\Teams\TeamUrls;
@@ -47,6 +48,7 @@ final class MoveCodes
             'key' => $code->public_key,
             'until' => $code->expires_at->getTimestamp(),
             'panel' => rtrim($this->urls->canonical(), '/'),
+            'edition' => Edition::current()->value,
         ];
 
         return self::PREFIX . rtrim(strtr(base64_encode((string) json_encode($claims, JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
@@ -58,16 +60,16 @@ final class MoveCodes
         $key = base64_decode((string) ($claims['key'] ?? ''), true);
 
         if ($key === false || strlen($key) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES || !is_string($claims['id'] ?? null) || !is_int($claims['until'] ?? null) || !is_string($claims['panel'] ?? null)) {
-            $this->refuse("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
+            $this->refuse("That isn't a move code. Copy it again from Settings, General on " . MoveSide::destination() . '.');
         }
 
         $until = CarbonImmutable::createFromTimestamp($claims['until']);
 
         if (!$until->isFuture()) {
-            $this->refuse('This move code has expired. Create a new one in Settings, General on your self-hosted Coresmith.');
+            $this->refuse('This move code has expired. Create a new one in Settings, General on ' . MoveSide::destination() . '.');
         }
 
-        return new MoveTarget($claims['id'], $key, $until, $claims['panel']);
+        return new MoveTarget($claims['id'], $key, $until, $claims['panel'], Edition::tryFrom((string) ($claims['edition'] ?? '')) ?? Edition::SelfHosted);
     }
 
     /**
@@ -76,14 +78,14 @@ final class MoveCodes
     private function claims(string $text): array
     {
         if (!str_starts_with($text, self::PREFIX)) {
-            $this->refuse("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
+            $this->refuse("That isn't a move code. Copy it again from Settings, General on " . MoveSide::destination() . '.');
         }
 
         $json = base64_decode(strtr(substr($text, strlen(self::PREFIX)), '-_', '+/'), true);
         $claims = $json === false ? null : json_decode($json, true);
 
         if (!is_array($claims) || ($claims['v'] ?? null) !== 1) {
-            $this->refuse("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
+            $this->refuse("That isn't a move code. Copy it again from Settings, General on " . MoveSide::destination() . '.');
         }
 
         return $claims;

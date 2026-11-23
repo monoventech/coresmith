@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Moves;
 
+use App\Enums\Edition;
 use App\Enums\PackageSource;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
@@ -117,7 +118,7 @@ final class TeamImporter
                 'tags' => AppTags::imported(is_array($record['tags'] ?? null) ? $record['tags'] : [$record['environment'] ?? null]),
                 ...MoveColumns::pick($record, MoveColumns::SERVERS),
                 'status' => ServerStatus::Moving,
-                'takeover' => ['state' => 'waiting', 'cloud_key' => (string) $record['ssh_public_key'], 'attempts' => 0, 'error' => null],
+                'takeover' => ['state' => 'waiting', 'cloud_key' => (string) $record['ssh_public_key'], 'attempts' => 0, 'error' => null, 'from' => MoveSide::label(Edition::tryFrom((string) ($payload['edition'] ?? '')) ?? Edition::Cloud)],
             ])->save();
             $servers[(string) $record['ref']] = $server;
         }
@@ -213,7 +214,7 @@ final class TeamImporter
             && collect([...$this->records($payload, 'applications'), ...$this->records($payload, 'databases')])->every(fn(array $record): bool => in_array((string) ($record['server'] ?? ''), $refs, true));
 
         if (!is_array($payload['team'] ?? null) || !$complete) {
-            $this->refuse('This move file is missing parts of the team. Download it again from Coresmith Cloud.');
+            $this->refuse('This move file is missing parts of the team. Download it again from ' . MoveSide::origin() . '.');
         }
 
         $taken = Server::query()->whereIn('ip_address', array_column($servers, 'ip_address'))->value('ip_address');

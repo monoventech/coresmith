@@ -26,4 +26,5 @@ export type ServerMove = {
     state: 'waiting' | 'running' | 'failed' | 'moved'
     error: string | null
     can_retry: boolean
+    other: string
 }

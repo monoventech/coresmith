@@ -67,7 +67,7 @@ test('a host key that is not the one coresmith cloud recorded stops the takeover
 
     expect($moved->status)->toBe(ServerStatus::Moving)
         ->and($moved->takeover)->toMatchArray(['state' => 'failed', 'attempts' => 1])
-        ->and($moved->takeover['error'])->toBe("web-01 showed a different host key than Coresmith Cloud recorded, so nothing was changed. Check it's the right server, accept or reject the new key, then try again.")
+        ->and($moved->takeover['error'])->toBe("web-01 showed a different host key than the Coresmith it came from recorded, so nothing was changed. Check it's the right server, accept or reject the new key, then try again.")
         ->and($moved->pending_host_key_fingerprint)->not->toBeNull()
         ->and($moved->ssh_public_key)->toBe($server->ssh_public_key)
         ->and($transport->commands())->toBe([]);
@@ -94,7 +94,7 @@ test('coresmith cloud\'s key no longer opening the server is said plainly', func
 
     $moved = takeOverServerRun($server, $transport);
 
-    expect($moved->takeover['error'])->toBe("Coresmith Cloud's key no longer opens web-01, so the move can't take it over. Add the server here again instead.")
+    expect($moved->takeover['error'])->toBe("web-01 no longer accepts the key of the Coresmith it came from, so the move can't take it over. Add the server here again instead.")
         ->and($transport->commands())->toBe([]);
 });
 

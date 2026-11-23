@@ -21,6 +21,7 @@ use App\Models\WebhookEndpoint;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Moves\TeamExporter;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\CloudBilling;
 
 function teamExporterRefusal(Team $team): string
 {
@@ -121,7 +122,7 @@ test('the export leaves billing, history and sign-in settings behind', function 
 
     expect($json)->not->toContain('cus_never_moves')
         ->and($json)->not->toContain('history stays behind')
-        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination', 'package_credentials']);
+        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'edition', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination', 'package_credentials']);
 });
 
 test('a server that is not ready stops the export', function (ServerStatus $status) {
@@ -189,4 +190,13 @@ test('package credentials move with their project and their secret', function ()
         ['project' => null, 'source' => 'composer', 'target' => 'nova.laravel.com', 'scope' => null, 'username' => 'ops@example.com', 'secret' => 'nova-license-moves'],
         ['project' => $project->id, 'source' => 'npm', 'target' => 'https://npm.pkg.github.com/', 'scope' => '@acme', 'username' => null, 'secret' => 'ghp_moves_token'],
     ]);
+});
+
+test('the export says which Coresmith sent it', function () {
+    $team = teamExporterTeam();
+    $selfHosted = app(TeamExporter::class)->payload($team, $team->owner);
+    CloudBilling::enable();
+
+    expect($selfHosted['edition'])->toBe('self-hosted')
+        ->and(app(TeamExporter::class)->payload($team, $team->owner)['edition'])->toBe('cloud');
 });
