@@ -9,10 +9,8 @@ use App\Services\Server\DnfPackageManager;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\Server\YumPackageManager;
 
-test('apt builds a non-interactive update command', function () {
-    expect((new AptPackageManager)->update())
-        ->toContain('DEBIAN_FRONTEND=noninteractive')
-        ->toContain('apt-get update');
+test('apt builds a non-interactive update command that accepts an archive which changed its label', function () {
+    expect((new AptPackageManager)->update())->toBe('DEBIAN_FRONTEND=noninteractive apt-get update -y --allow-releaseinfo-change-label');
 });
 
 test('apt install is non-interactive and assumes yes', function () {
@@ -33,6 +31,7 @@ test('apt names the source a failed refresh came from', function (string $output
     'a repository with no release file' => ["Hit:1 http://ports.ubuntu.com/ubuntu-ports noble InRelease\nErr:5 https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release\n  404  Not Found [IP: 185.125.190.80 443]\nE: The repository 'https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release' does not have a Release file.\n", 'https://ppa.launchpadcontent.net/ondrej/php/ubuntu'],
     'a repository that is not signed' => ["W: GPG error: https://download.docker.com/linux/ubuntu noble InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8\nE: The repository 'https://download.docker.com/linux/ubuntu noble InRelease' is not signed.\n", 'https://download.docker.com/linux/ubuntu'],
     'a fetch that was refused' => ["E: Failed to fetch https://packages.example.com/apt/dists/stable/InRelease  403  Forbidden [IP: 203.0.113.5 443]\nE: Some index files failed to download. They have been ignored, or old ones used instead.\n", 'https://packages.example.com/apt'],
+    'a repository that changed its origin' => ["Hit:1 http://archive.ubuntu.com/ubuntu noble InRelease\nE: Repository 'https://packages.example.com/apt stable InRelease' changed its 'Origin' value from 'Example' to 'Example Inc'\nN: This must be accepted explicitly before updates for this repository can be applied. See apt-secure(8) manpage for details.\n", 'https://packages.example.com/apt'],
     'a release file from the future' => ["E: Release file for http://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease is not valid yet (invalid for another 2h 3min 4s). Updates for this repository will not be applied.\n", 'http://archive.ubuntu.com/ubuntu'],
     'a held lock' => ["E: Could not get lock /var/lib/apt/lists/lock. It is held by process 2231 (apt-get)\nE: Unable to lock directory /var/lib/apt/lists/\n", null],
     'a full disk' => ["E: Write error - write (28: No space left on device)\n", null],
