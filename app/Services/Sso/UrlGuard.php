@@ -8,7 +8,9 @@ declare(strict_types=1);
 
 namespace App\Services\Sso;
 
+use App\Enums\Edition;
 use App\Services\Network\AddressResolver;
+use App\Services\Network\PublicAddress;
 use App\Services\SafeName;
 
 final class UrlGuard
@@ -127,6 +129,10 @@ final class UrlGuard
             if (self::inRange($address, $range) || self::inRange((string) self::embeddedIpv4($address), $range)) {
                 throw new SsoException("Coresmith won't connect to {$host}, because it points at a private address.", 'url.blocked');
             }
+        }
+
+        if (Edition::current()->isCloud() && !PublicAddress::is($address)) {
+            throw new SsoException("Coresmith won't connect to {$host}, because it points at a private address.", 'url.blocked');
         }
     }
 

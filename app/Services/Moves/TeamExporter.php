@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Moves;
 
 use App\Enums\DeploymentStatus;
+use App\Enums\Edition;
 use App\Enums\ServerStatus;
 use App\Models\Application;
 use App\Models\CloudProvider;
@@ -46,6 +47,7 @@ final class TeamExporter
             'id' => (string) Str::uuid(),
             'made_at' => now()->toIso8601String(),
             'from' => rtrim($this->urls->canonical(), '/'),
+            'edition' => Edition::current()->value,
             'team' => ['name' => $team->name, 'slug' => $team->slug],
             'members' => $team->members()->whereKeyNot($owner->getKey())->orderBy('email')->get()
                 ->map(fn(User $member): array => ['email' => $member->email, 'role' => (string) $member->pivot->role, 'sees_everything' => (bool) $member->pivot->sees_everything])->values()->all(),

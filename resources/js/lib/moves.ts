@@ -8,6 +8,8 @@ export type MovePreview = {
     github: number
     reconnect: Record<string, number>
     webhooks: number
+    problems: string[]
+    plan: string | null
 }
 
 export type MoveCode = {
@@ -19,6 +21,17 @@ export type MoveCode = {
 
 export type Moves = {
     code: MoveCode | null
+    billing: string | null
+}
+
+export type MoveAway = {
+    moving: {
+        since: string
+        to: string
+        where: string
+        file: string | null
+        can_cancel: boolean
+    } | null
 }
 
 export type ServerMove = {
@@ -26,4 +39,5 @@ export type ServerMove = {
     state: 'waiting' | 'running' | 'failed' | 'moved'
     error: string | null
     can_retry: boolean
+    other: string
 }

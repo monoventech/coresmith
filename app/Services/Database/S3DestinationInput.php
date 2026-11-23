@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Database;
 
 use App\Models\BackupDestination;
+use App\Services\Network\OutboundAddress;
 use Closure;
 use Illuminate\Http\Request;
 
@@ -30,7 +31,7 @@ final class S3DestinationInput
         $saved = $existing instanceof BackupDestination ? 'nullable' : 'required';
 
         return [
-            'endpoint' => ['nullable', 'string', 'max:255', 'url:https', self::withoutCredentials(...)],
+            'endpoint' => ['nullable', 'string', 'max:255', 'url:https', self::withoutCredentials(...), self::reachable(...)],
             'region' => ['required', 'string', 'regex:/^[a-z0-9-]{2,32}$/'],
             'bucket' => ['required', 'string', 'regex:/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/'],
             'prefix' => ['nullable', 'string', 'max:200', "regex:/^[A-Za-z0-9!_.*'()\\/-]{0,200}$/", 'not_regex:/\.\./', 'not_regex:/^\//'],
@@ -46,7 +47,9 @@ final class S3DestinationInput
     public static function messages(): array
     {
         return [
-            'endpoint.*' => self::ENDPOINT,
+            'endpoint.string' => self::ENDPOINT,
+            'endpoint.max' => self::ENDPOINT,
+            'endpoint.url' => self::ENDPOINT,
             'region.*' => self::REGION,
             'bucket.*' => self::BUCKET,
             'prefix.*' => self::PREFIX,
@@ -75,6 +78,19 @@ final class S3DestinationInput
             'secret_access_key' => $validated['secret_access_key'] ?? null,
             'path_style' => $request->boolean('path_style'),
         ], fn(mixed $value, string $key): bool => !in_array($key, ['access_key_id', 'secret_access_key'], true) || $value !== null, ARRAY_FILTER_USE_BOTH);
+    }
+
+    private static function reachable(string $attribute, mixed $value, Closure $fail): void
+    {
+        if (!is_string($value) || strtolower((string) parse_url($value, PHP_URL_SCHEME)) !== 'https' || parse_url($value, PHP_URL_USER) !== null) {
+            return;
+        }
+
+        match (app(OutboundAddress::class)->check($value)) {
+            OutboundAddress::PRIVATE => $fail("That endpoint points at a private address, so Coresmith Cloud can't reach it. Use your storage provider's public endpoint."),
+            OutboundAddress::UNRESOLVED => $fail("Coresmith Cloud couldn't find an address for " . strtolower((string) parse_url($value, PHP_URL_HOST)) . '. Check the endpoint.'),
+            default => null,
+        };
     }
 
     private static function withoutCredentials(string $attribute, mixed $value, Closure $fail): void

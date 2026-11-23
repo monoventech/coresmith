@@ -21,6 +21,7 @@ use App\Models\WebhookEndpoint;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Moves\TeamExporter;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\CloudBilling;
 
 function teamExporterRefusal(Team $team): string
 {
@@ -43,7 +44,7 @@ function teamExporterTeam(): Team
     $server = Server::factory()->active()->fromProvider($hetzner)->create([
         'name' => 'web-01',
         'ip_address' => '203.0.113.10',
-        'host_key_fingerprint' => 'SHA256:webkey',
+        'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW',
         'provisioning_phase' => 8,
         'installed_runtimes' => ['php' => ['8.5.5']],
     ]);
@@ -86,7 +87,7 @@ test('the export carries the team, its servers, apps and databases with their se
         ->and($payload['from'])->toBe('https://app.coresmith.io')
         ->and($payload['id'])->toBeString()->not->toBeEmpty()
         ->and(collect($payload['members'])->sortBy('email')->values()->all())->toBe([['email' => 'ada@acme.test', 'role' => 'admin', 'sees_everything' => true], ['email' => 'lin@acme.test', 'role' => 'member', 'sees_everything' => false]])
-        ->and($server)->toMatchArray(['name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_user' => 'root', 'host_key_fingerprint' => 'SHA256:webkey', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'provider_size' => 'cx22'])
+        ->and($server)->toMatchArray(['name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_user' => 'root', 'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'provider_size' => 'cx22'])
         ->and($server['ssh_private_key'])->toContain('OPENSSH PRIVATE KEY')
         ->and($server['cloud_provider'])->toBe($payload['cloud_providers'][0]['ref'])
         ->and($payload['cloud_providers'][0])->toMatchArray(['name' => 'Hetzner', 'api_token' => 'hetzner-token-moves'])
@@ -121,7 +122,7 @@ test('the export leaves billing, history and sign-in settings behind', function 
 
     expect($json)->not->toContain('cus_never_moves')
         ->and($json)->not->toContain('history stays behind')
-        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination', 'package_credentials']);
+        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'edition', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination', 'package_credentials']);
 });
 
 test('a server that is not ready stops the export', function (ServerStatus $status) {
@@ -189,4 +190,13 @@ test('package credentials move with their project and their secret', function ()
         ['project' => null, 'source' => 'composer', 'target' => 'nova.laravel.com', 'scope' => null, 'username' => 'ops@example.com', 'secret' => 'nova-license-moves'],
         ['project' => $project->id, 'source' => 'npm', 'target' => 'https://npm.pkg.github.com/', 'scope' => '@acme', 'username' => null, 'secret' => 'ghp_moves_token'],
     ]);
+});
+
+test('the export says which Coresmith sent it', function () {
+    $team = teamExporterTeam();
+    $selfHosted = app(TeamExporter::class)->payload($team, $team->owner);
+    CloudBilling::enable();
+
+    expect($selfHosted['edition'])->toBe('self-hosted')
+        ->and(app(TeamExporter::class)->payload($team, $team->owner)['edition'])->toBe('cloud');
 });

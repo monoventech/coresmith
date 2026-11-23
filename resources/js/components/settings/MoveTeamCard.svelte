@@ -1,12 +1,12 @@
 <script lang="ts">
-    import { Form, router } from '@inertiajs/svelte'
+    import { Form, Link, router } from '@inertiajs/svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import type { MoveCode, Moves } from '@/lib/moves'
 
-    let { moves }: { moves: Moves } = $props()
+    let { moves, cloud = false }: { moves: Moves; cloud?: boolean } = $props()
 
     let working = $state(false)
     let copied = $state(false)
@@ -14,6 +14,7 @@
 
     const code = $derived(moves.code)
     const preview = $derived(code?.preview ?? null)
+    const blocked = $derived(preview !== null && (preview.problems.length > 0 || preview.plan !== null))
 
     function counted(count: number, one: string, many: string): string {
         return `${count} ${count === 1 ? one : many}`
@@ -25,7 +26,7 @@
 
     const summary = $derived(
         preview
-            ? `${preview.team} moves here from ${preview.from} with ${listed([
+            ? `${preview.team} moves ${cloud ? 'into this team' : 'here'} from ${preview.from} with ${listed([
                   counted(preview.servers.length, 'server', 'servers'),
                   counted(preview.applications, 'app', 'apps'),
                   counted(preview.databases, 'database', 'databases')
@@ -82,20 +83,29 @@
     }
 </script>
 
-<div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="move-team-card">
-    <h3 class="type-h3 m-0 mb-1">Move a team from Coresmith Cloud</h3>
+<div
+    id="move-team"
+    class="flex h-full scroll-mt-24 flex-col rounded-xl border border-border bg-card px-5.5 py-5"
+    data-testid="move-team-card"
+>
+    <h3 class="type-h3 m-0 mb-1">
+        {cloud ? 'Move a team from self-hosted Coresmith' : 'Move a team from Coresmith Cloud'}
+    </h3>
     {#if !code}
         <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Bring a team's servers, apps and databases here without setting the servers up again. Their apps keep
-            serving the whole time.
+            {cloud
+                ? "Bring your self-hosted team's servers, apps and databases into this team without setting the servers up again. Their apps keep serving the whole time."
+                : "Bring a team's servers, apps and databases here without setting the servers up again. Their apps keep serving the whole time."}
         </p>
         <div class="mt-auto self-start pt-3">
             <Button variant="outline" size="sm" disabled={working} onclick={create}>Create a move code</Button>
         </div>
     {:else if !preview}
         <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Paste this code in Coresmith Cloud, Billing, Move to self-host, then upload the move file it gives you. It
-            works until {code.until}.
+            {cloud
+                ? 'In your self-hosted Coresmith, paste this code into Move this team to Coresmith Cloud, under Settings, General. Then upload the move file it gives you here.'
+                : "Paste this code where the team is now, then upload the move file it gives you. In Coresmith Cloud that's Billing, Move to self-host. On another Coresmith it's Settings, General."}
+            It works until {code.until}.
         </p>
         <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
             <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" data-testid="move-code">{code.text}</span>
@@ -140,9 +150,31 @@
                 {counted(preview.members, 'teammate gets', 'teammates get')} an invitation.
             </p>
         {/if}
+        {#if preview.problems.length > 0}
+            <div class="mt-2 text-[12.5px] text-destructive-strong" data-testid="move-problems">
+                <p class="m-0">Before this team can move here:</p>
+                <ul class="m-0 mt-1 list-disc pl-5">
+                    {#each preview.problems as problem (problem)}
+                        <li>{problem}</li>
+                    {/each}
+                </ul>
+            </div>
+        {/if}
+        {#if preview.plan}
+            <p class="mt-2 mb-0 text-[12.5px]" data-testid="move-plan">
+                {preview.plan}
+                {#if moves.billing}
+                    <Link
+                        href={moves.billing}
+                        class="focus-ring rounded-sm font-medium text-primary-strong no-underline underline-offset-4 hover:underline"
+                        >Go to Billing</Link
+                    >
+                {/if}
+            </p>
+        {/if}
         <FieldError message={error} />
         <div class="mt-auto flex flex-wrap gap-2.5 pt-3">
-            <Button size="sm" disabled={working} onclick={() => move(code)}>Move team</Button>
+            <Button size="sm" disabled={working || blocked} onclick={() => move(code)}>Move team</Button>
             <Button variant="ghost" size="sm" disabled={working} onclick={() => remove(code)}>Remove</Button>
         </div>
     {/if}
