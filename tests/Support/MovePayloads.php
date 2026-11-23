@@ -43,7 +43,7 @@ final class MovePayloads
             ]],
             'webhook_endpoints' => [['application' => 'a1', 'secret' => 'whsec_1', 'provider' => 'github', 'active' => true]],
             'databases' => [['server' => 's1', 'project' => 'p1', 'type' => 'mysql', 'name' => 'storefront', 'db_user' => 'storefront', 'db_password' => 'secret', 'host' => '127.0.0.1', 'port' => 3306, 'status' => 'active', 'privilege_level' => 'full', 'extensions' => [], 'is_external' => false]],
-            'backup_destination' => ['endpoint' => 'https://s3.eu-central-1.amazonaws.com', 'region' => 'eu-central-1', 'bucket' => 'acme-backups', 'prefix' => null, 'access_key_id' => 'AKIA', 'secret_access_key' => 'secret', 'path_style' => false, 'last_run_at' => null],
+            'backup_destination' => ['endpoint' => null, 'region' => 'eu-central-1', 'bucket' => 'acme-backups', 'prefix' => null, 'access_key_id' => 'AKIA', 'secret_access_key' => 'secret', 'path_style' => false, 'last_run_at' => null],
             'package_credentials' => [['project' => null, 'source' => 'composer', 'target' => 'nova.laravel.com', 'scope' => null, 'username' => 'ada@acme.test', 'secret' => 'token']],
         ];
     }
