@@ -44,6 +44,8 @@ final class CaddyApiClient
 
     public const THIS_MACHINE_PERSIST = '/usr/local/libexec/coresmith/persist-caddy-config';
 
+    private const FORMER_ROUTE = '/^app-[0-9a-z]{26}$/D';
+
     public const LOCK_SECONDS = 120;
 
     public const LOCK_WAIT_SECONDS = 60;
@@ -99,6 +101,7 @@ final class CaddyApiClient
                 $this->insertSite($connection, $application, $config);
             }
 
+            $this->forgetFormerRoute($connection, $application);
             $this->persistConfig($connection);
         });
     }
@@ -207,10 +210,27 @@ final class CaddyApiClient
                 $removed = $this->delete($connection, '/id/' . self::policyId($application)) || $removed;
             }
 
+            $removed = $this->forgetFormerRoute($connection, $application) || $removed;
+
             if ($removed) {
                 $this->persistConfig($connection);
             }
         });
+    }
+
+    private function forgetFormerRoute(SSHConnection $connection, Application $application): bool
+    {
+        $former = $application->former_route_id;
+
+        if (!is_string($former) || preg_match(self::FORMER_ROUTE, $former) !== 1 || $former === CaddyRouteBuilder::routeId($application)) {
+            return false;
+        }
+
+        $removed = $this->delete($connection, '/id/' . $former);
+        $removed = $this->delete($connection, '/id/' . $former . '-tls') || $removed;
+        $application->forceFill(['former_route_id' => null])->saveQuietly();
+
+        return $removed;
     }
 
     public function putAddress(SSHConnection $connection, Application $application, string $kind, string $listen): void

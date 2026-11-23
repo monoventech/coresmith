@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\ServerStatus;
+use App\Jobs\SyncApplicationRoute;
 use App\Jobs\TakeOverServer;
+use App\Models\Application;
 use App\Models\Server;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSSHTransport;
 
 function takeOverServerMoving(): Server
@@ -57,6 +60,28 @@ test('a moved server is taken over with this panel\'s own key and coresmith clou
         ->and($commands)->toContain(FakeSSHTransport::keyBlob($moved->ssh_public_key))
         ->and($commands)->toContain("blob='" . FakeSSHTransport::keyBlob($cloud) . "'")
         ->and($commands)->toContain(SecurityHardening::MANAGED_KEYS_BEGIN);
+});
+
+test('once a server is taken over, each app that moved onto it puts its own route in place of the one it had', function () {
+    Queue::fake();
+    $server = takeOverServerMoving();
+    $moved = Application::factory()->create(['team_id' => $server->team_id, 'server_id' => $server->id, 'former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $stayed = Application::factory()->create(['team_id' => $server->team_id, 'server_id' => $server->id]);
+
+    takeOverServerRun($server, new FakeSSHTransport);
+
+    Queue::assertPushed(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => $job->application->is($moved));
+    Queue::assertNotPushed(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => $job->application->is($stayed));
+});
+
+test('a takeover that stops leaves the routes as they were', function () {
+    Queue::fake();
+    $server = takeOverServerMoving();
+    Application::factory()->create(['team_id' => $server->team_id, 'server_id' => $server->id, 'former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+
+    takeOverServerRun($server, (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('impostor')));
+
+    Queue::assertNotPushed(SyncApplicationRoute::class);
 });
 
 test('a host key that is not the one coresmith cloud recorded stops the takeover before anything changes', function () {

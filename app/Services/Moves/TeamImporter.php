@@ -27,6 +27,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
 use App\Services\Billing\PlanGate;
+use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Projects\AppTags;
 use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamSlug;
@@ -36,6 +37,8 @@ use Illuminate\Validation\ValidationException;
 
 final class TeamImporter
 {
+    private const APPLICATION_ID = '/^[0-9a-z]{26}$/D';
+
     public function __construct(
         private readonly TeamInvitations $invitations,
         private readonly MoveChecks $checks,
@@ -186,6 +189,7 @@ final class TeamImporter
                 'project_id' => $projects[(string) ($record['project'] ?? '')] ?? $environments[(string) ($record['environment'] ?? '')]['project'] ?? null,
                 'tags' => AppTags::imported(is_array($record['tags'] ?? null) ? $record['tags'] : [$environments[(string) ($record['environment'] ?? '')]['tag'] ?? null]),
                 ...MoveColumns::pick($record, MoveColumns::APPLICATIONS),
+                'former_route_id' => is_string($record['ref'] ?? null) && preg_match(self::APPLICATION_ID, $record['ref']) === 1 ? CaddyRouteBuilder::routeIdFor($record['ref']) : null,
                 'last_request_at' => now(),
             ])->save();
             $applications[(string) $record['ref']] = $application->id;

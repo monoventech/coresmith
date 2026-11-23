@@ -80,7 +80,12 @@ final class CaddyRouteBuilder
 
     public static function routeId(Application $application): string
     {
-        return 'app-' . $application->getKey();
+        return self::routeIdFor((string) $application->getKey());
+    }
+
+    public static function routeIdFor(string $applicationId): string
+    {
+        return 'app-' . $applicationId;
     }
 
     /**
