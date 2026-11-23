@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Enums\ServerStatus;
-use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\CloseUnknownHosts;
 use App\Jobs\SyncApplicationRoute;
 use App\Jobs\TakeOverServer;
@@ -14,7 +13,6 @@ use App\Services\Server\SecurityHardening;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\SSH\SSHConnectionManager;
-use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSSHTransport;
 
@@ -169,44 +167,23 @@ function takeOverServerMachine(): Server
     return $server;
 }
 
-test("once the machine Coresmith ran on is taken over, it gets this Coresmith's certificate policy before any app moves its route, and unknown hostnames get closed", function () {
+test('once the machine Coresmith ran on is taken over, its apps move their routes and unknown hostnames get closed', function () {
     Queue::fake();
     $server = takeOverServerMachine();
-    $routesWaiting = null;
-    $transport = (new FakeSSHTransport)
-        ->respondTo("'http://localhost/config/apps/tls/automation/policies'", (string) json_encode([['@id' => 'coresmith-any-tls', 'on_demand' => true]]))
-        ->onCommand("'http://localhost/config/apps/tls/automation/policies/0'", function () use (&$routesWaiting): void {
-            $routesWaiting = Queue::pushed(SyncApplicationRoute::class)->count();
-        });
+    $transport = new FakeSSHTransport;
 
     $moved = takeOverServerRun($server, $transport);
 
     expect($moved->takeover['state'])->toBe('moved')
-        ->and($routesWaiting)->toBe(0);
+        ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, '/config/apps/tls'))->all())->toBe([]);
     Queue::assertPushed(SyncApplicationRoute::class, 1);
     Queue::assertPushed(CloseUnknownHosts::class, fn(CloseUnknownHosts $job): bool => $job->server->is($server));
 });
 
-test('an ordinary server keeps the certificate settings the Coresmith it came from gave it', function () {
+test('an ordinary server taken over leaves unknown hostnames to the hourly check', function () {
     Queue::fake();
-    $transport = new FakeSSHTransport;
 
-    takeOverServerRun(takeOverServerMoving(), $transport);
+    takeOverServerRun(takeOverServerMoving(), new FakeSSHTransport);
 
-    expect(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, '/config/apps/tls'))->all())->toBe([]);
     Queue::assertNotPushed(CloseUnknownHosts::class);
-});
-
-test("a certificate policy Caddy won't take is reported, and the takeover and the apps' routes still go ahead", function () {
-    Queue::fake();
-    Exceptions::fake();
-    $transport = (new FakeSSHTransport)->respondTo("'http://localhost/config/apps/tls/automation/policies'", 'curl: (22) The requested URL returned error: 400', 22);
-
-    $moved = takeOverServerRun(takeOverServerMachine(), $transport);
-
-    expect($moved->status)->toBe(ServerStatus::Active)
-        ->and($moved->takeover['state'])->toBe('moved')
-        ->and($transport->connected())->toBeFalse();
-    Exceptions::assertReported(SSHCommandFailedException::class);
-    Queue::assertPushed(SyncApplicationRoute::class, 1);
 });

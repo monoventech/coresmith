@@ -13,6 +13,7 @@ use App\Services\Caddy\CaddyApiClient;
 use App\Services\Caddy\CaddyInstaller;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Caddy\RouteConfigValidator;
+use App\Services\Runtime\AsdfManager;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -420,81 +421,73 @@ test("changes to Caddy on Coresmith's machine wait for one another, so an addres
         ->and($transport->commands())->toBe([]);
 });
 
-function caddyPoliciesAnswer(mixed $policies): FakeSSHTransport
+function caddyHandedOverConnection(FakeSSHTransport $transport): SSHConnection
 {
-    return (new FakeSSHTransport)->respondTo("-X GET --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/apps/tls/automation/policies'", (string) json_encode($policies));
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'meta' => ['caddy_admin' => 'socket', 'runtime_user' => AsdfManager::CORESMITH_HOST_USER]]);
+
+    return (new SSHConnection($server, $transport))->connect();
 }
 
-function caddyCatchAllPayload(mixed $payload): string
+function caddyPolicyPayload(Application $application, string $id): string
 {
-    return '-d ' . escapeshellarg((string) json_encode($payload, JSON_UNESCAPED_SLASHES));
+    return '-d ' . escapeshellarg((string) json_encode(['@id' => $id . '-tls', 'subjects' => ['app.example.com']], JSON_UNESCAPED_SLASHES));
 }
 
-test("the machine Coresmith ran on gets this Coresmith's certificate policy ahead of Coresmith's on-demand one, so its apps keep their certificates while both are there", function () {
-    InstanceSetting::put('notification_email', 'ops@example.com');
-    $transport = caddyPoliciesAnswer([
-        ['@id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls', 'subjects' => ['app.example.com']],
-        ['@id' => 'coresmith-site-tls', 'subjects' => ['coresmith.example.com']],
-        ['@id' => 'coresmith-any-tls', 'on_demand' => true],
-    ]);
+test("a machine Coresmith installed keeps a certificate policy for each app, since Coresmith's on-demand policy is its only catch-all", function () {
+    $transport = new FakeSSHTransport;
+    $application = routableApp();
 
-    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+    caddyClient()->addSite(caddyHandedOverConnection($transport), $application);
 
-    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/2'))->toContain(caddyCatchAllPayload(['issuers' => CaddyInstaller::issuers('ops@example.com')]))
-        ->and(caddyCalls($transport, '-X POST'))->toBe(0)
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/http/servers/coresmith/routes/0'))->toContain('"@id":"app-' . $application->getKey() . '"')
+        ->and(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()))
         ->and(collect($transport->commands())->last())->toContain(CaddyInstaller::CONFIG_FILE);
 });
 
-test("a machine whose Coresmith is already gone gets this Coresmith's certificate policy after its apps' own", function (array $policies) {
-    InstanceSetting::put('notification_email', 'ops@example.com');
-    $transport = caddyPoliciesAnswer($policies);
+test('updating an app on a machine Coresmith installed updates its policy, and removing it takes the policy out', function () {
+    $application = routableApp();
+    $updating = new FakeSSHTransport;
+    $removing = new FakeSSHTransport;
 
-    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+    caddyClient()->updateSite(caddyHandedOverConnection($updating), $application);
+    caddyClient()->removeSite(caddyHandedOverConnection($removing), $application);
 
-    expect(caddyThisMachineCommand($transport, 'POST', '/config/apps/tls/automation/policies'))->toContain(caddyCatchAllPayload(['issuers' => CaddyInstaller::issuers('ops@example.com')]))
+    expect(caddyThisMachineCommand($updating, 'PATCH', '/id/app-' . $application->getKey() . '-tls'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()))
+        ->and(caddyThisMachineCommand($removing, 'DELETE', '/id/app-' . $application->getKey() . '-tls'))->not->toBeNull();
+});
+
+test('an app that moved onto a machine Coresmith installed takes over its route and policy in place, so no host is ever covered twice', function () {
+    $application = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $transport = (new FakeSSHTransport)->respondTo("-X GET --unix-socket /run/caddy-admin/admin.sock 'http://localhost/id/app-{$application->getKey()}'", 'curl: (22) The requested URL returned error: 404', 22);
+
+    caddyClient()->putSite(caddyHandedOverConnection($transport), $application);
+
+    expect(caddyThisMachineCommand($transport, 'PATCH', '/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'))->toContain('"@id":"app-' . $application->getKey() . '"')
+        ->and(caddyThisMachineCommand($transport, 'PATCH', '/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()))
         ->and(caddyCalls($transport, '-X PUT'))->toBe(0)
-        ->and(collect($transport->commands())->last())->toContain(CaddyInstaller::CONFIG_FILE);
-})->with([
-    'apps only' => [[['@id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls', 'subjects' => ['app.example.com']]]],
-    'no policies left' => [[]],
-]);
-
-test('a machine with no certificate policies at all is given a list holding this one', function () {
-    InstanceSetting::put('notification_email', 'ops@example.com');
-    $transport = caddyPoliciesAnswer(null);
-
-    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
-
-    expect(caddyThisMachineCommand($transport, 'POST', '/config/apps/tls/automation/policies'))->toContain(caddyCatchAllPayload([['issuers' => CaddyInstaller::issuers('ops@example.com')]]));
+        ->and($application->fresh()->former_route_id)->toBeNull();
 });
 
-test('without a notification email the policy keeps Caddy\'s own certificate authorities', function () {
-    $transport = caddyPoliciesAnswer([['@id' => 'coresmith-any-tls', 'on_demand' => true]]);
+test('a moved app whose policy is already gone gets a new one', function () {
+    $application = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $transport = (new FakeSSHTransport)
+        ->respondTo("-X GET --unix-socket /run/caddy-admin/admin.sock 'http://localhost/id/app-{$application->getKey()}'", 'curl: (22) The requested URL returned error: 404', 22)
+        ->respondTo("-X PATCH --unix-socket /run/caddy-admin/admin.sock 'http://localhost/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'", 'curl: (22) The requested URL returned error: 404', 22);
 
-    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+    caddyClient()->putSite(caddyHandedOverConnection($transport), $application);
 
-    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->toContain("-d '{}'");
+    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->toContain(caddyPolicyPayload($application, 'app-' . $application->getKey()));
 });
 
-test('a certificate policy for every hostname that is already in place is left alone', function () {
-    $transport = caddyPoliciesAnswer([
-        ['@id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls', 'subjects' => ['app.example.com']],
-        ['issuers' => [['module' => 'acme', 'email' => 'earlier@example.com']]],
-        ['@id' => 'coresmith-any-tls', 'on_demand' => true],
-    ]);
+test('on an ordinary server a moved app takes over its route in place and writes no policy', function () {
+    $application = routableApp(['former_route_id' => 'app-01jbx4z3v8m2q7k6t5r9w0y1ce']);
+    $transport = (new FakeSSHTransport)->respondTo("-X GET 'http://localhost:2019/id/app-{$application->getKey()}'", 'curl: (22) The requested URL returned error: 404', 22);
 
-    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
+    caddyClient()->putSite(caddyConnection($transport), $application);
+    $commands = implode("\n", $transport->commands());
 
-    expect($transport->commands())->toHaveCount(1);
-});
-
-test("Coresmith's own certificate policies don't count as one, since removing Coresmith takes them out", function () {
-    $transport = caddyPoliciesAnswer([
-        ['@id' => 'coresmith-site-tls-2', 'issuers' => [['module' => 'internal']]],
-        ['@id' => 'coresmith-any-tls', 'on_demand' => true],
-    ]);
-
-    caddyClient()->putCatchAllPolicy(caddySocketConnection($transport));
-
-    expect(caddyThisMachineCommand($transport, 'PUT', '/config/apps/tls/automation/policies/0'))->not->toBeNull();
+    expect($commands)->toContain("-X PATCH 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce'")
+        ->not->toContain('/config/apps/tls/automation/policies')
+        ->not->toContain("-X PATCH 'http://localhost:2019/id/app-01jbx4z3v8m2q7k6t5r9w0y1ce-tls'")
+        ->and(caddyCalls($transport, '-X PUT'))->toBe(0);
 });
