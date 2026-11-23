@@ -84,7 +84,7 @@ final class GeneralSettingsController extends Controller
                 'added' => $key->created_at?->format('M Y'),
             ])->values(),
             'updates' => $cloud ? null : $updates->present($request->user()),
-            'moves' => $moves->forUser($request->user()),
+            'moves' => $moves->forUser($request->user(), $this->currentTeam()),
             'away' => $this->currentTeam() === null ? null : $moves->away($this->currentTeam(), $request->user()),
             'can' => [
                 'manageInstance' => $this->managesInstance($request),

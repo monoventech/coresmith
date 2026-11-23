@@ -23,7 +23,7 @@ final class MovePresenter
     ) {}
 
     /**
-     * @return array{code: array{id: string, text: string, until: string, preview: array<string, mixed>|null}|null}|null
+     * @return array{code: array{id: string, text: string, until: string, preview: array<string, mixed>|null}|null, billing: ?string}|null
      */
     public function forUser(User $user, ?Team $team = null): ?array
     {
@@ -41,8 +41,10 @@ final class MovePresenter
             ->latest()
             ->first();
 
+        $billing = $cloud ? route('settings.billing') : null;
+
         if ($code === null) {
-            return ['code' => null];
+            return ['code' => null, 'billing' => $billing];
         }
 
         $preview = null;
@@ -60,7 +62,7 @@ final class MovePresenter
             'text' => $this->codes->text($code),
             'until' => $code->expires_at->setTimezone((string) config('app.timezone', 'UTC'))->format('M j, H:i'),
             'preview' => $preview,
-        ]];
+        ], 'billing' => $billing];
     }
 
     /**

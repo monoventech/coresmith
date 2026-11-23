@@ -21,6 +21,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\CloudBilling;
 use Tests\Support\FakeStripe;
 use Tests\Support\MovePayloads;
@@ -184,4 +185,30 @@ test("a team's own S3 settings stay when a move brings others", function () {
 
     expect($team->servers()->count())->toBe(1)
         ->and(BackupDestination::query()->where('team_id', $team->id)->pluck('bucket')->all())->toBe(['ada-backups']);
+});
+
+test("Cloud's Settings, General offers the move to an empty team's owner, and to no one else", function () {
+    $team = moveToCloudTeam();
+    $owner = moveToCloudOwner($team);
+    $member = User::factory()->create(['current_team_id' => $team->id]);
+    $team->members()->attach($member, ['role' => TeamRole::Admin->value]);
+
+    $this->actingAs($owner)->get(route('settings.general'))->assertInertia(fn(Assert $page) => $page->where('moves.code', null));
+    $this->actingAs($member)->get(route('settings.general'))->assertInertia(fn(Assert $page) => $page->where('moves', null));
+
+    Server::factory()->for($team)->create();
+
+    $this->actingAs($owner)->get(route('settings.general'))->assertInertia(fn(Assert $page) => $page->where('moves', null));
+});
+
+test("Cloud's card previews the team with what blocks it", function () {
+    $team = moveToCloudTeam();
+    $owner = moveToCloudOwner($team);
+    moveToCloudCode($owner, $team, MovePayloads::selfHosted(2));
+
+    $this->actingAs($owner)->get(route('settings.general'))->assertInertia(fn(Assert $page) => $page
+        ->where('moves.code.preview.team', 'Arrivals')
+        ->where('moves.code.preview.problems', [])
+        ->where('moves.code.preview.plan', 'Arrivals has 2 servers, and the trial includes 1. Choose a plan that fits in Billing, then move the team.')
+        ->where('moves.billing', route('settings.billing')));
 });

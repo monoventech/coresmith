@@ -184,7 +184,7 @@
     </div>
 
     {#if moves}
-        <MoveTeamCard {moves} />
+        <MoveTeamCard {moves} {cloud} />
     {/if}
     {#if away}
         <MoveAwayCard {away} />
