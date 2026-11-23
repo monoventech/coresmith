@@ -72,7 +72,7 @@ test('an owner of the panel makes a move code to paste into coresmith cloud', as
 
     await card.getByRole('button', { name: 'Create a move code' }).click()
 
-    await expect(toast(page)).toContainText('Saved. Paste the move code into Coresmith Cloud.')
+    await expect(toast(page)).toContainText('Saved. Paste the move code into the Coresmith the team is leaving.')
     await expect(card.getByTestId('move-code')).toContainText('csmove1_')
     await expect(card).toContainText("In Coresmith Cloud that's Billing, Move to self-host.")
 

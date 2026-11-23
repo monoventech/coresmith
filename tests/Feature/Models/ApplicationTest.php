@@ -8,6 +8,7 @@ use App\Enums\DeploymentStatus;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
+use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
@@ -21,10 +22,11 @@ test('an application belongs to a server and a team', function () {
     expect($app->server)->not->toBeNull()->and($app->team)->not->toBeNull();
 });
 
-test('an application slug is unique', function () {
-    Application::factory()->create(['slug' => 'my-app']);
+test('an application slug is unique on its server', function () {
+    $server = Server::factory()->create();
+    Application::factory()->for($server)->create(['slug' => 'my-app']);
 
-    Application::factory()->create(['slug' => 'my-app']);
+    Application::factory()->for($server)->create(['slug' => 'my-app']);
 })->throws(QueryException::class);
 
 test('env variables are encrypted at rest', function () {
