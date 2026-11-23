@@ -355,6 +355,20 @@ test('keeping the machine puts root sign-in back to this machine only', function
         ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBeFalse();
 });
 
+test('once Coresmith Cloud has taken the machine over, keeping it is refused and the rule that lets Coresmith Cloud in stays', function () {
+    $base = thisMachineBase();
+    thisMachineHandedOver($base);
+    thisMachineRun($base, 'handover1 handover 88.99.12.121,2a01:4f8:1c17:43b8::1');
+    $keys = implode("\n", array_filter(explode("\n", file_get_contents("{$base}/root-ssh/authorized_keys")), fn(string $line): bool => !str_contains($line, thisMachineKey()))) . "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICloudCloudCloudCloudCloudCloudCloudCloudCl coresmith\n";
+    file_put_contents("{$base}/root-ssh/authorized_keys", $keys);
+
+    thisMachineRun($base, 'keep1 keep');
+
+    expect(thisMachineAnswer($base))->toBe(['id' => 'keep1', 'ok' => false, 'error' => "Coresmith Cloud has already taken this machine over, so the move can't be cancelled. Remove Coresmith from it instead."])
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe($keys)
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBe(thisMachineMoveRule());
+});
+
 test('a handover naming anything but a few addresses is refused without touching sshd or root\'s keys', function (string $addresses) {
     $base = thisMachineBase();
     thisMachineHandedOver($base);
@@ -381,7 +395,7 @@ test("an sshd that still turns root away from Coresmith Cloud's addresses gets t
     thisMachineRun($base, 'handover1 handover 88.99.12.121', ['effective' => "port 22\npermitrootlogin no\nlistenaddress 0.0.0.0:22\n"]);
 
     expect(thisMachineAnswer($base)['ok'] ?? null)->toBeFalse()
-        ->and(thisMachineAnswer($base)['error'] ?? null)->toBe("sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.")
+        ->and(thisMachineAnswer($base)['error'] ?? null)->toBe('sshd still turns root away from 88.99.12.121, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config and the files it includes.')
         ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe($keys)
         ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-move.conf"))->toBeFalse();
 });

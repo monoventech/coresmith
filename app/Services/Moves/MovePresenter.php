@@ -66,7 +66,7 @@ final class MovePresenter
     }
 
     /**
-     * @return array{moving: array{since: string, to: string, where: string, file: ?string, can_cancel: bool}|null}|null
+     * @return array{machine: ?string, moving: array{since: string, to: string, where: string, file: ?string, can_cancel: bool}|null}|null
      */
     public function away(Team $team, User $user): ?array
     {
@@ -74,11 +74,14 @@ final class MovePresenter
             return null;
         }
 
+        $machine = $team->servers()->where('runs_coresmith', true)->value('name');
+        $machine = is_string($machine) ? $machine : null;
+
         if ($team->moving_at === null) {
-            return ['moving' => null];
+            return ['machine' => $machine, 'moving' => null];
         }
 
-        return ['moving' => [
+        return ['machine' => $machine, 'moving' => [
             'since' => $team->moving_at->setTimezone((string) config('app.timezone', 'UTC'))->format('M j, H:i'),
             'to' => MoveSide::to($team),
             'where' => MoveSide::towards($team),

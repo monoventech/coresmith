@@ -15,21 +15,24 @@ use App\Services\Network\PublicAddress;
 
 final class MoveReach
 {
-    public function refusal(Team $team, MoveTarget $target, bool $handOver = false): ?string
+    /**
+     * @return array<string, string>
+     */
+    public function refusal(Team $team, MoveTarget $target, bool $handOver = false): array
     {
         if ($target->edition->isCloud() && Edition::current()->isCloud()) {
-            return 'That code comes from Coresmith Cloud. Paste a move code from your self-hosted Coresmith.';
+            return ['code' => 'That code comes from Coresmith Cloud. Paste a move code from your self-hosted Coresmith.'];
         }
 
         foreach ($team->servers()->with('tunnel')->orderBy('name')->get() as $server) {
-            $refusal = $this->serverRefusal($server, $target, $handOver);
+            $refusal = $server->runs_coresmith ? $this->machineRefusal($server, $target, $handOver) : $this->serverRefusal($server, $target);
 
-            if ($refusal !== null) {
+            if ($refusal !== []) {
                 return $refusal;
             }
         }
 
-        return null;
+        return [];
     }
 
     public static function machineAddress(Server $server): ?string
@@ -39,32 +42,34 @@ final class MoveReach
         return is_string($address) && PublicAddress::is($address) ? $address : null;
     }
 
-    private function serverRefusal(Server $server, MoveTarget $target, bool $handOver): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function serverRefusal(Server $server, MoveTarget $target): array
     {
-        if ($server->runs_coresmith) {
-            return $this->machineRefusal($server, $target, $handOver);
-        }
-
         if (!$target->edition->isCloud()) {
-            return null;
+            return [];
         }
 
         return match (true) {
-            !PublicAddress::is((string) $server->ip_address) => "{$server->name} is at {$server->ip_address}, which Coresmith Cloud can't reach. Give it a public address or remove it from the team, then try again.",
-            $server->tunnel !== null => self::tunnelRefusal($server),
-            default => null,
+            !PublicAddress::is((string) $server->ip_address) => ['code' => "{$server->name} is at {$server->ip_address}, which Coresmith Cloud can't reach. Give it a public address or remove it from the team, then try again."],
+            $server->tunnel !== null => ['code' => self::tunnelRefusal($server)],
+            default => [],
         };
     }
 
-    private function machineRefusal(Server $server, MoveTarget $target, bool $handOver): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function machineRefusal(Server $server, MoveTarget $target, bool $handOver): array
     {
         return match (true) {
-            !$target->edition->isCloud() => "{$server->name} is the machine Coresmith runs on, which can't move to another Coresmith. Remove it from the team, then try again.",
-            !$handOver => "{$server->name} is the machine Coresmith runs on. Agree to hand it over below, or remove it from the team, then try again.",
-            $target->addresses === [] => 'That code is from before Coresmith Cloud could take over the machine Coresmith runs on. Create a new one in Coresmith Cloud, then try again.',
-            self::machineAddress($server) === null => "{$server->name} has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again.",
-            $server->tunnel !== null => self::tunnelRefusal($server),
-            default => null,
+            !$target->edition->isCloud() => ['code' => "{$server->name} is the machine Coresmith runs on, which can't move to another Coresmith. Remove it from the team, then try again."],
+            !$handOver => ['hand_over' => "{$server->name} is the machine Coresmith runs on. Agree to hand it over, or remove it from the team, then try again."],
+            $target->addresses === [] => ['code' => 'That code is from before Coresmith Cloud could take over the machine Coresmith runs on. Create a new one in Coresmith Cloud, then try again.'],
+            self::machineAddress($server) === null => ['hand_over' => "{$server->name} has no public IPv4 address Coresmith Cloud can reach, so it can't move. Remove it from the team, then try again."],
+            $server->tunnel !== null => ['hand_over' => self::tunnelRefusal($server)],
+            default => [],
         };
     }
 

@@ -35,8 +35,8 @@ final class TeamMove
         $target = $this->codes->read($code);
         $refusal = $this->reach->refusal($team, $target, $handOver);
 
-        if ($refusal !== null) {
-            throw ValidationException::withMessages(['code' => $refusal]);
+        if ($refusal !== []) {
+            throw ValidationException::withMessages($refusal);
         }
 
         $machine = $team->servers()->where('runs_coresmith', true)->first();
@@ -45,7 +45,7 @@ final class TeamMove
             try {
                 $this->machine->handOver($target->addresses);
             } catch (ThisMachineRefused $refused) {
-                throw ValidationException::withMessages(['code' => $refused->getMessage()]);
+                throw ValidationException::withMessages(['hand_over' => $refused->getMessage()]);
             }
         }
 

@@ -1938,6 +1938,7 @@ readonly KEY_PATTERN='^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43}$'
 readonly IPV4='^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$'
 readonly IPV6='^[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}$'
 readonly NO_KEY="Coresmith's key isn't on this machine, so there's nothing to hand over. Add this machine as a server again, then try again."
+readonly TAKEN_OVER="Coresmith Cloud has already taken this machine over, so the move can't be cancelled. Remove Coresmith from it instead."
 readonly REQUEST='^([A-Za-z0-9]{1,64}) (add (ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})|remove|handover ([0-9A-Fa-f.:,]+)|keep)$'
 readonly REQUEST_ID='^([A-Za-z0-9]{1,64}) '
 readonly FINGERPRINT='^SHA256:[A-Za-z0-9+/]{43}$'
@@ -2225,20 +2226,24 @@ handover() {
 }
 
 keep() {
-    local key
-
-    save
+    local key=''
 
     if has_block "$KEYS"; then
         key="$(block_key)"
+    fi
 
-        if [[ "$key" =~ $KEY_PATTERN ]]; then
-            {
-                strip "$KEYS"
-                printf '%s\n%s %s coresmith-this-machine\n%s\n' "$BEGIN" "$KEY_OPTIONS" "$key" "$END"
-            } >"$WORK/keys.new"
-            write_keys "$WORK/keys.new"
-        fi
+    if [ -e "$MOVE_DROP_IN" ] && [[ ! "$key" =~ $KEY_PATTERN ]]; then
+        fail "$TAKEN_OVER"
+    fi
+
+    save
+
+    if [[ "$key" =~ $KEY_PATTERN ]]; then
+        {
+            strip "$KEYS"
+            printf '%s\n%s %s coresmith-this-machine\n%s\n' "$BEGIN" "$KEY_OPTIONS" "$key" "$END"
+        } >"$WORK/keys.new"
+        write_keys "$WORK/keys.new"
     fi
 
     rm -f -- "$MOVE_DROP_IN"
