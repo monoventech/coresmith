@@ -38,8 +38,12 @@ function moveHttpOwner(Team $team): User
 function moveHttpCodeText(?User $user = null): string
 {
     $codes = app(MoveCodes::class);
+    $edition = config('coresmith.edition');
+    config(['coresmith.edition' => 'self-hosted']);
+    $text = $codes->text($codes->create($user ?? User::factory()->create()));
+    config(['coresmith.edition' => $edition]);
 
-    return $codes->text($codes->create($user ?? User::factory()->create()));
+    return $text;
 }
 
 function moveHttpPanelOwner(): User

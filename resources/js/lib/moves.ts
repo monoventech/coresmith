@@ -21,6 +21,16 @@ export type Moves = {
     code: MoveCode | null
 }
 
+export type MoveAway = {
+    moving: {
+        since: string
+        to: string
+        where: string
+        file: string | null
+        can_cancel: boolean
+    } | null
+}
+
 export type ServerMove = {
     away: boolean
     state: 'waiting' | 'running' | 'failed' | 'moved'

@@ -14,6 +14,7 @@ use App\Enums\PlanFeature;
 use App\Exceptions\PlanRefusal;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Moves\MoveSide;
 use Closure;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
@@ -29,6 +30,8 @@ final class PlanGate
     public function creatingServer(Team $team, User $user, Closure $create): mixed
     {
         if (Edition::current()->isSelfHosted()) {
+            $this->ensureWritable($team, $user);
+
             return $create();
         }
 
@@ -68,12 +71,12 @@ final class PlanGate
 
     public function ensureWritable(Team $team, User $user): void
     {
-        if (Edition::current()->isSelfHosted()) {
-            return;
+        if ($team->moving_at !== null) {
+            throw PlanRefusal::moving($this->canManage($team, $user), MoveSide::label(Edition::tryFrom((string) $team->moving_edition) ?? Edition::SelfHosted));
         }
 
-        if ($team->moving_at !== null) {
-            throw PlanRefusal::moving($this->canManage($team, $user));
+        if (Edition::current()->isSelfHosted()) {
+            return;
         }
 
         $status = $this->billing->status($team);
@@ -85,11 +88,11 @@ final class PlanGate
 
     public function ensureCanAddServer(Team $team, User $user): void
     {
+        $this->ensureWritable($team, $user);
+
         if (Edition::current()->isSelfHosted()) {
             return;
         }
-
-        $this->ensureWritable($team, $user);
 
         $status = $this->billing->status($team);
         $limit = $status->serverLimit();
@@ -131,11 +134,11 @@ final class PlanGate
 
     public function ensureCanAddMember(Team $team, User $user): void
     {
+        $this->ensureWritable($team, $user);
+
         if (Edition::current()->isSelfHosted()) {
             return;
         }
-
-        $this->ensureWritable($team, $user);
 
         $status = $this->billing->status($team);
         $limit = $status->memberLimit();

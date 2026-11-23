@@ -85,6 +85,7 @@ final class GeneralSettingsController extends Controller
             ])->values(),
             'updates' => $cloud ? null : $updates->present($request->user()),
             'moves' => $moves->forUser($request->user()),
+            'away' => $this->currentTeam() === null ? null : $moves->away($this->currentTeam(), $request->user()),
             'can' => [
                 'manageInstance' => $this->managesInstance($request),
             ],

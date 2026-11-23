@@ -62,4 +62,66 @@ final class MovePresenter
             'preview' => $preview,
         ]];
     }
+
+    /**
+     * @return array{moving: array{since: string, to: string, where: string, file: ?string, can_cancel: bool}|null}|null
+     */
+    public function away(Team $team, User $user): ?array
+    {
+        if (!Edition::current()->isSelfHosted() || !$user->can('manageBilling', $team)) {
+            return null;
+        }
+
+        if ($team->moving_at === null) {
+            return ['moving' => null];
+        }
+
+        return ['moving' => [
+            'since' => $team->moving_at->setTimezone((string) config('app.timezone', 'UTC'))->format('M j, H:i'),
+            'to' => $this->destination($team),
+            'where' => $this->where($team),
+            'file' => $team->move_file === null ? null : route('settings.moving.file'),
+            'can_cancel' => true,
+        ]];
+    }
+
+    /**
+     * @return array{banner: array{tone: string, title: string, body: string, action: ?string}, href: string}|null
+     */
+    public function banner(Team $team, User $user): ?array
+    {
+        if (!Edition::current()->isSelfHosted() || $team->moving_at === null) {
+            return null;
+        }
+
+        $to = $this->destination($team);
+        $manages = $user->can('manageBilling', $team);
+        $upload = "Upload the move file {$this->where($team)} to finish.";
+
+        return [
+            'banner' => [
+                'tone' => 'warning',
+                'title' => "This team is moving to {$to}.",
+                'body' => 'Coresmith has stopped managing its servers, and they keep running. ' . ($manages ? $upload : 'Ask an owner if it should stay here.'),
+                'action' => $manages ? 'See the move' : null,
+            ],
+            'href' => route('settings.general'),
+        ];
+    }
+
+    private function where(Team $team): string
+    {
+        return ($team->moving_edition === Edition::Cloud->value ? 'in ' : 'on ') . $this->destination($team);
+    }
+
+    private function destination(Team $team): string
+    {
+        if ($team->moving_edition === Edition::Cloud->value) {
+            return MoveSide::label(Edition::Cloud);
+        }
+
+        $host = parse_url((string) $team->moving_to, PHP_URL_HOST);
+
+        return is_string($host) && $host !== '' ? $host : 'the Coresmith the team is moving to';
+    }
 }

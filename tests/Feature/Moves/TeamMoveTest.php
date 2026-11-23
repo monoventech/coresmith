@@ -38,8 +38,11 @@ function teamMoveOwner(Team $team): User
 function teamMoveCodeText(): string
 {
     $codes = app(MoveCodes::class);
+    config(['coresmith.edition' => 'self-hosted']);
+    $text = $codes->text($codes->create(User::factory()->create()));
+    CloudBilling::enable();
 
-    return $codes->text($codes->create(User::factory()->create()));
+    return $text;
 }
 
 beforeEach(fn() => CloudBilling::enable());
@@ -49,8 +52,11 @@ test('starting a move pauses the team and keeps a file only that panel can open'
     $team = teamMoveTeam();
     $codes = app(MoveCodes::class);
     $code = $codes->create(User::factory()->create());
+    config(['coresmith.edition' => 'self-hosted']);
+    $text = $codes->text($code);
+    CloudBilling::enable();
 
-    app(TeamMove::class)->start($team, teamMoveOwner($team), $codes->text($code));
+    app(TeamMove::class)->start($team, teamMoveOwner($team), $text);
     $team->refresh();
 
     expect($team->moving_at)->not->toBeNull()
@@ -67,6 +73,16 @@ test('a code that is not one leaves the team as it was', function () {
 
     expect($team->fresh()->moving_at)->toBeNull()
         ->and($team->servers()->first()->status)->toBe(ServerStatus::Active);
+});
+
+test('Coresmith Cloud only sends a team to a self-hosted Coresmith', function () {
+    $team = teamMoveTeam();
+    $codes = app(MoveCodes::class);
+    $cloudCode = $codes->text($codes->create(User::factory()->create()));
+
+    expect(fn() => app(TeamMove::class)->start($team, teamMoveOwner($team), $cloudCode))
+        ->toThrow(ValidationException::class, 'That code comes from Coresmith Cloud. Paste a move code from your self-hosted Coresmith.')
+        ->and($team->fresh()->moving_at)->toBeNull();
 });
 
 test('a moving team refuses changes and says why', function () {

@@ -13,11 +13,12 @@
     import { NativeSelect } from '@/components/ui/native-select'
     import { Textarea } from '@/components/ui/textarea'
     import AddressCard from '@/components/settings/AddressCard.svelte'
+    import MoveAwayCard from '@/components/settings/MoveAwayCard.svelte'
     import MoveTeamCard from '@/components/settings/MoveTeamCard.svelte'
     import PanelUpdatesCard from '@/components/settings/PanelUpdatesCard.svelte'
     import RemoveCoresmithDialog from '@/components/settings/RemoveCoresmithDialog.svelte'
     import type { Address } from '@/lib/address'
-    import type { Moves } from '@/lib/moves'
+    import type { MoveAway, Moves } from '@/lib/moves'
     import type { PanelUpdates } from '@/lib/panelUpdates.svelte'
     import type { Removal } from '@/lib/removal'
     import { cn } from '@/lib/utils'
@@ -42,6 +43,7 @@
         keys = [],
         updates,
         moves = null,
+        away = null,
         removal = null,
         can,
         key_reach = 'none'
@@ -65,6 +67,7 @@
         keys: Key[]
         updates: PanelUpdates | null
         moves?: Moves | null
+        away?: MoveAway | null
         removal?: Removal | null
         can: { manageInstance: boolean }
         key_reach?: 'managed' | 'added' | 'none'
@@ -82,7 +85,9 @@
             none: "Coresmith installs only owners', admins' and developers' keys on servers, so these aren't on any of them."
         }[key_reach]
     )
-    const cardsBeforeDanger = $derived(2 + (updates ? 1 : 0) + (moves ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0))
+    const cardsBeforeDanger = $derived(
+        2 + (updates ? 1 : 0) + (moves ? 1 : 0) + (away ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0)
+    )
 
     let dialog = $state<'key' | 'delete' | 'team' | null>(null)
     let removing = $state(false)
@@ -180,6 +185,9 @@
 
     {#if moves}
         <MoveTeamCard {moves} />
+    {/if}
+    {#if away}
+        <MoveAwayCard {away} />
     {/if}
 
     <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="ssh-keys-card">
