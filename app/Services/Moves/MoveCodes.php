@@ -10,6 +10,7 @@ namespace App\Services\Moves;
 
 use App\Enums\Edition;
 use App\Models\MoveCode;
+use App\Models\Team;
 use App\Models\User;
 use App\Services\Teams\TeamUrls;
 use Carbon\CarbonImmutable;
@@ -23,13 +24,14 @@ final class MoveCodes
 
     public function __construct(private readonly TeamUrls $urls) {}
 
-    public function create(User $user): MoveCode
+    public function create(User $user, ?Team $team = null): MoveCode
     {
         $pair = sodium_crypto_box_keypair();
 
         $code = new MoveCode;
         $code->forceFill([
             'user_id' => $user->getKey(),
+            'team_id' => $team?->getKey(),
             'public_key' => base64_encode(sodium_crypto_box_publickey($pair)),
             'secret_key' => base64_encode($pair),
             'expires_at' => now()->addHours(self::HOURS),

@@ -64,9 +64,9 @@ final class MoveChecks
             $this->backups($payload['backup_destination'] ?? null),
             ...array_map(fn(array $record): ?string => $this->passes($record, ['ref' => ['required'], 'name' => ['required', 'string', 'max:255']]) ? null : self::PART, $this->records($payload, 'projects')),
             ...array_map(fn(array $record): ?string => $this->passes($record, ['ref' => ['required'], 'type' => ['required', Rule::enum(CloudProviderType::class)], 'name' => ['required', 'string', 'max:255'], 'api_token' => ['required', 'string']]) ? null : self::PART, $this->records($payload, 'cloud_providers')),
-            ...array_map(fn(array $record): ?string => $this->passes($record, ['ref' => ['required'], 'type' => ['required', Rule::enum(SourceProviderType::class)], 'custom_host' => ['nullable', 'string', $this->domain(...)]]) ? null : self::PART, $this->records($payload, 'source_providers')),
+            ...array_map(fn(array $record): ?string => $this->passes($record, ['ref' => ['required'], 'custom_host' => ['nullable', 'string', $this->domain(...)]]) ? null : self::PART, $this->known($this->records($payload, 'source_providers'), 'type', SourceProviderType::class)),
             ...array_map(fn(array $record): ?string => $this->passes($record, ['application' => ['required', Rule::in($refs['applications'])], 'secret' => ['required', 'string', 'max:255'], 'provider' => ['required', 'string', 'max:32']]) ? null : self::PART, $this->records($payload, 'webhook_endpoints')),
-            ...array_map(fn(array $record): ?string => $this->passes($record, $this->packageRules($refs)) ? null : self::PART, $this->records($payload, 'package_credentials')),
+            ...array_map(fn(array $record): ?string => $this->passes($record, $this->packageRules($refs)) ? null : self::PART, $this->known($this->records($payload, 'package_credentials'), 'source', PackageSource::class)),
         ];
 
         return array_slice(array_values(array_filter($problems, fn(?string $problem): bool => $problem !== null)), 0, self::LIMIT);
@@ -154,7 +154,6 @@ final class MoveChecks
     private function packageRules(array $refs): array
     {
         return [
-            'source' => ['required', Rule::enum(PackageSource::class)],
             'target' => ['required', 'string', 'max:255'],
             'scope' => ['nullable', 'string', 'max:214'],
             'username' => ['nullable', 'string', 'max:255', 'regex:/^\S+\z/D'],
@@ -208,6 +207,16 @@ final class MoveChecks
         $text = is_string($name) ? Str::of($name)->squish()->limit(60)->toString() : '';
 
         return $text === '' ? $fallback : $text;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $records
+     * @param  class-string<\BackedEnum>  $enum
+     * @return list<array<string, mixed>>
+     */
+    private function known(array $records, string $key, string $enum): array
+    {
+        return array_values(array_filter($records, fn(array $record): bool => $enum::tryFrom((string) ($record[$key] ?? '')) !== null));
     }
 
     /**

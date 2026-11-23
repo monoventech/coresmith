@@ -9,10 +9,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Enums\Edition;
+use App\Enums\ServerStatus;
 use App\Http\Controllers\Controller;
 use App\Models\MoveCode;
 use App\Services\Moves\MoveCodes;
 use App\Services\Moves\MoveFile;
+use App\Services\Moves\MoveSide;
 use App\Services\Moves\TeamImporter;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Http\RedirectResponse;
@@ -27,16 +29,16 @@ final class MoveCodeController extends Controller
         $this->ensureAllowed($request);
 
         MoveCode::query()->where('user_id', $request->user()->getKey())->whereNull('imported_at')->delete();
-        $codes->create($request->user());
+        $codes->create($request->user(), Edition::current()->isCloud() ? $this->currentTeam() : null);
 
-        return back()->with('success', 'Saved. Paste the move code into Coresmith Cloud.');
+        return back()->with('success', 'Saved. Paste the move code into ' . MoveSide::origin() . '.');
     }
 
     public function upload(Request $request, MoveCode $moveCode, MoveFile $files): RedirectResponse
     {
         $this->ensureOwn($request, $moveCode);
 
-        $choose = 'Choose the .coresmith-move file you downloaded from Coresmith Cloud.';
+        $choose = 'Choose the .coresmith-move file you downloaded from ' . MoveSide::origin() . '.';
         $validated = $request->validate(['file' => ['required', 'file', 'max:20480']], ['file.required' => $choose, 'file.file' => $choose, 'file.uploaded' => $choose, 'file.max' => $choose]);
         $upload = $validated['file'];
         $contents = $upload instanceof UploadedFile ? (string) file_get_contents((string) $upload->getRealPath()) : '';
@@ -56,8 +58,12 @@ final class MoveCodeController extends Controller
         }
 
         $team = $importer->import($files->open((string) $moveCode->file, $moveCode), $moveCode, $request->user());
+        $servers = $team->servers()->where('status', ServerStatus::Moving->value)->count();
+        $moved = Edition::current()->isCloud()
+            ? 'Moved. Coresmith Cloud is taking over ' . $servers . ' ' . ($servers === 1 ? 'server' : 'servers') . '.'
+            : "Moved. {$team->name} is here, and its servers are being taken over.";
 
-        return redirect($urls->home($team, $request))->with('success', "Moved. {$team->name} is here, and its servers are being taken over.");
+        return redirect($urls->home($team, $request))->with('success', $moved);
     }
 
     public function destroy(Request $request, MoveCode $moveCode): RedirectResponse
@@ -72,13 +78,24 @@ final class MoveCodeController extends Controller
 
     private function ensureAllowed(Request $request): void
     {
-        abort_unless(Edition::current()->isSelfHosted(), 404);
-        abort_unless($request->user()->managesInstance(), 403);
+        if (Edition::current()->isSelfHosted()) {
+            abort_unless($request->user()->managesInstance(), 403);
+
+            return;
+        }
+
+        $team = $this->currentTeam();
+
+        abort_unless($team !== null && $request->user()->can('manageBilling', $team) && !$team->servers()->exists(), 403);
     }
 
     private function ensureOwn(Request $request, MoveCode $moveCode): void
     {
-        $this->ensureAllowed($request);
+        if (Edition::current()->isSelfHosted()) {
+            $this->ensureAllowed($request);
+        } else {
+            abort_unless($moveCode->team !== null && $request->user()->can('manageBilling', $moveCode->team), 403);
+        }
 
         abort_unless($moveCode->user_id === $request->user()->getKey(), 404);
     }

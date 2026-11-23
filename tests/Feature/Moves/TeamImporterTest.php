@@ -37,8 +37,8 @@ function teamImporterPayload(array $overrides = []): array
         'members' => [['email' => 'ada@acme.test', 'role' => 'admin'], ['email' => 'lin@acme.test', 'role' => 'member']],
         'cloud_providers' => [['ref' => 'cp1', 'type' => 'hetzner', 'name' => 'Hetzner', 'account_label' => 'acme', 'api_token' => 'hetzner-token-moves', 'verified_at' => '2026-11-01T10:00:00+00:00']],
         'servers' => [
-            ['ref' => 's1', 'cloud_provider' => 'cp1', 'name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_port' => 22, 'ssh_user' => 'root', 'ssh_private_key' => $web->privateKey, 'ssh_public_key' => $web->publicKey, 'host_key_fingerprint' => 'SHA256:webkey', 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'meta' => ['cpu_cores' => 2], 'audit_logging_enabled' => true, 'environment' => 'Production', 'region' => 'fsn1', 'booted_at' => null, 'provider_server_id' => '4711', 'provider_size' => 'cx22', 'provider_image' => 'ubuntu-24.04', 'provider_monthly_cost' => '4.35', 'provider_currency' => 'EUR'],
-            ['ref' => 's2', 'cloud_provider' => null, 'name' => 'db-01', 'ip_address' => '203.0.113.11', 'ssh_port' => 2222, 'ssh_user' => 'root', 'ssh_private_key' => $db->privateKey, 'ssh_public_key' => $db->publicKey, 'host_key_fingerprint' => 'SHA256:dbkey', 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => [], 'meta' => null, 'audit_logging_enabled' => false, 'environment' => null, 'region' => null, 'booted_at' => null, 'provider_server_id' => null, 'provider_size' => null, 'provider_image' => null, 'provider_monthly_cost' => null, 'provider_currency' => null],
+            ['ref' => 's1', 'cloud_provider' => 'cp1', 'name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_port' => 22, 'ssh_user' => 'root', 'ssh_private_key' => $web->privateKey, 'ssh_public_key' => $web->publicKey, 'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW', 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'meta' => ['cpu_cores' => 2], 'audit_logging_enabled' => true, 'environment' => 'Production', 'region' => 'fsn1', 'booted_at' => null, 'provider_server_id' => '4711', 'provider_size' => 'cx22', 'provider_image' => 'ubuntu-24.04', 'provider_monthly_cost' => '4.35', 'provider_currency' => 'EUR'],
+            ['ref' => 's2', 'cloud_provider' => null, 'name' => 'db-01', 'ip_address' => '203.0.113.11', 'ssh_port' => 2222, 'ssh_user' => 'root', 'ssh_private_key' => $db->privateKey, 'ssh_public_key' => $db->publicKey, 'host_key_fingerprint' => 'SHA256:DbkDbkDbkDbkDbkDbkDbkDbkDbkDbkDbkDbkDbkDbkD', 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => [], 'meta' => null, 'audit_logging_enabled' => false, 'environment' => null, 'region' => null, 'booted_at' => null, 'provider_server_id' => null, 'provider_size' => null, 'provider_image' => null, 'provider_monthly_cost' => null, 'provider_currency' => null],
         ],
         'source_providers' => [
             ['ref' => 'gh', 'type' => 'github_app', 'name' => 'Acme on GitHub', 'custom_host' => null],
@@ -99,7 +99,7 @@ test('importing recreates the team with its servers waiting to be taken over', f
         ->and($web->cloudProvider?->name)->toBe('Hetzner')
         ->and($web->cloudProvider?->api_token)->toBe('hetzner-token-moves')
         ->and($web->provider_server_id)->toBe('4711')
-        ->and($web->host_key_fingerprint)->toBe('SHA256:webkey')
+        ->and($web->host_key_fingerprint)->toBe('SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW')
         ->and($team->servers()->where('name', 'db-01')->first()->ssh_port)->toBe(2222)
         ->and($site->server_id)->toBe($web->id)
         ->and($site->env_variables)->toContain('DB_PASSWORD=site-db-password')
@@ -195,6 +195,8 @@ test('the preview says what moves and what needs reconnecting', function () {
         'github' => 1,
         'reconnect' => ['GitLab' => 1],
         'webhooks' => 1,
+        'problems' => [],
+        'plan' => null,
     ]);
 });
 

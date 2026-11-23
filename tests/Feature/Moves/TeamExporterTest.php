@@ -44,7 +44,7 @@ function teamExporterTeam(): Team
     $server = Server::factory()->active()->fromProvider($hetzner)->create([
         'name' => 'web-01',
         'ip_address' => '203.0.113.10',
-        'host_key_fingerprint' => 'SHA256:webkey',
+        'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW',
         'provisioning_phase' => 8,
         'installed_runtimes' => ['php' => ['8.5.5']],
     ]);
@@ -87,7 +87,7 @@ test('the export carries the team, its servers, apps and databases with their se
         ->and($payload['from'])->toBe('https://app.coresmith.io')
         ->and($payload['id'])->toBeString()->not->toBeEmpty()
         ->and(collect($payload['members'])->sortBy('email')->values()->all())->toBe([['email' => 'ada@acme.test', 'role' => 'admin', 'sees_everything' => true], ['email' => 'lin@acme.test', 'role' => 'member', 'sees_everything' => false]])
-        ->and($server)->toMatchArray(['name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_user' => 'root', 'host_key_fingerprint' => 'SHA256:webkey', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'provider_size' => 'cx22'])
+        ->and($server)->toMatchArray(['name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_user' => 'root', 'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'provider_size' => 'cx22'])
         ->and($server['ssh_private_key'])->toContain('OPENSSH PRIVATE KEY')
         ->and($server['cloud_provider'])->toBe($payload['cloud_providers'][0]['ref'])
         ->and($payload['cloud_providers'][0])->toMatchArray(['name' => 'Hetzner', 'api_token' => 'hetzner-token-moves'])

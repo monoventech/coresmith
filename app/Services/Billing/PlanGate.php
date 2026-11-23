@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Billing;
 
 use App\Enums\Edition;
+use App\Enums\Plan;
 use App\Enums\PlanFeature;
 use App\Exceptions\PlanRefusal;
 use App\Models\Team;
@@ -97,6 +98,35 @@ final class PlanGate
         if ($limit !== null && $status->plan !== null && $count >= $limit) {
             throw PlanRefusal::servers($status->plan, $count, $this->canManage($team, $user));
         }
+    }
+
+    public function moveRefusal(Team $team, User $user, string $name, int $servers, int $people): ?string
+    {
+        if (Edition::current()->isSelfHosted()) {
+            return null;
+        }
+
+        $status = $this->billing->status($team);
+
+        if ($status->readOnly() || $status->plan === null) {
+            return PlanRefusal::readOnly($status, $this->canManage($team, $user))->getMessage();
+        }
+
+        $limit = $status->serverLimit();
+
+        if ($limit !== null && $servers > $limit) {
+            return $status->plan === Plan::Trial
+                ? "{$name} has {$servers} servers, and the trial includes {$limit}. Choose a plan that fits in Billing, then move the team."
+                : "{$name} has {$servers} servers, and {$status->plan->label()} includes {$limit}. Choose Pro or Business in Billing, then move the team.";
+        }
+
+        $members = $status->memberLimit();
+
+        if ($members !== null && $people > $members) {
+            return "{$name} has {$people} people, and {$status->plan->label()} is for one person. Choose Pro or Business in Billing, then move the team.";
+        }
+
+        return null;
     }
 
     public function ensureCanAddMember(Team $team, User $user): void

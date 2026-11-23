@@ -24,7 +24,7 @@ use Tests\Support\FakeStripe;
 function teamMoveTeam(?Team $team = null): Team
 {
     $team ??= Team::factory()->onTrial()->owned()->create(['name' => 'Acme']);
-    $server = Server::factory()->active()->create(['team_id' => $team->id, 'name' => 'web-01', 'host_key_fingerprint' => 'SHA256:web']);
+    $server = Server::factory()->active()->create(['team_id' => $team->id, 'name' => 'web-01', 'host_key_fingerprint' => 'SHA256:WebWebWebWebWebWebWebWebWebWebWebWebWebWebW']);
     Application::factory()->create(['team_id' => $team->id, 'server_id' => $server->id, 'name' => 'site']);
 
     return $team->fresh();

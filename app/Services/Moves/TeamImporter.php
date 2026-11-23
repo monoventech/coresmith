@@ -26,6 +26,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
+use App\Services\Billing\PlanGate;
 use App\Services\Projects\AppTags;
 use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamSlug;
@@ -35,15 +36,17 @@ use Illuminate\Validation\ValidationException;
 
 final class TeamImporter
 {
-    public const GITHUB_PLACEHOLDER = 'Coresmith Cloud';
-
-    public function __construct(private readonly TeamInvitations $invitations) {}
+    public function __construct(
+        private readonly TeamInvitations $invitations,
+        private readonly MoveChecks $checks,
+        private readonly PlanGate $plans,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $payload
-     * @return array{team: string, from: string, servers: list<string>, applications: int, databases: int, members: int, github: int, reconnect: array<string, int>, webhooks: int}
+     * @return array{team: string, from: string, servers: list<string>, applications: int, databases: int, members: int, github: int, reconnect: array<string, int>, webhooks: int, problems: list<string>, plan: ?string}
      */
-    public function preview(array $payload): array
+    public function preview(array $payload, ?Team $team = null, ?User $user = null): array
     {
         $types = $this->providerTypes($payload);
         $applications = collect($this->records($payload, 'applications'));
@@ -62,6 +65,8 @@ final class TeamImporter
                 ->countBy(fn(SourceProviderType $type): string => $type->label())
                 ->all(),
             'webhooks' => count($this->records($payload, 'webhook_endpoints')),
+            'problems' => $this->checks->problems($payload),
+            'plan' => $team instanceof Team && $user instanceof User ? $this->plans->moveRefusal($team, $user, $this->name($payload), count($this->records($payload, 'servers')), $this->people($payload, $team, $user)) : null,
         ];
     }
 
@@ -70,14 +75,22 @@ final class TeamImporter
      */
     public function import(array $payload, MoveCode $code, User $owner): Team
     {
-        $this->ensureFits($payload);
+        $problems = $this->checks->problems($payload);
 
-        [$team, $servers] = DB::transaction(fn(): array => $this->create($payload, $code, $owner));
+        if ($problems !== []) {
+            $this->refuse($problems[0]);
+        }
+
+        $into = Edition::current()->isCloud() ? $this->landing($payload, $code, $owner) : null;
+
+        $this->ensureFits($payload, $into === null);
+
+        [$team, $servers] = DB::transaction(fn(): array => $this->create($payload, $code, $owner, $into));
 
         foreach ($this->records($payload, 'members') as $member) {
             $email = Str::lower(trim((string) ($member['email'] ?? '')));
 
-            if ($email !== '' && $email !== Str::lower((string) $owner->email) && filter_var($email, FILTER_VALIDATE_EMAIL) !== false) {
+            if ($email !== '' && $email !== Str::lower((string) $owner->email) && filter_var($email, FILTER_VALIDATE_EMAIL) !== false && !$team->members()->where('email', $email)->exists()) {
                 $this->invitations->invite($team, $email, TeamRole::tryFrom((string) ($member['role'] ?? '')) ?? TeamRole::Member, $owner, ($member['sees_everything'] ?? true) !== false);
             }
         }
@@ -93,14 +106,9 @@ final class TeamImporter
      * @param  array<string, mixed>  $payload
      * @return array{0: Team, 1: list<Server>}
      */
-    private function create(array $payload, MoveCode $code, User $owner): array
+    private function create(array $payload, MoveCode $code, User $owner, ?Team $into): array
     {
-        $name = (string) ($payload['team']['name'] ?? '') ?: 'Moved team';
-        $slug = (string) ($payload['team']['slug'] ?? '');
-
-        $team = new Team;
-        $team->forceFill(['name' => $name, 'owner_id' => $owner->getKey(), 'slug' => TeamSlug::isAvailable($slug) ? $slug : TeamSlug::generate($name)])->save();
-        $team->members()->attach($owner->getKey(), ['role' => TeamRole::Owner->value]);
+        $team = $into ?? $this->newTeam($payload, $owner);
 
         $accounts = [];
         foreach ($this->records($payload, 'cloud_providers') as $record) {
@@ -118,7 +126,7 @@ final class TeamImporter
                 'tags' => AppTags::imported(is_array($record['tags'] ?? null) ? $record['tags'] : [$record['environment'] ?? null]),
                 ...MoveColumns::pick($record, MoveColumns::SERVERS),
                 'status' => ServerStatus::Moving,
-                'takeover' => ['state' => 'waiting', 'cloud_key' => (string) $record['ssh_public_key'], 'attempts' => 0, 'error' => null, 'from' => MoveSide::label(Edition::tryFrom((string) ($payload['edition'] ?? '')) ?? Edition::Cloud)],
+                'takeover' => ['state' => 'waiting', 'cloud_key' => (string) $record['ssh_public_key'], 'attempts' => 0, 'error' => null, 'from' => MoveSide::label($this->sender($payload))],
             ])->save();
             $servers[(string) $record['ref']] = $server;
         }
@@ -133,7 +141,7 @@ final class TeamImporter
 
             $provider = new SourceProvider;
             $provider->forceFill(['team_id' => $team->id, 'type' => $type, ...match ($type) {
-                SourceProviderType::GitHubApp => ['name' => self::GITHUB_PLACEHOLDER, 'installation_id' => null, 'access_token' => null],
+                SourceProviderType::GitHubApp => ['name' => ucfirst(MoveSide::label($this->sender($payload))), 'installation_id' => null, 'access_token' => null],
                 SourceProviderType::Custom => ['name' => (string) ($record['name'] ?? 'Custom'), 'custom_host' => $record['custom_host'] ?? null, 'access_token' => null],
                 default => ['name' => (string) ($record['name'] ?? $type->label()), 'access_token' => null],
             }])->save();
@@ -191,7 +199,7 @@ final class TeamImporter
             }
         }
 
-        if (is_array($payload['backup_destination'] ?? null)) {
+        if (is_array($payload['backup_destination'] ?? null) && !$team->backupDestination()->exists()) {
             (new BackupDestination)->forceFill(['team_id' => $team->id, ...MoveColumns::pick($payload['backup_destination'], MoveColumns::BACKUP_DESTINATION)])->save();
         }
 
@@ -206,7 +214,7 @@ final class TeamImporter
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function ensureFits(array $payload): void
+    private function ensureFits(array $payload, bool $local): void
     {
         $servers = $this->records($payload, 'servers');
         $refs = array_map(fn(array $server): string => (string) ($server['ref'] ?? ''), $servers);
@@ -217,11 +225,80 @@ final class TeamImporter
             $this->refuse('This move file is missing parts of the team. Download it again from ' . MoveSide::origin() . '.');
         }
 
-        $taken = Server::query()->whereIn('ip_address', array_column($servers, 'ip_address'))->value('ip_address');
+        $taken = $local ? Server::query()->whereIn('ip_address', array_column($servers, 'ip_address'))->value('ip_address') : null;
 
         if ($taken !== null) {
             $this->refuse("{$taken} is already a server here. Remove it first, then upload the file again.");
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function newTeam(array $payload, User $owner): Team
+    {
+        $name = $this->name($payload);
+        $slug = (string) ($payload['team']['slug'] ?? '');
+
+        $team = new Team;
+        $team->forceFill(['name' => $name, 'owner_id' => $owner->getKey(), 'slug' => TeamSlug::isAvailable($slug) ? $slug : TeamSlug::generate($name)])->save();
+        $team->members()->attach($owner->getKey(), ['role' => TeamRole::Owner->value]);
+
+        return $team;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function landing(array $payload, MoveCode $code, User $owner): Team
+    {
+        $team = $code->team;
+
+        if (!$team instanceof Team) {
+            $this->refuse('This move code belongs to no team. Create a new one, then download the file again from ' . MoveSide::origin() . '.');
+        }
+
+        if ($team->servers()->exists()) {
+            $this->refuse('This team already has servers. Remove them before you move a team in.');
+        }
+
+        $refusal = $this->plans->moveRefusal($team, $owner, $this->name($payload), count($this->records($payload, 'servers')), $this->people($payload, $team, $owner));
+
+        if ($refusal !== null) {
+            $this->refuse($refusal);
+        }
+
+        return $team;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function people(array $payload, Team $team, User $owner): int
+    {
+        $members = $team->members()->pluck('email')->map(fn(mixed $email): string => Str::lower((string) $email))->all();
+        $invited = collect($this->records($payload, 'members'))
+            ->map(fn(array $member): string => Str::lower(trim((string) ($member['email'] ?? ''))))
+            ->filter(fn(string $email): bool => $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false && $email !== Str::lower((string) $owner->email) && !in_array($email, $members, true))
+            ->unique();
+
+        return count($members) + $invited->count();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function name(array $payload): string
+    {
+        return (string) ($payload['team']['name'] ?? '') ?: 'Moved team';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function sender(array $payload): Edition
+    {
+        return Edition::tryFrom((string) ($payload['edition'] ?? '')) ?? Edition::Cloud;
     }
 
     /**
