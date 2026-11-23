@@ -135,6 +135,8 @@ test('a helper from before handovers says to run the installer again', function 
     thisMachineServiceHelper(thisMachineServiceFolder(), fn(string $what): array => ['ok' => false, 'error' => "The request wasn't one Coresmith's helper accepts, so nothing changed."]);
 
     expect(fn() => app(ThisMachine::class)->handOver(['88.99.12.121']))
+        ->toThrow(ThisMachineRefused::class, "This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.")
+        ->and(fn() => app(ThisMachine::class)->keep())
         ->toThrow(ThisMachineRefused::class, "This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.");
 });
 

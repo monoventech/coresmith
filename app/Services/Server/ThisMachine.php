@@ -65,16 +65,21 @@ final class ThisMachine
      */
     public function handOver(array $addresses, int $seconds = self::ANSWER_SECONDS): void
     {
-        try {
-            $this->ask('handover ' . implode(',', $addresses), $seconds);
-        } catch (ThisMachineRefused $refused) {
-            throw $refused->getMessage() === self::UNKNOWN_REQUEST ? new ThisMachineRefused("This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.") : $refused;
-        }
+        $this->askNewer('handover ' . implode(',', $addresses), $seconds);
     }
 
     public function keep(int $seconds = self::ANSWER_SECONDS): void
     {
-        $this->ask('keep', $seconds);
+        $this->askNewer('keep', $seconds);
+    }
+
+    private function askNewer(string $what, int $seconds): void
+    {
+        try {
+            $this->ask($what, $seconds);
+        } catch (ThisMachineRefused $refused) {
+            throw $refused->getMessage() === self::UNKNOWN_REQUEST ? new ThisMachineRefused("This machine's helper is from before Coresmith could hand it over. Run the installer again, then try again.") : $refused;
+        }
     }
 
     /**
