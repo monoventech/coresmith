@@ -28,7 +28,7 @@ final class TerminalChanges
         return array_values(array_filter([
             (int) ($before['key'] ?? 0) > 0 && ($after['key'] ?? '') === '0' ? self::lostKey($server) : null,
             $changed('sudo') ? ['key' => 'sudo', 'title' => "Coresmith's account", 'detail' => "The server's sudo rules changed. If Coresmith can no longer act as root there, its next check on the server says so."] : null,
-            $changed('units') ? ['key' => 'units', 'title' => "The apps' processes", 'detail' => "Settings Coresmith keeps for the apps' processes changed. Each app's next deploy writes them again."] : null,
+            $changed('units') ? ['key' => 'units', 'title' => "The apps' process settings", 'detail' => "Settings Coresmith keeps for the apps' processes changed. Each app's next deploy writes them again."] : null,
             $changed('settings') ? ['key' => 'settings', 'title' => "The apps' settings", 'detail' => "Files Coresmith keeps for the apps, such as their environment variables, changed. Each app's next deploy writes them again."] : null,
             $changed('web') ? ['key' => 'web', 'title' => "The web server's settings", 'detail' => "The web server's settings changed. Coresmith may replace these changes the next time it updates an app's addresses."] : null,
             $changed('firewall') ? ['key' => 'firewall', 'title' => 'The firewall rules', 'detail' => "The firewall rules changed. The server's Hardening tab shows what's open now, and can put Coresmith's rules back."] : null,

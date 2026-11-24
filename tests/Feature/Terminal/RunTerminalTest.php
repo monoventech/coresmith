@@ -17,6 +17,7 @@ use App\Models\TerminalSession;
 use App\Models\User;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Terminal\ServerFingerprint;
+use App\Services\Terminal\TerminalChanges;
 use App\Services\Terminal\TerminalInbox;
 use App\Services\Terminal\TerminalScreen;
 use Illuminate\Support\Facades\Event;
@@ -341,6 +342,13 @@ test('the check after a session names what changed and writes it to Activity', f
     expect(array_column($session->fresh()->changes, 'key'))->toBe(['firewall', 'processes'])
         ->and($session->fresh()->changes[1]['detail'])->toBe("These stopped: shop's worker. Start them again from each app's page.")
         ->and(Activity::query()->where('description', 'terminal_changed')->sole()->properties['changes'])->toBe(['The firewall rules', "The apps' processes"]);
+});
+
+test('changed process settings and stopped processes read as two different changes', function () {
+    $server = runTerminalSession()->server;
+    $changes = app(TerminalChanges::class)->between($server, ['units' => 'b1', 'processes' => 'coresmith-app-shop-worker'], ['units' => 'b2', 'processes' => '']);
+
+    expect(array_column($changes, 'title'))->toBe(["The apps' process settings", "The apps' processes"]);
 });
 
 test('a session that changed nothing says so', function () {
