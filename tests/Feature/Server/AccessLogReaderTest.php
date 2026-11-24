@@ -136,3 +136,32 @@ test('recent requests are read from the tail of the caddy access log for the app
     expect($transport->commands())->toBe(["test -f '/var/log/caddy/access.log' && tail -n 2000 '/var/log/caddy/access.log' || true"])
         ->and(array_column($lines, 'text'))->toBe(['GET /www 200 12ms']);
 });
+
+test('a request keeps who asked, with which browser, from where, and how much came back, with secrets masked', function () {
+    $request = (new AccessLogReader)->request(json_decode(accessLogLine([
+        'request' => [
+            'method' => 'POST',
+            'uri' => '/api/pay?token=abc123&order=9',
+            'client_ip' => '203.0.113.42',
+            'proto' => 'HTTP/2.0',
+            'headers' => ['User-Agent' => ['Mozilla/5.0 (Macintosh) Safari/605.1.15'], 'Referer' => ['https://shop.example.com/checkout?session=xyz']],
+        ],
+        'status' => 500,
+        'duration' => 1.2,
+        'size' => 412,
+    ]), true), ['shop.example.com']);
+
+    expect($request)->toBe([
+        'at' => 1789308309.482,
+        'method' => 'POST',
+        'path' => '/api/pay?token=•••&order=9',
+        'status' => 500,
+        'ms' => 1200,
+        'bytes' => 412,
+        'ip' => '203.0.113.42',
+        'agent' => 'Mozilla/5.0 (Macintosh) Safari/605.1.15',
+        'referer' => 'https://shop.example.com/checkout?session=•••',
+        'host' => 'shop.example.com',
+        'proto' => 'HTTP/2.0',
+    ]);
+});
