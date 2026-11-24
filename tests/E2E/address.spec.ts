@@ -105,7 +105,7 @@ test.describe("Coresmith's address", () => {
     test("with the tunnel off on this machine, the warning sends people to this machine's Network tab and leaves the records out", async ({
         page
     }) => {
-        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', machine: '/servers/beelink' })
+        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', machine: '/servers/beelink/network' })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
             "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. To reach them, turn on IPv4 through Cloudflare on this machine's Network tab. If its IPv4 address is yours alone, you can instead forward ports 80 and 443 to this machine and add an A record."
@@ -117,7 +117,7 @@ test.describe("Coresmith's address", () => {
     test("with the tunnel on but not carrying the address yet, the warning says so and links to this machine's Network tab", async ({
         page
     }) => {
-        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'on', machine: '/servers/beelink' })
+        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'on', machine: '/servers/beelink/network' })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
             "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. This machine's Cloudflare tunnel doesn't carry it yet. See why on this machine's Network tab."
@@ -128,7 +128,12 @@ test.describe("Coresmith's address", () => {
     test("with IPv4 through another server on but not carrying the address yet, the warning names that server and links to this machine's Network tab", async ({
         page
     }) => {
-        await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', front_door: 'web-1', machine: '/servers/beelink' })
+        await settingsShowing(page, {
+            ...IPV6_ONLY,
+            tunnel: 'off',
+            front_door: 'web-1',
+            machine: '/servers/beelink/network'
+        })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
             "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. It doesn't go through web-1 yet. See why on this machine's Network tab."
@@ -353,7 +358,7 @@ test.describe('Cloudflare DNS for the address', () => {
                 host: 'coresmith.example.com',
                 error: null,
                 synced: '3 minutes ago',
-                tunnel: { name: 'beelink', url: '/servers/beelink' }
+                tunnel: { name: 'beelink', url: '/servers/beelink/network' }
             }
         })
 
@@ -365,7 +370,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await expect(dns.getByTestId('address-dns-in-use')).toHaveText(
             'The tunnel on beelink uses this token, so you can replace it but not disconnect it.'
         )
-        await expect(dns.getByRole('link', { name: 'beelink' })).toHaveAttribute('href', '/servers/beelink')
+        await expect(dns.getByRole('link', { name: 'beelink' })).toHaveAttribute('href', '/servers/beelink/network')
         await expect(dns.getByRole('button', { name: 'Disconnect' })).toHaveCount(0)
 
         await dns.getByRole('button', { name: 'Replace token' }).click()
@@ -391,7 +396,7 @@ test.describe('Cloudflare DNS for the address', () => {
     test("a check's note that sends you to this machine's Network tab links to it", async ({ page }) => {
         const connected = {
             cloudflare: { connected: false, host: null, error: null, synced: null },
-            machine: '/servers/beelink'
+            machine: '/servers/beelink/network'
         }
         const passed = {
             host: 'coresmith.example.com',
@@ -414,7 +419,7 @@ test.describe('Cloudflare DNS for the address', () => {
 
         await expect(
             dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's Network tab" })
-        ).toHaveAttribute('href', '/servers/beelink')
+        ).toHaveAttribute('href', '/servers/beelink/network')
     })
 
     test('a check refused for a reason pointing the domain cannot fix leaves out the Cloudflare button and links the page that can', async ({
@@ -422,7 +427,7 @@ test.describe('Cloudflare DNS for the address', () => {
     }) => {
         const connected = {
             cloudflare: { connected: true, host: null, error: null, synced: null },
-            machine: '/servers/beelink'
+            machine: '/servers/beelink/network'
         }
         const refused = {
             host: 'coresmith.example.com',
@@ -448,7 +453,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toHaveCount(0)
         await expect(
             dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's Network tab" })
-        ).toHaveAttribute('href', '/servers/beelink')
+        ).toHaveAttribute('href', '/servers/beelink/network')
     })
 
     for (const theme of ['light', 'dark'] as const) {
@@ -457,13 +462,13 @@ test.describe('Cloudflare DNS for the address', () => {
             await settingsShowing(page, {
                 ...IPV6_ONLY,
                 tunnel: 'off',
-                machine: '/servers/beelink',
+                machine: '/servers/beelink/network',
                 cloudflare: {
                     connected: true,
                     host: 'coresmith.example.com',
                     error: null,
                     synced: '3 minutes ago',
-                    tunnel: { name: 'beelink', url: '/servers/beelink' }
+                    tunnel: { name: 'beelink', url: '/servers/beelink/network' }
                 }
             })
             await expect(card(page).getByTestId('address-machine-link')).toBeVisible()

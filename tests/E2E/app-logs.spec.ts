@@ -223,21 +223,21 @@ test.describe("an app's logs", () => {
     test('new lines arrive while following, and while you read earlier ones a button counts them', async ({
         page
     }, testInfo) => {
-        let extra = 0
+        let extra = 30
 
         await fakeLines(page, () => ({ extra }))
         await openLogs(page, isMobile(testInfo))
-        await expect(timeline(page)).toContainText('Processing SendReceipt')
+        await expect(timeline(page)).toContainText('Processing SyncInventory, job 5629')
 
         await timeline(page).evaluate((element) => (element.scrollTop = 0))
-        extra = 3
+        extra = 33
 
         const jump = page.getByTestId('logs-new')
 
         await expect(jump).toHaveText('3 new lines', { timeout: 6_000 })
         await jump.click()
         await expect(jump).toBeHidden()
-        await expect(timeline(page)).toContainText('Processing SyncInventory, job 5602')
+        await expect(timeline(page)).toContainText('Processing SyncInventory, job 5632')
     })
 
     test('Pause stops following and Resume picks it up again', async ({ page }, testInfo) => {
