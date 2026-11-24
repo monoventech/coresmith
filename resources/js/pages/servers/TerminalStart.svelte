@@ -203,15 +203,16 @@
             {#if password}
                 <div>
                     <Label for="terminal-password" class="mb-1.5">Your password</Label>
-                    <PasswordInput
-                        id="terminal-password"
-                        name="password"
-                        required
-                        autocomplete="current-password"
-                        class="max-w-80"
-                        aria-invalid={errors.password ? true : undefined}
-                        aria-describedby="terminal-password-hint"
-                    />
+                    <div class="max-w-80">
+                        <PasswordInput
+                            id="terminal-password"
+                            name="password"
+                            required
+                            autocomplete="current-password"
+                            aria-invalid={errors.password ? true : undefined}
+                            aria-describedby="terminal-password-hint"
+                        />
+                    </div>
                     <p id="terminal-password-hint" class="m-0 mt-1.5 text-[12.5px] text-muted-foreground">
                         Asked once every 15 minutes.
                     </p>
