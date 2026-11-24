@@ -25,6 +25,7 @@ use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Panel\Realtime;
 use App\Services\Teams\TeamAccess;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,8 @@ use Inertia\Response;
 
 final class DeploymentController extends Controller
 {
+    public const LOG_PIECE_BYTES = 262_144;
+
     public const ORIGINS = ['fleet', 'deployments', 'app', 'releases', 'setup', 'project'];
 
     public function deploy(Request $request, Server $server, Application $application, DeployGuard $guard): RedirectResponse
@@ -83,6 +86,7 @@ final class DeploymentController extends Controller
             ],
             'deployment_links' => [
                 'cancel' => route('servers.applications.deployments.cancel', [$server, $application, $deployment]),
+                'log' => route('servers.applications.deployments.log', [$server, $application, $deployment]),
             ],
             'deployment' => self::present($deployment, $phases),
             'back' => $this->back((string) $request->query('from'), $server, $application, $request->user()),
@@ -134,6 +138,37 @@ final class DeploymentController extends Controller
         };
     }
 
+    public function log(Request $request, Server $server, Application $application, Deployment $deployment, DeploymentPhases $phases): JsonResponse
+    {
+        $this->authorize('view', $application);
+
+        abort_unless($application->server_id === $server->id, 404);
+        abort_unless($deployment->application_id === $application->id, 404);
+
+        $deployment->setRelation('application', $application->setRelation('server', $server));
+        $log = (string) $deployment->log;
+        $from = max(0, min($request->integer('from'), strlen($log)));
+
+        while ($from > 0 && $from < strlen($log) && (ord($log[$from]) & 0xC0) === 0x80) {
+            $from--;
+        }
+
+        return response()->json([
+            'from' => $from,
+            'text' => mb_strcut($log, $from, self::LOG_PIECE_BYTES, 'UTF-8'),
+            'bytes' => strlen($log),
+            'deployment' => self::presentStatus($deployment, $phases),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function presentStatus(Deployment $deployment, DeploymentPhases $phases): array
+    {
+        return array_diff_key(self::present($deployment, $phases), ['log' => true]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -147,6 +182,7 @@ final class DeploymentController extends Controller
             'status' => $deployment->status->value,
             'state' => DeploymentPresenter::state($deployment),
             'log' => (string) $deployment->log,
+            'log_bytes' => strlen((string) $deployment->log),
             'phases' => $states,
             'failed_phase' => $failed['key'] ?? null,
             'failure_reason' => $deployment->failure_reason,

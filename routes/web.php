@@ -173,6 +173,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.releases.index');
     Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
         ->name('servers.applications.deployments.show');
+    Route::get('servers/{server}/applications/{application}/deployments/{deployment}/log', [DeploymentController::class, 'log'])
+        ->middleware('throttle:120,1,deploy-log')
+        ->name('servers.applications.deployments.log');
     Route::post('servers/{server}/applications/{application}/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])
         ->middleware('throttle:10,1,deploy-cancel')
         ->name('servers.applications.deployments.cancel');

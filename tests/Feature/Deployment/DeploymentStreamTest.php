@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Broadcasting\DeploymentChannel;
 use App\Enums\DeploymentStatus;
 use App\Enums\TeamRole;
+use App\Events\DeploymentLogAppended;
 use App\Events\DeploymentUpdated;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -80,7 +81,7 @@ test('the update is broadcast on a channel private to that deployment', function
         ->and($event->broadcastAs())->toBe('deployment.updated');
 });
 
-test('the broadcast payload carries the log and status the page needs', function () {
+test('a status update carries the status and how long the log is, never the log itself', function () {
     $deployment = deploymentFor(Team::factory()->create());
     $deployment->forceFill([
         'status' => DeploymentStatus::Running,
@@ -90,10 +91,21 @@ test('the broadcast payload carries the log and status the page needs', function
 
     $payload = (new DeploymentUpdated($deployment->fresh()))->broadcastWith();
 
-    expect($payload)->toHaveKeys(['id', 'status', 'log', 'started_at', 'finished_at'])
+    expect($payload)->toHaveKeys(['id', 'status', 'log_bytes', 'started_at', 'finished_at'])
         ->and($payload['status'])->toBe('running')
-        ->and($payload['log'])->toBe("composer install\nnpm run build")
+        ->and($payload['log_bytes'])->toBe(strlen("composer install\nnpm run build"))
+        ->and($payload)->not->toHaveKey('log')
         ->and($payload)->not->toHaveKey('application');
+});
+
+test('a piece of the log is broadcast on the deployment channel with only its offset and text', function () {
+    $deployment = deploymentFor(Team::factory()->create());
+    $event = new DeploymentLogAppended($deployment->id, 42, "\n\$ npm ci");
+
+    expect($event->broadcastOn())->toHaveCount(1)
+        ->and($event->broadcastOn()[0]->name)->toBe('private-deployments.' . $deployment->id)
+        ->and($event->broadcastAs())->toBe('deployment.log')
+        ->and($event->broadcastWith())->toBe(['offset' => 42, 'text' => "\n\$ npm ci"]);
 });
 
 function deploymentStreamRunning(int $lines): Deployment
@@ -125,12 +137,12 @@ test('every update fits the socket server with room for its headers, however lon
     expect(deploymentStreamRequestBytes($deployment, $payload) + 1_000)->toBeLessThanOrEqual((int) config('reverb.servers.reverb.max_request_size'));
 })->with([1, 40, 70, 85, 100, 400]);
 
-test('a log too long for the socket stays behind and the page fetches it', function () {
+test('a status update for a long log still says how long it is, so the page can fetch what it missed', function () {
     $deployment = deploymentStreamRunning(400);
 
     $payload = (new DeploymentUpdated($deployment))->broadcastWith();
 
-    expect($payload['log'])->toBeNull()
+    expect($payload['log_bytes'])->toBe(strlen((string) $deployment->log))
         ->and($payload['status'])->toBe('running')
         ->and($payload['id'])->toBe($deployment->getKey());
 });

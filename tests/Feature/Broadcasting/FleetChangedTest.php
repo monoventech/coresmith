@@ -8,6 +8,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Events\DeploymentFailed;
+use App\Events\DeploymentLogAppended;
 use App\Events\DeploymentSucceeded;
 use App\Events\DeploymentUpdated;
 use App\Events\FleetChanged;
@@ -578,7 +579,7 @@ test('a ping that cannot be queued is reported and never thrown at the caller', 
 })->with(['server', 'application', 'deployment']);
 
 test('a deploy runs to the end and frees its lock when its ping cannot be queued', function () {
-    Event::fake([DeploymentUpdated::class, DeploymentSucceeded::class]);
+    Event::fake([DeploymentUpdated::class, DeploymentLogAppended::class, DeploymentSucceeded::class]);
     Exceptions::fake();
     $deployment = fleetPingDeployment();
     config(['broadcasting.default' => 'reverb']);
