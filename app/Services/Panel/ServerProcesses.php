@@ -63,6 +63,30 @@ final class ServerProcesses
     }
 
     /**
+     * @return list<array{process: string, state: array{key: string, label: string, tone: string}, memory: string|null, restarts: int, since: string|null}>
+     */
+    public function ofApplication(Application $application): array
+    {
+        return AppProcess::query()
+            ->where('application_id', $application->getKey())
+            ->orderBy('process')
+            ->get()
+            ->map(function (AppProcess $process) use ($application): array {
+                $restarts = $process->restartsToday();
+
+                return [
+                    'process' => $process->process,
+                    'state' => $this->state($application, $process, $restarts),
+                    'memory' => $process->memory_bytes === null ? null : Formats::size(intdiv($process->memory_bytes, 1048576)),
+                    'restarts' => $restarts,
+                    'since' => $process->active_state === 'active' ? Formats::when($process->started_at) : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array{key: string, label: string, tone: string}
      */
     private function state(Application $application, AppProcess $process, int $restarts): array

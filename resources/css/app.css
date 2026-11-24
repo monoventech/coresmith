@@ -485,6 +485,85 @@ input[type='search']::-webkit-search-cancel-button {
         opacity: 0.65;
     }
 
+    .terminal .log-row {
+        display: grid;
+        grid-template-columns: 4.25rem 3.75rem minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: baseline;
+        padding: 3px 10px;
+        border-radius: 6px;
+    }
+
+    .terminal .log-row:hover {
+        background: oklch(0.22 0.01 60);
+    }
+
+    .terminal .log-row .log-time {
+        color: oklch(0.64 0.01 80);
+    }
+
+    .terminal .log-tag {
+        justify-self: start;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 0 5px;
+        border: 1px solid oklch(0.36 0.01 60);
+        border-radius: 4px;
+        font-size: 11px;
+        line-height: 18px;
+        color: oklch(0.76 0.01 80);
+    }
+
+    .terminal .log-row-error {
+        background: oklch(0.21 0.03 25);
+    }
+
+    .terminal .log-row-error .log-tag {
+        color: oklch(0.82 0.14 25);
+        border-color: oklch(0.45 0.1 25);
+    }
+
+    .terminal .log-row-error .log-text {
+        color: oklch(0.86 0.09 25);
+    }
+
+    .terminal .log-row-warning .log-text {
+        color: oklch(0.88 0.13 75);
+    }
+
+    .terminal .log-row-selected {
+        background: oklch(0.25 0.03 45);
+        outline: 1px solid oklch(0.45 0.08 45);
+    }
+
+    .terminal .log-status-ok {
+        color: oklch(0.84 0.13 150);
+    }
+
+    .terminal .log-status-warn {
+        color: oklch(0.88 0.13 75);
+    }
+
+    .terminal .log-status-error {
+        color: oklch(0.82 0.14 25);
+    }
+
+    .terminal .log-link {
+        color: oklch(0.84 0.14 45);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    @media (max-width: 639px) {
+        .terminal .log-row {
+            grid-template-columns: 3.75rem 3rem minmax(0, 1fr);
+            gap: 0.5rem;
+            padding: 3px 6px;
+        }
+    }
+
     .log-pill {
         border-color: oklch(0.4 0.01 60);
         background: oklch(0.24 0.01 60);
