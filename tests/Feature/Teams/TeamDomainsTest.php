@@ -68,15 +68,6 @@ test('a domain that is not a domain, the panel itself or already taken is refuse
     'another team' => ['taken.example.com', 'Another team already uses that domain.'],
 ]);
 
-test('a domain under the tenant domain is refused because the team already has one there', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
-    [$user] = teamDomainsOwner();
-
-    $this->actingAs($user)
-        ->post(route('settings.team-domain.store'), ['hostname' => 'acme.coresmith.test'])
-        ->assertSessionHasErrors(['hostname' => 'Addresses under coresmith.test already come with your team address.']);
-});
-
 test('changing the domain issues a new token and forgets the old verification', function () {
     [$user, $team] = teamDomainsOwner();
     $old = TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'old.acme.test']);
@@ -160,7 +151,7 @@ test('checking or removing when there is no domain is not found', function () {
     $this->actingAs($user)->delete(route('settings.team-domain.destroy'))->assertNotFound();
 });
 
-test('the team page shows the team address, and the subdomain when the instance has a tenant domain', function () {
+test('the team page shows the team address', function () {
     [$user] = teamDomainsOwner();
 
     $this->actingAs($user)
@@ -168,20 +159,13 @@ test('the team page shows the team address, and the subdomain when the instance 
         ->assertInertia(fn($page) => $page
             ->where('team.slug', 'acme')
             ->where('address.path', 'http://localhost/acme')
-            ->where('address.subdomain', null)
             ->where('address.domain', null)
             ->where('address.custom_domains', true)
             ->where('can.update', true));
-
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
-
-    $this->actingAs($user)
-        ->get('http://localhost/acme/settings/team')
-        ->assertInertia(fn($page) => $page->where('address.subdomain', 'http://acme.coresmith.test'));
 });
 
-test('on Cloud the team page offers no subdomain or custom domain, even one saved before', function () {
-    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+test('on Cloud the team page offers no custom domain, even one saved before', function () {
+    config(['coresmith.edition' => 'cloud']);
     [$user, $team] = teamDomainsOwner();
     TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
 
@@ -189,23 +173,20 @@ test('on Cloud the team page offers no subdomain or custom domain, even one save
         ->get('/acme/settings/team')
         ->assertInertia(fn($page) => $page
             ->where('address.path', 'http://localhost/acme')
-            ->where('address.subdomain', null)
             ->where('address.domain', null)
             ->where('address.custom_domains', false));
 });
 
 test('on Cloud caddy may issue a certificate for Coresmith itself and no team host', function () {
-    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+    config(['coresmith.edition' => 'cloud']);
     $team = Team::factory()->create(['slug' => 'acme']);
     TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
 
     $this->get(route('caddy.ask', ['domain' => 'localhost']))->assertOk();
     $this->get(route('caddy.ask', ['domain' => 'panel.acme.test']))->assertNotFound();
-    $this->get(route('caddy.ask', ['domain' => 'acme.coresmith.test']))->assertNotFound();
 });
 
-test('caddy may issue certificates for the panel, verified domains and team subdomains only', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
+test('caddy may issue certificates for the panel and verified domains only', function () {
     $team = Team::factory()->create(['slug' => 'acme']);
     TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
     TeamDomain::factory()->for(Team::factory())->create(['hostname' => 'pending.example.com']);
@@ -213,9 +194,8 @@ test('caddy may issue certificates for the panel, verified domains and team subd
     $this->get(route('caddy.ask', ['domain' => 'localhost']))->assertOk();
     $this->get(route('caddy.ask', ['domain' => 'panel.acme.test']))->assertOk();
     $this->get(route('caddy.ask', ['domain' => 'PANEL.ACME.TEST.']))->assertOk();
-    $this->get(route('caddy.ask', ['domain' => 'acme.coresmith.test']))->assertOk();
+    $this->get(route('caddy.ask', ['domain' => 'acme.coresmith.test']))->assertNotFound();
     $this->get(route('caddy.ask', ['domain' => 'pending.example.com']))->assertNotFound();
-    $this->get(route('caddy.ask', ['domain' => 'nobody.coresmith.test']))->assertNotFound();
     $this->get(route('caddy.ask', ['domain' => 'evil.example.com']))->assertNotFound();
     $this->get(route('caddy.ask'))->assertNotFound();
 });

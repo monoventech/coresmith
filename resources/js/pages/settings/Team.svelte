@@ -37,7 +37,6 @@
 
     type Address = {
         path: string
-        subdomain: string | null
         domain: {
             hostname: string
             url: string
@@ -250,7 +249,7 @@
 {/if}
 
 <div class={cn('mt-4 grid items-stretch gap-4', address.custom_domains && 'grid-cols-2 max-[900px]:grid-cols-1')}>
-    <TeamAddressCard slug={team.slug} path={address.path} subdomain={address.subdomain} canUpdate={can.update} />
+    <TeamAddressCard slug={team.slug} path={address.path} canUpdate={can.update} />
     {#if address.custom_domains}
         <CustomDomainCard domain={address.domain} canUpdate={can.update} />
     {/if}

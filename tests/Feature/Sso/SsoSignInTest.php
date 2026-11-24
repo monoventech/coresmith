@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TeamRole;
 use App\Models\SsoIdentity;
+use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Services\Sso\PendingSsoLink;
@@ -602,47 +603,48 @@ test('signing in returns to the page that asked for it', function () {
 });
 
 test('signing in on a team host stays on that host', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
     $team = ssoTeam();
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
     ssoConnection($team);
     $member = ssoLinkedMember($team);
 
-    $flow = ssoStart('http://acme.coresmith.test/sso/acme/start');
+    $flow = ssoStart('http://panel.acme.test/sso/acme/start');
 
-    expect($flow['redirect_uri'])->toBe('http://acme.coresmith.test/sso/callback');
+    expect($flow['redirect_uri'])->toBe('http://panel.acme.test/sso/callback');
 
     ssoFakeToken(ssoToken(ssoClaims($flow['nonce'])));
 
-    ssoCallback($flow['state'], 'http://acme.coresmith.test')->assertRedirect('http://acme.coresmith.test/dashboard');
+    ssoCallback($flow['state'], 'http://panel.acme.test')->assertRedirect('http://panel.acme.test/dashboard');
 
     $this->assertAuthenticatedAs($member);
 
     Http::assertSent(fn(HttpRequest $request): bool => $request->url() === 'https://idp.example.test/token'
-        && $request['redirect_uri'] === 'http://acme.coresmith.test/sso/callback');
+        && $request['redirect_uri'] === 'http://panel.acme.test/sso/callback');
 });
 
 test('a callback on another host than the one that started is refused', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
     $team = ssoTeam();
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
     ssoConnection($team);
     ssoMember($team, TeamRole::Member, ['email' => 'ada@example.test']);
 
     $flow = ssoStart();
     ssoFakeToken(ssoToken(ssoClaims($flow['nonce'])));
 
-    ssoCallback($flow['state'], 'http://acme.coresmith.test')
-        ->assertRedirect('http://acme.coresmith.test/login')
+    ssoCallback($flow['state'], 'http://panel.acme.test')
+        ->assertRedirect('http://panel.acme.test/login')
         ->assertSessionHas('error', 'That sign-in attempt started on a different address. Start again from the sign-in page.');
 
     $this->assertGuest();
 });
 
 test('a team host only starts sign-in for its own team', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
-    ssoConnection(ssoTeam());
+    $team = ssoTeam();
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
+    ssoConnection($team);
     ssoConnection(ssoTeam('other'), ['email_domain' => 'other.test']);
 
-    $this->get('http://acme.coresmith.test/sso/other/start')->assertNotFound();
+    $this->get('http://panel.acme.test/sso/other/start')->assertNotFound();
     $this->get('http://localhost/sso/missing-team/start')->assertNotFound();
 
     expect(session(SignInState::SESSION_KEY))->toBeNull();
