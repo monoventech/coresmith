@@ -88,6 +88,38 @@ test('the framework and scheduler logs are read as the app\'s own user, never as
         ->toContain('logs/scheduler.log');
 });
 
+test('a quiet source keeps its lines when a busy one fills the read, and so do errors', function () {
+    $now = now()->getTimestamp();
+    $root = implode("\n", [
+        '==BOUNDARY== meta', (string) $now, '+0000',
+        '==BOUNDARY== requests', '0 0',
+        appLogsAccess($now - 3000, '/early-failure', 500),
+        ...array_map(fn(int $index): string => appLogsAccess($now - 1000 + $index, "/page-{$index}"), range(1, 700)),
+        '==BOUNDARY== process worker', '120 ' . $now,
+        now()->subSeconds(2000)->format('Y-m-d H:i:s') . ' Processing SendReceipt',
+        '',
+    ]);
+
+    [$read] = appLogsRead(appLogsApp(), new LogQuery('1h'), $root);
+    $texts = array_column($read['entries'], 'text');
+
+    expect($texts)->toContain('Processing SendReceipt', 'GET /early-failure 500 50ms', 'GET /page-401 200 50ms', 'GET /page-700 200 50ms')
+        ->not->toContain('GET /page-400 200 50ms')
+        ->and($read['capped'])->toBeTrue()
+        ->and($read['cut'])->toBe([['source' => 'requests', 'level' => 'info']]);
+});
+
+test('lines left out count against a filter only when the filter wants them', function () {
+    $cached = ['capped' => true, 'cut' => [['source' => 'requests', 'level' => 'info']]];
+
+    expect(AppLogs::leftOut($cached, new LogQuery))->toBeTrue()
+        ->and(AppLogs::leftOut($cached, new LogQuery(sources: ['requests'])))->toBeTrue()
+        ->and(AppLogs::leftOut($cached, new LogQuery(sources: ['php'])))->toBeFalse()
+        ->and(AppLogs::leftOut($cached, new LogQuery(level: 'errors')))->toBeFalse()
+        ->and(AppLogs::leftOut(['capped' => true], new LogQuery(sources: ['php'])))->toBeTrue()
+        ->and(AppLogs::leftOut(['capped' => false], new LogQuery))->toBeFalse();
+});
+
 test('an app that was never deployed has no files of its own to read', function () {
     expect(app(AppLogs::class)->appScript(appLogsApp(['current_release' => null]), new LogQuery, 'b0undary'))->toBeNull();
 });

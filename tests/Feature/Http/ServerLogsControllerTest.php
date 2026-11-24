@@ -85,6 +85,33 @@ test('the first read is pending and starts a read, and cached lines come back fi
         ->assertJsonPath('sources.4', ['key' => 'firewall', 'label' => 'Blocked addresses', 'count' => 1]);
 });
 
+test('a quiet source shows its lines, and the note about older lines shows only when lines the filter wants were left out', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = serverLogsServer($team);
+    $owner = serverLogsMember($team, TeamRole::Owner);
+
+    Cache::put(ReadServerLogs::cacheKey($server, new LogQuery), [
+        'entries' => [
+            ['id' => 'a', 'at' => 1.0, 'sort' => 1.0, 'source' => 'system', 'process' => null, 'level' => 'warning', 'text' => 'tailscaled.service: Got notification message', 'more' => [], 'request' => null],
+            ['id' => 'b', 'at' => 2.0, 'sort' => 2.0, 'source' => 'web', 'process' => null, 'level' => 'info', 'text' => 'Caddy reloaded', 'more' => [], 'request' => null],
+        ],
+        'stats' => null,
+        'capped' => true,
+        'cut' => [['source' => 'web', 'level' => 'info']],
+        'error' => null,
+        'read_at' => now()->timestamp,
+    ], 120);
+
+    $this->actingAs($owner)
+        ->getJson(route('servers.logs.lines', [$server, 'sources' => ['system']]))
+        ->assertOk()
+        ->assertJsonPath('entries.0.text', 'tailscaled.service: Got notification message')
+        ->assertJsonPath('capped', false);
+    $this->actingAs($owner)->getJson(route('servers.logs.lines', $server))->assertJsonPath('capped', true);
+    $this->actingAs($owner)->getJson(route('servers.logs.lines', [$server, 'level' => 'warnings']))->assertJsonPath('capped', false);
+});
+
 test('a read caches what it found, and keeps it with an error when the server cannot be reached', function () {
     $team = Team::factory()->create();
     $server = serverLogsServer($team);

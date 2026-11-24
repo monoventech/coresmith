@@ -72,7 +72,7 @@ final class ServerLogsController extends Controller
             'error' => $cached['error'] ?? null,
             'read_at' => CarbonImmutable::createFromTimestamp((int) ($cached['read_at'] ?? 0))->toIso8601String(),
             'entries' => array_map(ApplicationLogsController::present(...), array_slice($shown, -ApplicationLogsController::SHOWN)),
-            'capped' => ($cached['capped'] ?? false) || count($shown) > ApplicationLogsController::SHOWN,
+            'capped' => AppLogs::leftOut($cached, $query) || count($shown) > ApplicationLogsController::SHOWN,
             'sources' => self::sources($entries),
             'stats' => $cached['stats'] ?? null,
             'processes' => [],
