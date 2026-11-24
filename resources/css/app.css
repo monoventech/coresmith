@@ -292,6 +292,18 @@
         background: color-mix(in oklab, var(--primary) 5%, transparent);
     }
 
+    .tabs-more-end {
+        mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+    }
+
+    .tabs-more-start {
+        mask-image: linear-gradient(to left, #000 calc(100% - 2rem), transparent);
+    }
+
+    .tabs-more-start.tabs-more-end {
+        mask-image: linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
+    }
+
     .option-selected {
         border-color: var(--primary);
         background: color-mix(in oklab, var(--primary) 6%, transparent);

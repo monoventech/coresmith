@@ -166,7 +166,7 @@ test("while this machine's front door is on, moving Coresmith to another address
 
     $verdict = app(AddressGate::class)->check('new.example.com');
 
-    expect($verdict->refusal)->toBe("Coresmith can't change its address while visitors come in through web-1. Turn off IPv4 through another server on this machine's page, change the address, then turn it on again.")
+    expect($verdict->refusal)->toBe("Coresmith can't change its address while visitors come in through web-1. Turn off IPv4 through another server on this machine's Network tab, change the address, then turn it on again.")
         ->and($verdict->pointable)->toBeFalse();
 });
 

@@ -66,7 +66,7 @@ final class AddressGate
         }
 
         if ($frontDoor !== null) {
-            return new AddressVerdict("Coresmith can't change its address while visitors come in through {$frontDoor->door?->name}. Turn off IPv4 through another server on this machine's page, change the address, then turn it on again.", pointable: false);
+            return new AddressVerdict("Coresmith can't change its address while visitors come in through {$frontDoor->door?->name}. Turn off IPv4 through another server on this machine's Network tab, change the address, then turn it on again.", pointable: false);
         }
 
         $report = $this->reachability->check($host);

@@ -7,6 +7,7 @@ import {
     gotoServer,
     gotoServerTab,
     isMobile,
+    NARROW_PHONE,
     own,
     pageData,
     refuseClipboard,
@@ -96,6 +97,7 @@ test.describe('a server', () => {
 
         for (const [label, url] of [
             ['Databases', /\/databases$/],
+            ['Network', /\/network$/],
             ['Hardening', /\/hardening$/],
             ['Activity', /\/activity$/],
             ['Apps', /\/servers\/[\w.-]+$/]
@@ -112,6 +114,21 @@ test.describe('a server', () => {
     test('the last tab stays in view when the tabs widen', async ({ page }) => {
         await gotoServerTab(page, 'forge-01', 'Activity')
         await tabStaysInViewAsTabsWiden(page, page.url(), 'Server sections', 'Activity')
+    })
+
+    test('a strip wider than the screen fades the side that has more tabs', async ({ page }) => {
+        await page.setViewportSize(NARROW_PHONE)
+        await page.goto('/servers/forge-01')
+
+        const strip = tabs(page, 'Server sections')
+
+        await expect(strip).toHaveClass(/tabs-more-end/)
+        await expect(strip).not.toHaveClass(/tabs-more-start/)
+
+        await strip.evaluate((element) => element.scrollTo({ left: element.scrollWidth }))
+
+        await expect(strip).toHaveClass(/tabs-more-start/)
+        await expect(strip).not.toHaveClass(/tabs-more-end/)
     })
 
     test('the last tab comes into view when the strip narrows', async ({ page }) => {

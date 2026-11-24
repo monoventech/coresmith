@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { blockingViolations, dialog, expect, gotoServer, test, useTheme, withProps } from './support/fixtures'
+import { blockingViolations, dialog, expect, gotoServerTab, test, useTheme, withProps } from './support/fixtures'
 
 test.use({ reducedMotion: 'reduce' })
 
@@ -42,10 +42,10 @@ const OPEN = {
 }
 
 async function serverShowing(page: Page, frontDoor: Record<string, unknown>) {
-    await withProps(page, /\/servers\/[\w.-]+$/, (props) => {
+    await withProps(page, /\/servers\/[\w.-]+\/network$/, (props) => {
         props.frontDoor = frontDoor
     })
-    await gotoServer(page, SERVER)
+    await gotoServerTab(page, SERVER, 'Network')
 
     return page.getByTestId('front-door-card')
 }

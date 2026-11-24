@@ -4,6 +4,7 @@
 
 <script lang="ts">
     import { Link } from '@inertiajs/svelte'
+    import { TriangleAlert } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import ProcessesCard from '@/components/servers/ProcessesCard.svelte'
@@ -13,10 +14,6 @@
     import type { Runtimes } from '@/components/servers/RuntimesCard.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import ServerMovePanel from '@/components/servers/ServerMovePanel.svelte'
-    import FrontDoorCard from '@/components/servers/FrontDoorCard.svelte'
-    import type { FrontDoor } from '@/components/servers/FrontDoorCard.svelte'
-    import TunnelCard from '@/components/servers/TunnelCard.svelte'
-    import type { Tunnel } from '@/components/servers/TunnelCard.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
     import type { EntityState } from '@/lib/fleet'
@@ -39,15 +36,13 @@
         server,
         applications = [],
         runtimes,
-        tunnel = null,
-        frontDoor = null,
+        network = null,
         processes = []
     }: {
         server: ServerHeader
         applications: AppRow[]
         runtimes: Runtimes
-        tunnel?: Tunnel | null
-        frontDoor?: FrontDoor | null
+        network?: { text: string; action: string; href: string } | null
         processes?: ProcessRow[]
     } = $props()
 
@@ -71,12 +66,17 @@
     <ServerMovePanel move={server.move} server={server.id} />
 {/if}
 
-{#if tunnel && !server.provisioning}
-    <TunnelCard {tunnel} server={server.key} name={server.name} />
-{/if}
-
-{#if frontDoor && !server.provisioning}
-    <FrontDoorCard {frontDoor} server={server.key} name={server.name} />
+{#if network && !server.provisioning}
+    <div
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3"
+        data-testid="network-notice"
+    >
+        <TriangleAlert class="size-4.5 shrink-0 text-warning" aria-hidden="true" />
+        <span class="min-w-0 flex-1 text-[13.5px]">{network.text}</span>
+        <Link href={network.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]! no-underline"
+            >{network.action}</Link
+        >
+    </div>
 {/if}
 
 {#if server.provisioning}
