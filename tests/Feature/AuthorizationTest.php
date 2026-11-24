@@ -41,6 +41,14 @@ test('the role matrix matches the spec', function (TeamRole $role, Ability $abil
     [TeamRole::Member, Ability::ViewServer, true],
     [TeamRole::Member, Ability::ManageApplicationEnv, false],
     [TeamRole::Member, Ability::ViewServerCredentials, false],
+    [TeamRole::Owner, Ability::OpenRootTerminal, true],
+    [TeamRole::Owner, Ability::OpenTerminal, true],
+    [TeamRole::Admin, Ability::OpenRootTerminal, false],
+    [TeamRole::Admin, Ability::OpenTerminal, false],
+    [TeamRole::Developer, Ability::OpenRootTerminal, false],
+    [TeamRole::Developer, Ability::OpenTerminal, true],
+    [TeamRole::Member, Ability::OpenRootTerminal, false],
+    [TeamRole::Member, Ability::OpenTerminal, false],
 ]);
 
 test('a member cannot see another teams server', function () {

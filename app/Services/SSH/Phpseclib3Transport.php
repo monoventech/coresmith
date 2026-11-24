@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\SSH;
 
+use App\Services\SSH\Contracts\ShellTransport;
 use App\Services\SSH\Contracts\SSHTransport;
 use LogicException;
 use phpseclib3\Crypt\Common\PrivateKey;
@@ -16,7 +17,7 @@ use phpseclib3\Net\SSH2;
 use ReflectionProperty;
 use RuntimeException;
 
-final class Phpseclib3Transport implements SSHTransport
+final class Phpseclib3Transport implements ShellTransport, SSHTransport
 {
     public const ALGORITHMS = [
         'kex' => ['curve25519-sha256', 'curve25519-sha256@libssh.org'],
@@ -33,7 +34,7 @@ final class Phpseclib3Transport implements SSHTransport
         ],
     ];
 
-    private ?SSH2 $ssh = null;
+    private ?TerminalSSH2 $ssh = null;
 
     private ?SFTP $sftp = null;
 
@@ -53,7 +54,7 @@ final class Phpseclib3Transport implements SSHTransport
         $this->port = $port;
         $this->timeout = $timeout;
 
-        $this->ssh = new SSH2($host, $port);
+        $this->ssh = new TerminalSSH2($host, $port);
         $this->ssh->setPreferredAlgorithms(self::ALGORITHMS);
         $this->ssh->setTimeout($timeout);
     }
@@ -149,7 +150,48 @@ final class Phpseclib3Transport implements SSHTransport
         $this->sftp = null;
     }
 
-    private function connection(): SSH2
+    public function openShell(int $columns, int $rows, string $command): void
+    {
+        $ssh = $this->connection();
+        $ssh->setWindowSize($columns, $rows);
+        $ssh->setTimeout($this->timeout);
+        $ssh->enablePTY();
+        $ssh->exec($command);
+    }
+
+    public function readShell(float $seconds): ?string
+    {
+        $ssh = $this->connection();
+
+        if (!$ssh->interactive()) {
+            return null;
+        }
+
+        $ssh->setTimeout($seconds);
+        $data = $ssh->read('', SSH2::READ_NEXT);
+
+        if (is_string($data)) {
+            return $data;
+        }
+
+        return $data === true || !$ssh->isConnected() ? null : '';
+    }
+
+    public function writeShell(string $bytes): void
+    {
+        $ssh = $this->connection();
+
+        if ($ssh->interactive()) {
+            $ssh->write($bytes);
+        }
+    }
+
+    public function resizeShell(int $columns, int $rows): void
+    {
+        $this->connection()->resize($columns, $rows);
+    }
+
+    private function connection(): TerminalSSH2
     {
         if ($this->ssh === null) {
             throw new LogicException('SSH transport is not connected.');

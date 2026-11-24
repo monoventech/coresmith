@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\TerminalEndReason;
+use App\Services\Terminal\TerminalSessions;
 use App\Enums\Edition;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Settings\AccountGitController;
@@ -103,6 +105,10 @@ final class TeamMemberController extends Controller
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'from' => $from?->value, 'to' => $role->value])->log('member_role_changed');
 
+        if ($from !== $role) {
+            app(TerminalSessions::class)->endFor($user, TerminalEndReason::RoleChanged, $team);
+        }
+
         $this->syncServers($team);
 
         return back()->with('success', 'Role updated.');
@@ -125,6 +131,8 @@ final class TeamMemberController extends Controller
         AccountGitController::removeOwn($team, (string) $user->getKey());
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email])->log('member_removed');
+
+        app(TerminalSessions::class)->endFor($user, TerminalEndReason::LeftTeam, $team);
 
         $this->syncServers($team);
 

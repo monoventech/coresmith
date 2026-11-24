@@ -5,10 +5,12 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\Ability;
 use App\Enums\Edition;
+use App\Enums\TerminalEndReason;
 use App\Enums\TeamRole;
 use App\Jobs\SyncStripeCustomerEmail;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Services\Teams\TeamAccess;
+use App\Services\Terminal\TerminalSessions;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -109,6 +111,10 @@ class User extends Authenticatable
         static::updated(function (User $user): void {
             if ($user->wasChanged(['email', 'email_verified_at']) && !Edition::current()->isSelfHosted()) {
                 $user->ownedTeams()->withTrashed()->whereNotNull('stripe_id')->each(fn(Team $team) => SyncStripeCustomerEmail::dispatch($team));
+            }
+
+            if ($user->wasChanged('password')) {
+                app(TerminalSessions::class)->endFor($user, TerminalEndReason::PasswordChanged);
             }
         });
     }

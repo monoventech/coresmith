@@ -24,6 +24,7 @@ test('every queue from the spec is defined with its tries and timeout', function
     ['deployments', 'deployments', 1, 840, 3],
     ['server-tasks', 'server-tasks', 3, 1320, 5],
     ['default', 'default', 3, 960, 3],
+    ['terminals', 'terminals', 1, 4200, 4],
 ]);
 
 test('provisioning and deployments never auto retry', function () {
@@ -37,7 +38,7 @@ test('provisioning uses simple balancing so a long job is not rebalanced', funct
 
 test('both environments cover every supervisor', function (string $environment) {
     expect(array_keys(config("horizon.environments.{$environment}")))
-        ->toBe(['provisioning', 'deployments', 'server-tasks', 'default']);
+        ->toBe(['provisioning', 'deployments', 'server-tasks', 'default', 'terminals']);
 })->with(['production', 'local']);
 
 test('a production supervisor keeps its workers until the environment raises them', function (string $supervisor, string $name, int $workers) {
@@ -54,6 +55,7 @@ test('a production supervisor keeps its workers until the environment raises the
     ['deployments', 'HORIZON_DEPLOYMENTS_PROCESSES', 3],
     ['server-tasks', 'HORIZON_SERVER_TASKS_PROCESSES', 5],
     ['default', 'HORIZON_DEFAULT_PROCESSES', 3],
+    ['terminals', 'HORIZON_TERMINALS_PROCESSES', 4],
 ]);
 
 test('raising one supervisor leaves the others alone', function () {
