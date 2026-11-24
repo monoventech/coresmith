@@ -64,6 +64,9 @@ async function openSession(page: Page, testInfo: TestInfo) {
             seq++
             reverb.emit(channel, 'terminal.output', { seq, data: base64(text) })
         },
+        lose() {
+            seq++
+        },
         warn(reason: 'idle' | 'hour', inSeconds: number) {
             reverb.emit(channel, 'terminal.warning', { reason, ends_at: Math.floor(Date.now() / 1000) + inSeconds })
         }
@@ -84,6 +87,37 @@ test.describe('a terminal session', () => {
         await page.keyboard.press('Enter')
 
         await expect.poll(() => shell.sent.input.join('')).toBe('ls -la\r')
+    })
+
+    test('output lost on the way comes back from the saved screen, even when the first read is older', async ({
+        page
+    }, testInfo) => {
+        const shell = await openSession(page, testInfo)
+        let reads = 0
+
+        await page.route(/\/terminal\/[^/]+\/screen$/, (route) => {
+            reads++
+
+            return route.fulfill({
+                json:
+                    reads === 1
+                        ? { seq: 1, screen: base64('root@shell:~# '), status: 'open', ended: null }
+                        : {
+                              seq: 4,
+                              screen: base64('root@shell:~# one\r\ntwo\r\nthree\r\n'),
+                              status: 'open',
+                              ended: null
+                          }
+            })
+        })
+
+        shell.print('one\r\n')
+        shell.lose()
+        shell.print('three\r\n')
+
+        await expect(shell.rows).toContainText('two')
+        await expect(shell.rows).toContainText('three')
+        expect(reads).toBeGreaterThanOrEqual(2)
     })
 
     test('a paste of several lines asks first, and goes in once you agree', async ({ page }, testInfo) => {

@@ -1,3 +1,7 @@
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
 import { realtime, realtimeConfigured } from '@/lib/echo'
 
 export type Change = { key: string; title: string; detail: string }
@@ -217,6 +221,7 @@ export class TerminalLink {
             }
 
             this.apply(saved)
+            this.watchGap()
         } catch {
             this.lost()
         }
@@ -245,16 +250,21 @@ export class TerminalLink {
 
         this.held[seq] = decode(data)
         this.drain()
+        this.watchGap()
+    }
 
-        if (this.waiting() && !this.gapTimer) {
-            this.gapTimer = setTimeout(() => {
-                this.gapTimer = null
-
-                if (this.waiting()) {
-                    void this.sync()
-                }
-            }, GAP_MS)
+    private watchGap(): void {
+        if (!this.waiting() || this.gapTimer || this.closed || this.ended) {
+            return
         }
+
+        this.gapTimer = setTimeout(() => {
+            this.gapTimer = null
+
+            if (this.waiting()) {
+                void this.sync()
+            }
+        }, GAP_MS)
     }
 
     private waiting(): boolean {
