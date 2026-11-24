@@ -6,33 +6,20 @@
     import { Label } from '@/components/ui/label'
     import { Form } from '@inertiajs/svelte'
 
-    let {
-        slug,
-        path,
-        subdomain = null,
-        canUpdate
-    }: {
-        slug: string
-        path: string
-        subdomain?: string | null
-        canUpdate: boolean
-    } = $props()
+    let { slug, path, canUpdate }: { slug: string; path: string; canUpdate: boolean } = $props()
 
     let editing = $state(false)
-    let copied = $state<string | null>(null)
+    let copied = $state(false)
 
-    const addresses = $derived(
-        [path, subdomain].filter((value): value is string => typeof value === 'string' && value !== '')
-    )
     const prefix = $derived(path.slice(0, path.length - slug.length))
 
-    async function copy(value: string) {
+    async function copy() {
         try {
-            await navigator.clipboard.writeText(value)
-            copied = value
-            setTimeout(() => (copied = null), 2000)
+            await navigator.clipboard.writeText(path)
+            copied = true
+            setTimeout(() => (copied = false), 2000)
         } catch {
-            copied = null
+            copied = false
         }
     }
 </script>
@@ -47,17 +34,11 @@
     <p class="mb-3 text-[12.5px] text-muted-foreground">
         Links, bookmarks and tabs open straight into this team, even when you belong to several.
     </p>
-    <div class="flex flex-col">
-        {#each addresses as address (address)}
-            <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
-                <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{address}</span>
-                <button
-                    type="button"
-                    class="focus-ring quick-action h-8! px-3! text-[12.5px]!"
-                    onclick={() => copy(address)}>{copied === address ? 'Copied' : 'Copy'}</button
-                >
-            </div>
-        {/each}
+    <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
+        <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{path}</span>
+        <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={copy}
+            >{copied ? 'Copied' : 'Copy'}</button
+        >
     </div>
 </div>
 

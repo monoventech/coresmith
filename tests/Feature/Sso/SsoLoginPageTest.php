@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use Illuminate\Support\Facades\Http;
 
@@ -33,12 +34,13 @@ test('a team address with single sign-on offers it on the sign-in page', functio
 });
 
 test('a team host with single sign-on starts on that host', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
-    ssoConnection(ssoTeam());
+    $team = ssoTeam();
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
+    ssoConnection($team);
 
-    $this->get('http://acme.coresmith.test/login')
+    $this->get('http://panel.acme.test/login')
         ->assertOk()
-        ->assertInertia(fn($page) => $page->where('sso.start', 'http://acme.coresmith.test/sso/acme/start'));
+        ->assertInertia(fn($page) => $page->where('sso.start', 'http://panel.acme.test/sso/acme/start'));
 });
 
 test('the sign-in page offers no single sign-on when no team has it turned on', function () {
@@ -107,12 +109,13 @@ test('the lookup needs a real email address', function () {
 });
 
 test('looking up from a team host sends other teams to the main address', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
-    ssoConnection(ssoTeam());
+    $team = ssoTeam();
+    TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
+    ssoConnection($team);
     ssoConnection(ssoTeam('other'), ['email_domain' => 'other.test']);
 
-    $this->post('http://acme.coresmith.test/sso', ['email' => 'bob@other.test'])->assertRedirect('http://localhost/sso/other/start');
-    $this->post('http://acme.coresmith.test/sso', ['email' => 'ada@example.test'])->assertRedirect('http://acme.coresmith.test/sso/acme/start');
+    $this->post('http://panel.acme.test/sso', ['email' => 'bob@other.test'])->assertRedirect('http://localhost/sso/other/start');
+    $this->post('http://panel.acme.test/sso', ['email' => 'ada@example.test'])->assertRedirect('http://panel.acme.test/sso/acme/start');
 });
 
 test('the lookup is throttled', function () {

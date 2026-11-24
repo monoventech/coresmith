@@ -11,7 +11,6 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamSlug;
-use App\Services\Teams\TeamUrls;
 use Closure;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,7 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class TeamUrlController extends Controller
 {
-    public function update(Request $request, TeamContext $context, TeamUrls $urls): Response
+    public function update(Request $request, TeamContext $context): Response
     {
         $team = $context->teamOrFail();
 
@@ -53,10 +52,6 @@ final class TeamUrlController extends Controller
 
         $request->session()->flash('success', 'Saved. Old links to ' . $previous . ' stop working.');
 
-        return Inertia::location(match (true) {
-            $context->viaHost() && $urls->tenantDomain() !== null && $request->getHost() === $previous . '.' . $urls->tenantDomain() => $urls->subdomainUrl($team) . '/settings/team',
-            $context->viaPath() => $request->getSchemeAndHttpHost() . '/' . $team->slug . '/settings/team',
-            default => route('teams.index'),
-        });
+        return Inertia::location($context->viaPath() ? $request->getSchemeAndHttpHost() . '/' . $team->slug . '/settings/team' : route('teams.index'));
     }
 }
