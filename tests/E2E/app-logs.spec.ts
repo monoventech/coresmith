@@ -1,7 +1,7 @@
 import type { Page, Request } from '@playwright/test'
 import { blockingViolations, expect, gotoApplication, isMobile, test, useTheme } from './support/fixtures'
 
-type Overrides = { error?: string | null; entries?: Array<Record<string, unknown>>; extra?: number }
+type Overrides = { error?: string | null; entries?: Array<Record<string, unknown>>; extra?: number; capped?: boolean }
 
 function entry(id: string, seconds: number, fields: Record<string, unknown>) {
     return {
@@ -46,7 +46,7 @@ function lines(overrides: Overrides = {}) {
     return {
         pending: false,
         error: overrides.error ?? null,
-        capped: false,
+        capped: overrides.capped ?? false,
         entries: overrides.entries ?? [
             request('r1', 60, 'GET', '/checkout', 200),
             entry('w1', 50, { text: 'Processing SendReceipt, job 5521' }),
@@ -255,6 +255,17 @@ test.describe("an app's logs", () => {
             "Couldn't reach forge-01 to read the logs. Coresmith tries again in a moment."
         )
         await expect(timeline(page)).toContainText('POST /api/pay 500')
+    })
+
+    test('a busy read says only the newest lines are shown and that a search finds older ones', async ({
+        page
+    }, testInfo) => {
+        await fakeLines(page, () => ({ capped: true }))
+        await openLogs(page, isMobile(testInfo))
+
+        await expect(page.getByTestId('logs-capped')).toHaveText(
+            'Showing the newest lines only. Search to find older ones.'
+        )
     })
 
     test('an hour with nothing in it offers the last 24 hours', async ({ page }, testInfo) => {

@@ -386,7 +386,9 @@
                 <div
                     class={cn(
                         `log-${kind}`,
-                        wrap ? 'wrap-anywhere whitespace-pre-wrap' : 'w-max min-w-full whitespace-pre',
+                        wrap
+                            ? 'wrap-anywhere whitespace-pre-wrap'
+                            : 'w-max min-w-full whitespace-pre max-sm:w-auto max-sm:min-w-0 max-sm:wrap-anywhere max-sm:whitespace-pre-wrap',
                         index >= log.settled && 'log-line-new',
                         flashed === index && 'log-line-flash'
                     )}

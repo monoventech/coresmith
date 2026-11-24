@@ -248,12 +248,25 @@ test.describe('quick actions on a server card', () => {
         await expectWayBack(page, server)
     })
 
-    test('logs open the server activity', async ({ page }) => {
+    test("logs open the server's logs", async ({ page }) => {
+        await page.route(/\/logs\/lines/, (route) =>
+            route.fulfill({
+                json: {
+                    pending: false,
+                    error: null,
+                    entries: [],
+                    capped: false,
+                    sources: [],
+                    stats: null,
+                    processes: []
+                }
+            })
+        )
         await page.goto('/dashboard')
         await card(page, 'forge-01').getByRole('link', { name: 'Logs' }).click()
 
-        await page.waitForURL(/\/activity$/)
-        await expect(page.getByTestId('server-activity')).toBeVisible()
+        await page.waitForURL(/\/logs$/)
+        await expect(page.getByRole('heading', { level: 1, name: 'Logs' })).toBeVisible()
     })
 
     test('deploying from a busy server asks which app, then opens the deploy', async ({ page }, testInfo) => {

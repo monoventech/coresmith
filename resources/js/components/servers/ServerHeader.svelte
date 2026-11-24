@@ -128,6 +128,11 @@
             {/if}
             {#if server.can.update}
                 <Button variant="ghost" onclick={openRename}>Rename</Button>
+                {#if !server.provisioning}
+                    <Button variant="outline" href={route('servers.logs', server.key)} data-testid="server-logs"
+                        >Logs</Button
+                    >
+                {/if}
                 {#if server.active && server.cloud?.task?.state !== 'running'}
                     <Button
                         variant="outline"

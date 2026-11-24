@@ -556,11 +556,19 @@ input[type='search']::-webkit-search-cancel-button {
         text-underline-offset: 2px;
     }
 
+    .terminal.log-wide-tags .log-row {
+        grid-template-columns: 4.25rem 9.5rem minmax(0, 1fr);
+    }
+
     @media (max-width: 639px) {
         .terminal .log-row {
             grid-template-columns: 3.75rem 3rem minmax(0, 1fr);
             gap: 0.5rem;
             padding: 3px 6px;
+        }
+
+        .terminal.log-wide-tags .log-row {
+            grid-template-columns: 3.75rem 6rem minmax(0, 1fr);
         }
     }
 

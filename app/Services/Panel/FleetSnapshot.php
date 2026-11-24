@@ -217,7 +217,7 @@ final class FleetSnapshot
             'cpu_trend' => $this->trend($server, 'cpu_percent'),
             'memory_trend' => $this->trend($server, 'memory_percent'),
             'href' => route('servers.show', $server),
-            'logs_href' => route('servers.activity', $server),
+            'logs_href' => $this->viewer?->can('update', $server) ? route('servers.logs', $server) : route('servers.activity', $server),
             'watch_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $server->applications->find($running->application_id) ?? $running->application_id, $running]),
             'applications' => $server->applications->map(fn(Application $application): array => [
                 'id' => $application->getKey(),

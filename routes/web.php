@@ -38,6 +38,7 @@ use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerFrontDoorController;
 use App\Http\Controllers\ServerHostKeyController;
+use App\Http\Controllers\ServerLogsController;
 use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerRuntimeController;
 use App\Http\Controllers\ServerTabsController;
@@ -231,6 +232,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('servers/{server}/applications/{application}/cron-jobs/{cronJob}', [ApplicationCronJobController::class, 'destroy'])
         ->where('cronJob', '[0-9a-f]{16}')
         ->name('servers.applications.cron-jobs.destroy');
+    Route::get('servers/{server}/logs', [ServerLogsController::class, 'show'])
+        ->name('servers.logs');
+    Route::get('servers/{server}/logs/lines', [ServerLogsController::class, 'lines'])
+        ->middleware('throttle:90,1,server-log-lines')
+        ->name('servers.logs.lines');
     Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogsController::class, 'show'])
         ->name('servers.applications.logs');
     Route::get('servers/{server}/applications/{application}/logs/lines', [ApplicationLogsController::class, 'lines'])
