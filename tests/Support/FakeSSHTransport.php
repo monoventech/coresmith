@@ -58,6 +58,9 @@ final class FakeSSHTransport implements SSHTransport
     /** @var array<string, string> */
     private array $timeouts = [];
 
+    /** @var list<string> */
+    private array $streamedCommands = [];
+
     /** @var list<int> */
     private array $budgets = [];
 
@@ -179,6 +182,12 @@ final class FakeSSHTransport implements SSHTransport
         return $this->commands;
     }
 
+    /** @return list<string> */
+    public function streamed(): array
+    {
+        return $this->streamedCommands;
+    }
+
     /** @return array<string, string> */
     public function uploads(): array
     {
@@ -287,6 +296,11 @@ final class FakeSSHTransport implements SSHTransport
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
     {
         $this->commands[] = $command;
+
+        if ($onOutput !== null) {
+            $this->streamedCommands[] = $command;
+        }
+
         $this->budgets[] = $timeout;
         $this->timedOut = false;
 

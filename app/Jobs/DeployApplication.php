@@ -37,6 +37,7 @@ use App\Services\Deployment\DatabaseFailure;
 use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\DeploymentLog;
+use App\Services\Deployment\DeploymentOutput;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Deployment\DeployScript;
 use App\Services\Deployment\EnvironmentFile;
@@ -1304,12 +1305,17 @@ final class DeployApplication implements ShouldQueue
 
         try {
             $properties = $packages->prepare($connection, $application, $unit, $paths->appDirectory($release));
-            $result = $connection->execute(
-                app(AppShell::class)->runScript($application, $script, $paths->appDirectory($release), $stack->versions(), unit: $unit, properties: $properties),
-                sudo: true,
-            );
+            $output = new DeploymentOutput(fn(string $text) => $this->appendLog($text));
 
-            $this->appendLog($result->output);
+            try {
+                $result = $connection->stream(
+                    app(AppShell::class)->runScript($application, $script, $paths->appDirectory($release), $stack->versions(), unit: $unit, properties: $properties),
+                    $output->write(...),
+                    sudo: true,
+                );
+            } finally {
+                $output->finish();
+            }
 
             if ($result->failed()) {
                 $this->failureReason = "It stopped with exit code {$result->exitCode}. Its output is in the log. Fix it under Deploy script on the app page, then deploy again.";
@@ -1376,16 +1382,17 @@ final class DeployApplication implements ShouldQueue
         foreach ($steps as $step) {
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
+                $output = new DeploymentOutput(fn(string $text) => $this->appendLog($text));
 
                 try {
-                    $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application), $properties), sudo: true);
+                    $result = $connection->stream($shell->run($application, $step, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application), $properties), $output->write(...), sudo: true);
                 } catch (SSHCommandTimedOut $e) {
                     rescue(fn() => $connection->execute('systemctl stop ' . escapeshellarg($unit . '.service') . ' || true', sudo: true), report: false);
 
                     throw $e;
+                } finally {
+                    $output->finish();
                 }
-
-                $this->appendLog($result->output);
 
                 if ($result->successful()) {
                     if ($step === Php::ROUTE_CACHE) {
