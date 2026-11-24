@@ -16,7 +16,9 @@ final class LogEntryParser
 {
     public const LINE_LENGTH = 2000;
 
-    public const MORE_LINES = 40;
+    public const MORE_LINES = 30;
+
+    public const MORE_LENGTH = 500;
 
     public const PATH_LENGTH = 300;
 
@@ -163,7 +165,7 @@ final class LogEntryParser
                 $more = &$entries[array_key_last($entries)]['more'];
 
                 if (count($more) < self::MORE_LINES) {
-                    $more[] = $text;
+                    $more[] = mb_substr($text, 0, self::MORE_LENGTH);
                 }
 
                 if ($this->level($text) === 'error') {

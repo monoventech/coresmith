@@ -18,7 +18,7 @@ use App\Services\SSH\SSHConnection;
 
 final class AppLogs
 {
-    public const KEEP = 1000;
+    public const KEEP = 600;
 
     public const READ_SECONDS = 10;
 

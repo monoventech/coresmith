@@ -163,3 +163,11 @@ test('the same line twice in the same second still gets two ids', function () {
 
     expect($entries[0]['id'])->not->toBe($entries[1]['id']);
 });
+
+test('a stack trace keeps at most 30 lines of 500 characters, so one entry cannot swamp a read', function () {
+    $trace = array_map(fn(int $frame): string => "#{$frame} " . str_repeat('x', 900), range(0, 59));
+    $entries = logParserRun("==b0undary== process worker\n100 1795499999\n2026-11-24 12:00:01 Processing SyncInventory\n" . implode("\n", $trace) . "\n");
+
+    expect($entries[0]['more'])->toHaveCount(LogEntryParser::MORE_LINES)
+        ->and(mb_strlen($entries[0]['more'][0]))->toBe(LogEntryParser::MORE_LENGTH);
+});
