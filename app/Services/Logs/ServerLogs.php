@@ -20,7 +20,7 @@ final class ServerLogs
     public function __construct(private readonly LogEntryParser $parser) {}
 
     /**
-     * @return array{entries: list<array<string, mixed>>, stats: array<string, mixed>, capped: bool}
+     * @return array{entries: list<array<string, mixed>>, stats: array<string, mixed>, capped: bool, cut: list<array{source: string, level: string}>}
      */
     public function read(SSHConnection $connection, LogQuery $query): array
     {
@@ -32,12 +32,13 @@ final class ServerLogs
 
         $entries = array_values(array_filter($entries, fn(array $entry): bool => ($since === null || $entry['sort'] >= $since) && ($until === null || $entry['sort'] <= $until + 1)));
         $requests = array_values(array_filter($entries, fn(array $entry): bool => $entry['request'] !== null));
-        $entries = AppLogs::ordered($entries);
+        $kept = AppLogs::newest(AppLogs::ordered($entries));
 
         return [
-            'entries' => array_slice($entries, -AppLogs::KEEP),
+            'entries' => $kept['entries'],
             'stats' => LogStats::of(array_column($requests, 'request'), $since === null ? null : (($until ?? now()->getTimestamp()) - $since)),
-            'capped' => count($entries) > AppLogs::KEEP,
+            'capped' => $kept['cut'] !== [],
+            'cut' => $kept['cut'],
         ];
     }
 
