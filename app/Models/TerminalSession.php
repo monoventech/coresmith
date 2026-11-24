@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Enums\TerminalEndReason;
 use App\Enums\TerminalMode;
 use App\Enums\TerminalStatus;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 final class TerminalSession extends Model
 {
-    use HasUlids;
+    use HasUlids, IgnoresJsonKeyOrder;
 
     protected $guarded = ['id'];
 

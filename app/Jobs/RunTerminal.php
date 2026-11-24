@@ -57,6 +57,8 @@ final class RunTerminal implements ShouldQueue
 
     public int $timeout = 4200;
 
+    public bool $deleteWhenMissingModels = true;
+
     private int $seq = 0;
 
     private string $screen = '';

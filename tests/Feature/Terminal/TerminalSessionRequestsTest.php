@@ -13,6 +13,7 @@ use App\Models\TerminalSession;
 use App\Models\User;
 use App\Services\Terminal\TerminalInbox;
 use App\Services\Terminal\TerminalScreen;
+use Illuminate\Support\Facades\Broadcast;
 
 function terminalRequestsSession(TerminalStatus $status = TerminalStatus::Open): TerminalSession
 {
@@ -126,6 +127,10 @@ test('ending a session whose job has not started closes it at once', function ()
         ->assertJson(['status' => 'closed', 'ended' => ['reason' => 'ended']]);
 
     expect($session->fresh()->end_reason)->toBe(TerminalEndReason::Ended);
+});
+
+test('the terminal channel is registered under its name', function () {
+    expect(Broadcast::getChannels()->get('terminals.{terminal}'))->toBe(TerminalChannel::class);
 });
 
 test("a session's channel is only for the person who opened it", function () {
