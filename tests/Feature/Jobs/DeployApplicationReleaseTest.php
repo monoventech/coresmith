@@ -146,6 +146,25 @@ test('each command run in the release is echoed before its output', function () 
         ->and($lines)->toContain('$ php artisan migrate --force');
 });
 
+test('a build step streams its output into the log while it runs, and the output appears once', function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $transport = releaseTransport()->respondTo('composer install', "Installing dependencies from lock file\n");
+
+    releaseRun($deployment, $transport);
+
+    expect(collect($transport->streamed())->contains(fn(string $command): bool => str_contains($command, 'composer install')))->toBeTrue()
+        ->and(substr_count((string) $deployment->fresh()->log, 'Installing dependencies from lock file'))->toBe(1);
+});
+
+test('a build step that runs out of time keeps the output it printed before it stopped', function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $transport = releaseTransport()->timeOutOn('composer install', "Installing dependencies from lock file\n  - Installing laravel/framework (v13.4.0)\n");
+
+    rescue(fn() => releaseRun($deployment, $transport), report: false);
+
+    expect((string) $deployment->fresh()->log)->toContain('- Installing laravel/framework (v13.4.0)');
+});
+
 test('a Laravel cache that fails is skipped with the reason, and the deploy goes on', function (string $cache, string $output) {
     $deployment = Deployment::factory()->for(releaseApp())->create();
     $transport = releaseTransport()->respondTo("artisan {$cache}", $output, 255);
@@ -185,6 +204,16 @@ test('a deploy script of your own is logged as the build phase with no dependenc
     expect($log)->toContain('[14:05:09] script: running your deploy script')
         ->and($log)->not->toContain('] deps: installing dependencies')
         ->and($log)->not->toContain('] migrate:');
+});
+
+test('a deploy script of your own streams its output into the log while it runs, and the output appears once', function () {
+    $deployment = Deployment::factory()->for(releaseApp(['custom_blueprint' => "echo building\n"]))->create();
+    $transport = releaseTransport()->respondTo('/bin/bash -s <', "building the assets\n");
+
+    releaseRun($deployment, $transport);
+
+    expect(collect($transport->streamed())->contains(fn(string $command): bool => str_contains($command, '/bin/bash -s <')))->toBeTrue()
+        ->and(substr_count((string) $deployment->fresh()->log, 'building the assets'))->toBe(1);
 });
 
 test('a private repository announces that it fetches with the deploy key', function () {

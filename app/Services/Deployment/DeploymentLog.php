@@ -11,12 +11,17 @@ namespace App\Services\Deployment;
 use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
+use App\Events\DeploymentLogAppended;
 use App\Events\DeploymentUpdated;
 use App\Models\Deployment;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 final class DeploymentLog
 {
+    /** @var array<string, true> */
+    private static array $unsent = [];
+
     public function __construct(private readonly LogSanitizer $sanitizer) {}
 
     public function stamp(): string
@@ -26,15 +31,14 @@ final class DeploymentLog
 
     public function append(Deployment $deployment, string $output): void
     {
-        if ($output === '') {
-            return;
+        if ($this->write($deployment, $output)) {
+            $this->send($deployment, new DeploymentUpdated($deployment));
         }
+    }
 
-        $clean = $this->sanitizer->sanitize($output, $deployment->application);
-
-        $deployment->forceFill(['log' => trim((string) $deployment->log . "\n" . $clean)])->save();
-
-        DeploymentUpdated::dispatch($deployment);
+    public function stream(Deployment $deployment, string $output): void
+    {
+        $this->write($deployment, $output);
     }
 
     public function fail(Deployment $deployment, string $message, ?string $reason, bool $swapped = false, bool $keepFailed = false): void
@@ -118,6 +122,57 @@ final class DeploymentLog
         DeploymentFailed::dispatch($deployment);
 
         return true;
+    }
+
+    private function write(Deployment $deployment, string $output): bool
+    {
+        if ($output === '') {
+            return false;
+        }
+
+        $before = (string) $deployment->log;
+        $clean = $this->sanitizer->sanitize(mb_scrub($output, 'UTF-8'), $deployment->application);
+        $added = $before === '' ? trim($clean) : rtrim("\n" . $clean);
+
+        if ($added === '') {
+            return false;
+        }
+
+        $deployment->forceFill(['log' => $before . $added])->save();
+        $this->broadcast($deployment, strlen($before), $added);
+
+        return true;
+    }
+
+    private function broadcast(Deployment $deployment, int $offset, string $text): void
+    {
+        $deploymentId = (string) $deployment->getKey();
+        $start = 0;
+
+        while ($start < strlen($text)) {
+            $bytes = DeploymentLogAppended::PIECE_BYTES;
+            $piece = new DeploymentLogAppended($deploymentId, $offset + $start, mb_strcut($text, $start, $bytes, 'UTF-8'));
+
+            while (!$piece->fits() && $bytes > 4) {
+                $bytes = max(4, intdiv($bytes, 2));
+                $piece = new DeploymentLogAppended($deploymentId, $offset + $start, mb_strcut($text, $start, $bytes, 'UTF-8'));
+            }
+
+            $this->send($deployment, $piece);
+            $start += strlen($piece->text);
+        }
+    }
+
+    private function send(Deployment $deployment, object $event): void
+    {
+        try {
+            event($event);
+        } catch (Throwable $e) {
+            if (!isset(self::$unsent[(string) $deployment->getKey()])) {
+                self::$unsent[(string) $deployment->getKey()] = true;
+                report($e);
+            }
+        }
     }
 
     private function writeFailure(Deployment $deployment, string $message, ?string $reason, bool $swapped): void
