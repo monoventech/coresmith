@@ -254,6 +254,20 @@ return [
             'timeout' => 960,
             'nice' => 0,
         ],
+
+        'terminals' => [
+            'connection' => 'redis',
+            'queue' => ['terminals'],
+            'balance' => 'simple',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 4,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 1,
+            'timeout' => 4200,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -279,6 +293,10 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+
+            'terminals' => [
+                'maxProcesses' => $workers('HORIZON_TERMINALS_PROCESSES', 4),
+            ],
         ],
 
         'local' => [
@@ -295,6 +313,10 @@ return [
             ],
 
             'default' => [
+                'maxProcesses' => 2,
+            ],
+
+            'terminals' => [
                 'maxProcesses' => 2,
             ],
         ],

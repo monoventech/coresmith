@@ -134,6 +134,10 @@
                         >Logs</Button
                     >
                 {/if}
+                {#if server.terminal_href}
+                    <Button variant="outline" href={server.terminal_href} data-testid="server-terminal">Terminal</Button
+                    >
+                {/if}
                 {#if server.active && server.cloud?.task?.state !== 'running'}
                     <Button
                         variant="outline"

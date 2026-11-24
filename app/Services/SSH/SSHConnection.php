@@ -14,8 +14,10 @@ use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Server;
 use App\Services\Deployment\LogSanitizer;
+use App\Services\SSH\Contracts\ShellTransport;
 use App\Services\SSH\Contracts\SSHTransport;
 use Closure;
+use LogicException;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Exception\BadDecryptionException;
@@ -152,6 +154,37 @@ final class SSHConnection
         });
 
         return $this->conclude($command, $output, $timeout);
+    }
+
+    public function openShell(int $columns, int $rows, string $command): void
+    {
+        $this->guarded(fn() => $this->shellTransport()->openShell($columns, $rows, $command));
+    }
+
+    public function readShell(float $seconds): ?string
+    {
+        return $this->guarded(fn(): ?string => $this->shellTransport()->readShell($seconds));
+    }
+
+    public function writeShell(string $bytes): void
+    {
+        $this->guarded(fn() => $this->shellTransport()->writeShell($bytes));
+    }
+
+    public function resizeShell(int $columns, int $rows): void
+    {
+        $this->guarded(fn() => $this->shellTransport()->resizeShell($columns, $rows));
+    }
+
+    private function shellTransport(): ShellTransport
+    {
+        $transport = $this->connect()->transport;
+
+        if (!$transport instanceof ShellTransport) {
+            throw new LogicException('This SSH transport cannot open an interactive shell.');
+        }
+
+        return $transport;
     }
 
     private function guarded(Closure $work): mixed

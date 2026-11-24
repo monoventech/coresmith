@@ -83,6 +83,7 @@ final class TeamController extends Controller
                 fn(TeamRole $role): array => ['value' => $role->value, 'label' => $role->label()],
                 TeamRole::cases(),
             ),
+            'terminals' => ['root' => (bool) $team->root_terminals, 'can_change' => $user->can('manageRootTerminals', $team)],
             'can' => [
                 'update' => $user->can('update', $team),
                 'manageMembers' => $manages,

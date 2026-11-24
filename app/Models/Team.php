@@ -163,6 +163,7 @@ class Team extends Model
             'free_plan' => Plan::class,
             'free_until' => 'datetime',
             'moving_at' => 'datetime',
+            'root_terminals' => 'boolean',
         ];
     }
 }

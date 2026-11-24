@@ -12,6 +12,7 @@
     import PlanNote from '@/components/settings/PlanNote.svelte'
     import type { SingleSignOn } from '@/components/settings/SingleSignOnCard.svelte'
     import SingleSignOnCard from '@/components/settings/SingleSignOnCard.svelte'
+    import TerminalsCard from '@/components/settings/TerminalsCard.svelte'
     import TeamAddressCard from '@/components/settings/TeamAddressCard.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
@@ -58,7 +59,8 @@
         can,
         shareable = null,
         sso,
-        offsite = null
+        offsite = null,
+        terminals
     }: {
         team: { id: string; name: string; slug: string }
         address: Address
@@ -70,6 +72,7 @@
         shareable?: Shareable | null
         sso: SingleSignOn
         offsite?: OffsiteDestination | null
+        terminals: { root: boolean; can_change: boolean }
     } = $props()
 
     const billing = $derived(page.props.billing)
@@ -257,6 +260,10 @@
 
 <div class="mt-4">
     <SingleSignOnCard {sso} planNote={billing?.notes.single_sign_on} />
+</div>
+
+<div class="mt-4">
+    <TerminalsCard root={terminals.root} canChange={terminals.can_change} />
 </div>
 
 {#if can.update}
