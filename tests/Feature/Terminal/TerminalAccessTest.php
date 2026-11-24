@@ -53,7 +53,7 @@ test('teams allow root terminals until their owner turns them off', function () 
     expect(Team::factory()->create()->fresh()->root_terminals)->toBeTrue();
 });
 
-test('nobody opens a terminal on another team\'s server', function () {
+test("nobody opens a terminal on another team's server", function () {
     $server = Server::factory()->for(Team::factory()->create())->create();
     $outsider = terminalAccessUser(Team::factory()->create(), TeamRole::Owner);
 
