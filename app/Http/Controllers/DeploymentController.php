@@ -147,6 +147,7 @@ final class DeploymentController extends Controller
             'status' => $deployment->status->value,
             'state' => DeploymentPresenter::state($deployment),
             'log' => (string) $deployment->log,
+            'log_bytes' => strlen((string) $deployment->log),
             'phases' => $states,
             'failed_phase' => $failed['key'] ?? null,
             'failure_reason' => $deployment->failure_reason,

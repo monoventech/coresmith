@@ -1305,7 +1305,7 @@ final class DeployApplication implements ShouldQueue
 
         try {
             $properties = $packages->prepare($connection, $application, $unit, $paths->appDirectory($release));
-            $output = new DeploymentOutput(fn(string $text) => $this->appendLog($text));
+            $output = new DeploymentOutput(fn(string $text) => app(DeploymentLog::class)->stream($this->deployment, $text));
 
             try {
                 $result = $connection->stream(
@@ -1382,7 +1382,7 @@ final class DeployApplication implements ShouldQueue
         foreach ($steps as $step) {
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
-                $output = new DeploymentOutput(fn(string $text) => $this->appendLog($text));
+                $output = new DeploymentOutput(fn(string $text) => app(DeploymentLog::class)->stream($this->deployment, $text));
 
                 try {
                     $result = $connection->stream($shell->run($application, $step, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application), $properties), $output->write(...), sudo: true);
