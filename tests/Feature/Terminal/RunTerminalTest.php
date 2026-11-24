@@ -351,6 +351,16 @@ test('changed process settings and stopped processes read as two different chang
     expect(array_column($changes, 'title'))->toBe(["The apps' process settings", "The apps' processes"]);
 });
 
+test('changed scheduled jobs and app folders are named, with what to do next', function () {
+    $server = runTerminalSession()->server;
+    $changes = app(TerminalChanges::class)->between($server, ['jobs' => 'f1', 'folders' => 'g1'], ['jobs' => 'f2', 'folders' => 'g2']);
+
+    expect($changes)->toBe([
+        ['key' => 'jobs', 'title' => "The apps' scheduled jobs", 'detail' => "Scheduled jobs Coresmith keeps for the apps changed. Each app's next deploy writes them again."],
+        ['key' => 'folders', 'title' => "The apps' folders", 'detail' => "An app's folder was removed, or its owner or permissions changed, and the app may stop working. Deploy it again from its page. If that fails, the deploy's log says why."],
+    ]);
+});
+
 test('a session that changed nothing says so', function () {
     $session = runTerminalSession();
     $print = runTerminalPrint(['key' => '1', 'sudo' => 'a1', 'units' => 'b1', 'settings' => 'c1', 'web' => 'd1', 'firewall' => 'e1', 'running' => 'active', 'processes' => '']);
@@ -398,6 +408,8 @@ test('the fingerprint reads each thing Coresmith looks after in one command, as 
     expect($script)->toContain('authorized_keys')
         ->toContain('/etc/sudoers.d/')
         ->toContain('/etc/systemd/system/coresmith-*')
+        ->toContain('/etc/cron.d/coresmith-*')
+        ->toContain('/var/coresmith/apps/*/')
         ->toContain('/etc/coresmith')
         ->toContain('/config/')
         ->toContain('systemctl is-active caddy')

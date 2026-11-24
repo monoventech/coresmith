@@ -10,6 +10,8 @@ namespace App\Services\Terminal;
 
 use App\Models\Server;
 use App\Services\Caddy\CaddyApiClient;
+use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\ReleasePaths;
 use App\Services\Server\FirewallManagerFactory;
 use App\Services\SSH\SSHConnection;
 use Throwable;
@@ -34,6 +36,8 @@ final class ServerFingerprint
             "printf '{$mark} key=%s\\n' \"\$(grep -cF {$key} \"\$home/.ssh/authorized_keys\" 2>/dev/null || true)\"",
             "printf '{$mark} sudo=%s\\n' \"\$(cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null | {$hash})\"",
             "printf '{$mark} units=%s\\n' \"\$(for f in /etc/systemd/system/coresmith-*; do [ -f \"\$f\" ] && echo \"\$f\" && cat \"\$f\"; done 2>/dev/null | {$hash})\"",
+            "printf '{$mark} jobs=%s\\n' \"\$(for f in " . CrontabBuilder::DIRECTORY . "/coresmith-*; do [ -f \"\$f\" ] && echo \"\$f\" && cat \"\$f\"; done 2>/dev/null | {$hash})\"",
+            "printf '{$mark} folders=%s\\n' \"\$(for d in " . ReleasePaths::ROOT . "/*/; do stat -c '%n %U %G %a' \"\$d\" \"\${d}releases\" \"\${d}shared\" 2>/dev/null; [ -e \"\${d}current\" ] && echo \"\${d}current\"; done 2>/dev/null | {$hash})\"",
             "printf '{$mark} settings=%s\\n' \"\$(find /etc/coresmith -type f 2>/dev/null | sort | xargs -r sha256sum 2>/dev/null | {$hash})\"",
             "printf '{$mark} web=%s\\n' \"\$({$web} 2>/dev/null | {$hash})\"",
             "printf '{$mark} firewall=%s\\n' \"\$({$firewall} 2>/dev/null | {$hash})\"",
