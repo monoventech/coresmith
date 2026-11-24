@@ -28,7 +28,7 @@ final class ApplicationLogsController extends Controller
 {
     public const FRESH_SECONDS = 2;
 
-    public const SHOWN = 300;
+    public const SHOWN = AppLogs::KEEP;
 
     public const DEPLOYS = 50;
 
@@ -94,7 +94,7 @@ final class ApplicationLogsController extends Controller
             'error' => $cached['error'] ?? null,
             'read_at' => CarbonImmutable::createFromTimestamp((int) ($cached['read_at'] ?? 0))->toIso8601String(),
             'entries' => array_map(self::present(...), array_slice($shown, -self::SHOWN)),
-            'capped' => ($cached['capped'] ?? false) || count($shown) > self::SHOWN,
+            'capped' => AppLogs::leftOut($cached, $query) || count($shown) > self::SHOWN,
             'sources' => $this->sources($application, $logs, $entries),
             'stats' => $cached['stats'] ?? null,
             'processes' => $processes->ofApplication($application),
