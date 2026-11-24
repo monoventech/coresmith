@@ -412,6 +412,10 @@
             return '—'
         }
 
+        if (ms < 1) {
+            return '<1 ms'
+        }
+
         return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`
     }
 
@@ -705,7 +709,11 @@
         <span class="text-[12px] font-medium text-muted-foreground">Response time, p95</span>
         <span class="font-mono text-[22px] font-medium max-sm:text-[19px]">{duration(stats?.p95 ?? null)}</span>
         <span class="text-[12px] text-muted-foreground max-sm:hidden"
-            >{stats?.p50 == null ? 'Reading' : `Half answer within ${duration(stats.p50)}`}</span
+            >{stats?.p50 == null
+                ? 'Reading'
+                : stats.p50 < 1
+                  ? 'Half answer in under 1 ms'
+                  : `Half answer within ${duration(stats.p50)}`}</span
         >
     </div>
     <div

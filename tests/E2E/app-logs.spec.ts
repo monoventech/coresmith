@@ -126,6 +126,18 @@ test.describe("an app's logs", () => {
         await expect(page.getByTestId('logs-status')).toHaveText('Live, following')
     })
 
+    test('times under a millisecond read as under 1 ms', async ({ page }, testInfo) => {
+        await page.route(/\/logs\/lines/, (route) => {
+            const body = lines()
+
+            return route.fulfill({ json: { ...body, stats: { ...body.stats, p50: 0, p95: 0 } } })
+        })
+        await openLogs(page, isMobile(testInfo))
+
+        await expect(page.getByTestId('logs-glance')).toContainText('<1 ms')
+        await expect(page.getByTestId('logs-glance')).toContainText('Half answer in under 1 ms')
+    })
+
     test('a stack trace opens under its line', async ({ page }, testInfo) => {
         await fakeLines(page)
         await openLogs(page, isMobile(testInfo))
