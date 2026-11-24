@@ -332,7 +332,7 @@ test('the pushed deploy payload says who cancelled and carries no link', functio
 
     expect($payload)->toMatchArray(['cancel_requested' => true, 'cancelled_by' => 'Maya Lindqvist', 'cancellable' => false])
         ->and(array_filter(array_keys($payload), fn(string $key): bool => str_ends_with($key, '_href')))->toBe([])
-        ->and($payload)->toBe(DeploymentController::present($deployment->fresh(), app(DeploymentPhases::class)));
+        ->and($payload)->toBe(array_diff_key(DeploymentController::present($deployment->fresh(), app(DeploymentPhases::class)), ['log' => true]));
 });
 
 test('deploy updates are only broadcast when a broadcaster is configured', function (string $driver, bool $broadcast) {

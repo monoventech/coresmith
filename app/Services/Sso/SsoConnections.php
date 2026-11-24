@@ -128,12 +128,6 @@ final class SsoConnections
             $uris[] = 'https://' . $domain->hostname . SignIn::CALLBACK_PATH;
         }
 
-        $subdomain = $this->urls->subdomainUrl($team);
-
-        if ($subdomain !== null) {
-            $uris[] = $subdomain . SignIn::CALLBACK_PATH;
-        }
-
         return array_values(array_unique($uris));
     }
 

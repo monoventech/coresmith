@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.35 (2026-11-24)
+
+### Added
+- feat: a server's Network tab holds its addresses and the ways to bring IPv4 visitors in, so the Apps tab keeps only a one-line notice when IPv4 visitors can't get in (#179)
+
+### Changed
+- Every server has a Logs page for its requests, sign-ins, blocked addresses, app events and system warnings (#178)
+- Every app has a Logs page to read, search and follow what it writes (#177)
+- Deploy logs stream as they run, with find, wrap, first error, copy and download (#176)
+- Team subdomains are gone: a team opens at Coresmith's address as a path, or on its own domain on self-hosted (#175)
+
 ## v0.8.34 (2026-11-23)
 
 ### Fixed

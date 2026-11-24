@@ -59,7 +59,6 @@ final class TeamController extends Controller
             'team' => ['id' => $team->id, 'name' => $team->name, 'slug' => $team->slug],
             'address' => [
                 'path' => $urls->pathUrl($team, $request),
-                'subdomain' => $urls->subdomainUrl($team),
                 'domain' => $domain instanceof TeamDomain ? app(TeamDomains::class)->present($domain) : null,
                 'custom_domains' => $urls->allowsTeamHosts(),
             ],

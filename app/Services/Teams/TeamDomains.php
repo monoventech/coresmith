@@ -42,12 +42,6 @@ final class TeamDomains
             return "That doesn't look like a domain. Try deploy.example.com.";
         }
 
-        $tenant = $this->urls->tenantDomain();
-
-        if ($tenant !== null && ($hostname === $tenant || str_ends_with($hostname, '.' . $tenant))) {
-            return 'Addresses under ' . $tenant . ' already come with your team address.';
-        }
-
         if (TeamDomain::query()->where('hostname', $hostname)->where('team_id', '!=', $team->getKey())->exists()) {
             return 'Another team already uses that domain.';
         }

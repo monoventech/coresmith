@@ -8,6 +8,7 @@ use App\Http\Controllers\ApplicationDatabaseController;
 use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
+use App\Http\Controllers\ApplicationLogsController;
 use App\Http\Controllers\ApplicationPhpLimitsController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationRuntimeController;
@@ -37,6 +38,7 @@ use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerFrontDoorController;
 use App\Http\Controllers\ServerHostKeyController;
+use App\Http\Controllers\ServerLogsController;
 use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerRuntimeController;
 use App\Http\Controllers\ServerTabsController;
@@ -135,6 +137,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('servers/{server}/hardening', [ServerTabsController::class, 'hardening'])
         ->withTrashed()
         ->name('servers.hardening');
+    Route::get('servers/{server}/network', [ServerTabsController::class, 'network'])
+        ->withTrashed()
+        ->name('servers.network');
     Route::get('servers/{server}/activity', [ServerTabsController::class, 'activity'])
         ->withTrashed()
         ->name('servers.activity');
@@ -173,6 +178,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.releases.index');
     Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
         ->name('servers.applications.deployments.show');
+    Route::get('servers/{server}/applications/{application}/deployments/{deployment}/log', [DeploymentController::class, 'log'])
+        ->middleware('throttle:120,1,deploy-log')
+        ->name('servers.applications.deployments.log');
     Route::post('servers/{server}/applications/{application}/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])
         ->middleware('throttle:10,1,deploy-cancel')
         ->name('servers.applications.deployments.cancel');
@@ -227,9 +235,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('servers/{server}/applications/{application}/cron-jobs/{cronJob}', [ApplicationCronJobController::class, 'destroy'])
         ->where('cronJob', '[0-9a-f]{16}')
         ->name('servers.applications.cron-jobs.destroy');
-    Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogController::class, 'index'])
-        ->middleware('throttle:30,1,app-logs')
+    Route::get('servers/{server}/logs', [ServerLogsController::class, 'show'])
+        ->name('servers.logs');
+    Route::get('servers/{server}/logs/lines', [ServerLogsController::class, 'lines'])
+        ->middleware('throttle:90,1,server-log-lines')
+        ->name('servers.logs.lines');
+    Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogsController::class, 'show'])
         ->name('servers.applications.logs');
+    Route::get('servers/{server}/applications/{application}/logs/lines', [ApplicationLogsController::class, 'lines'])
+        ->middleware('throttle:90,1,app-log-lines')
+        ->name('servers.applications.logs.lines');
+    Route::get('servers/{server}/applications/{application}/logs/recent', [ApplicationLogController::class, 'index'])
+        ->middleware('throttle:30,1,app-logs')
+        ->name('servers.applications.logs.recent');
     Route::get('servers/{server}/applications/{application}/cron-jobs/log', [ApplicationSchedulerLogController::class, 'index'])
         ->middleware('throttle:30,1,scheduler-log')
         ->name('servers.applications.cron-jobs.log');

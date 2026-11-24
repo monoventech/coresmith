@@ -30,7 +30,7 @@ const FAILED = {
 }
 
 const IPV6_ONLY_NOTE =
-    "coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page to reach them. If 203.0.113.7 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."
+    "coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its Network tab to reach them. If 203.0.113.7 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."
 
 const IPV6_ONLY = {
     host: 'coresmith.example.com',
@@ -102,38 +102,38 @@ test.describe("Coresmith's address", () => {
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })
 
-    test("with the tunnel off on this machine, the warning sends people to this machine's page and leaves the records out", async ({
+    test("with the tunnel off on this machine, the warning sends people to this machine's Network tab and leaves the records out", async ({
         page
     }) => {
         await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', machine: '/servers/beelink' })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. To reach them, turn on IPv4 through Cloudflare on this machine's page. If its IPv4 address is yours alone, you can instead forward ports 80 and 443 to this machine and add an A record."
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. To reach them, turn on IPv4 through Cloudflare on this machine's Network tab. If its IPv4 address is yours alone, you can instead forward ports 80 and 443 to this machine and add an A record."
         )
-        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
+        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink/network')
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })
 
-    test("with the tunnel on but not carrying the address yet, the warning says so and links to this machine's page", async ({
+    test("with the tunnel on but not carrying the address yet, the warning says so and links to this machine's Network tab", async ({
         page
     }) => {
         await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'on', machine: '/servers/beelink' })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. This machine's Cloudflare tunnel doesn't carry it yet. See why on this machine's page."
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. This machine's Cloudflare tunnel doesn't carry it yet. See why on this machine's Network tab."
         )
-        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
+        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink/network')
     })
 
-    test("with IPv4 through another server on but not carrying the address yet, the warning names that server and links to this machine's page", async ({
+    test("with IPv4 through another server on but not carrying the address yet, the warning names that server and links to this machine's Network tab", async ({
         page
     }) => {
         await settingsShowing(page, { ...IPV6_ONLY, tunnel: 'off', front_door: 'web-1', machine: '/servers/beelink' })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. It doesn't go through web-1 yet. See why on this machine's page."
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. It doesn't go through web-1 yet. See why on this machine's Network tab."
         )
-        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink')
+        await expect(card(page).getByTestId('address-machine-link')).toHaveAttribute('href', '/servers/beelink/network')
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })
 
@@ -388,7 +388,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toBeVisible()
     })
 
-    test("a check's note that sends you to this machine's page links to it", async ({ page }) => {
+    test("a check's note that sends you to this machine's Network tab links to it", async ({ page }) => {
         const connected = {
             cloudflare: { connected: false, host: null, error: null, synced: null },
             machine: '/servers/beelink'
@@ -398,7 +398,7 @@ test.describe('Cloudflare DNS for the address', () => {
             ok: true,
             problems: [],
             notes: [
-                "Visitors without IPv6 can't open coresmith.example.com yet. Turn on IPv4 through Cloudflare on this machine's page to reach them."
+                "Visitors without IPv6 can't open coresmith.example.com yet. Turn on IPv4 through Cloudflare on this machine's Network tab to reach them."
             ],
             records: [],
             checked_at: '2026-11-20T05:50:00Z'
@@ -413,7 +413,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
 
         await expect(
-            dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's page" })
+            dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's Network tab" })
         ).toHaveAttribute('href', '/servers/beelink')
     })
 
@@ -428,7 +428,7 @@ test.describe('Cloudflare DNS for the address', () => {
             host: 'coresmith.example.com',
             ok: false,
             problems: [
-                "Coresmith can't change its address while visitors come in through web-1. Turn off IPv4 through another server on this machine's page, change the address, then turn it on again."
+                "Coresmith can't change its address while visitors come in through web-1. Turn off IPv4 through another server on this machine's Network tab, change the address, then turn it on again."
             ],
             notes: [],
             records: [],
@@ -447,7 +447,7 @@ test.describe('Cloudflare DNS for the address', () => {
         await expect(dialog(page).getByTestId('address-check')).toContainText('Turn off IPv4 through another server')
         await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toHaveCount(0)
         await expect(
-            dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's page" })
+            dialog(page).getByTestId('address-check').getByRole('link', { name: "this machine's Network tab" })
         ).toHaveAttribute('href', '/servers/beelink')
     })
 

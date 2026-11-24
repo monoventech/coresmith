@@ -38,6 +38,7 @@
     const tabs = $derived([
         { label: 'Apps', href: server.tabs.apps },
         { label: 'Databases', href: server.tabs.databases },
+        { label: 'Network', href: server.tabs.network },
         { label: 'Hardening', href: server.tabs.hardening },
         { label: 'Activity', href: server.tabs.activity }
     ])
@@ -128,6 +129,11 @@
             {/if}
             {#if server.can.update}
                 <Button variant="ghost" onclick={openRename}>Rename</Button>
+                {#if !server.provisioning}
+                    <Button variant="outline" href={route('servers.logs', server.key)} data-testid="server-logs"
+                        >Logs</Button
+                    >
+                {/if}
                 {#if server.active && server.cloud?.task?.state !== 'running'}
                     <Button
                         variant="outline"

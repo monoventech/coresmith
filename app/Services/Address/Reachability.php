@@ -301,9 +301,9 @@ final class Reachability
     {
         return match (true) {
             !Edition::current()->isSelfHosted() => null,
-            !$this->thisMachine => "Turn on IPv4 through Cloudflare on the server's page",
-            Server::query()->where('runs_coresmith', true)->exists() => "Turn on IPv4 through Cloudflare on this machine's page",
-            default => 'Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page',
+            !$this->thisMachine => "Turn on IPv4 through Cloudflare on the server's Network tab",
+            Server::query()->where('runs_coresmith', true)->exists() => "Turn on IPv4 through Cloudflare on this machine's Network tab",
+            default => 'Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its Network tab',
         };
     }
 

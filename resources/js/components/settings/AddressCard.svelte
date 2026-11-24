@@ -29,7 +29,7 @@
         address.change?.state === 'done' && address.change.to === address.host ? address.change : null
     )
     const stale = $derived(moved !== null && typeof window !== 'undefined' && window.location.hostname !== address.host)
-    const MACHINE_PAGE = "this machine's page"
+    const MACHINE_PAGE = "this machine's Network tab"
     const tunnelFix = $derived(address.tunnel === 'off' || address.tunnel === 'on')
     const replacing = $derived(address.cloudflare.connected)
 

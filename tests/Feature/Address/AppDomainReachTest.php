@@ -105,7 +105,7 @@ test('a domain on a home server nobody reaches over IPv4 is told to turn on IPv4
 
     $report = app(AppDomainReach::class)->check($application)['notes.example.net'];
 
-    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and this server's IPv4 address, 203.0.113.7, doesn't answer on ports 80 and 443 from the internet. Turn on IPv4 through Cloudflare on the server's page, then check again. If 203.0.113.7 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."])
+    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and this server's IPv4 address, 203.0.113.7, doesn't answer on ports 80 and 443 from the internet. Turn on IPv4 through Cloudflare on the server's Network tab, then check again. If 203.0.113.7 is yours alone, you can instead forward ports 80 and 443 to 192.168.0.248 and add an A record for it."])
         ->and($report->records)->toBe([
             ['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7', 'note' => 'Only if the address is yours and you can forward ports 80 and 443'],
         ]);

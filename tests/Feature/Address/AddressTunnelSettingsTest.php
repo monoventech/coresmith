@@ -58,7 +58,7 @@ test("a tunnel that carries Coresmith's address clears the IPv6-only warning at 
             ->where('address.ipv6_only', false)
             ->where('address.tunnel', 'carries')
             ->where('address.cloudflare.synced', 'today 11:55')
-            ->where('address.cloudflare.tunnel', ['name' => 'beelink', 'url' => route('servers.show', $server)]));
+            ->where('address.cloudflare.tunnel', ['name' => 'beelink', 'url' => route('servers.network', $server)]));
 });
 
 test('the warning knows whether the tunnel is off, on without the address, or not on offer for this machine', function (?array $tunnel, ?bool $ipv4Open, bool $machine, ?string $state) {

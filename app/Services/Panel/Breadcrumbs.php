@@ -37,12 +37,14 @@ final class Breadcrumbs
 
     private const SERVER_PAGES = [
         'servers.hardening' => 'Hardening',
+        'servers.network' => 'Network',
         'servers.activity' => 'Activity',
+        'servers.logs' => 'Logs',
         'servers.databases.index' => 'Databases',
         'servers.applications.create' => 'Add an app',
     ];
 
-    private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases', 'servers.applications.setup.edit' => 'Edit setup'];
+    private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases', 'servers.applications.setup.edit' => 'Edit setup', 'servers.applications.logs' => 'Logs'];
 
     public function __construct(private readonly TeamAccess $access) {}
 

@@ -151,6 +151,7 @@
             deploy_href: string
             repository_check: RepositoryCheck | null
             logs_href: string
+            recent_log_href: string
             last_failed: boolean
             last_failed_live: boolean
             last_failed_reason: string | null
@@ -462,7 +463,7 @@
 
     async function loadLog() {
         try {
-            const response = await fetch(application.logs_href, {
+            const response = await fetch(application.recent_log_href, {
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...REFRESH_HEADERS }
             })
             const body = (await response.json()) as { lines?: LogLine[]; error?: string | null; pending?: boolean }
@@ -549,7 +550,7 @@
             </div>
         {/if}
     </div>
-    {#if application.running_href || can.deploy || can.update}
+    {#if application.running_href || can.deploy || can.update || can.viewLogs}
         <div class="flex flex-wrap gap-2 max-sm:w-full">
             {#if application.running_href}
                 <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
@@ -559,6 +560,14 @@
                     aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
                     onclick={deploy}
                     class="max-sm:w-full sm:hidden">Deploy</Button
+                >
+            {/if}
+            {#if can.viewLogs}
+                <Button
+                    variant="outline"
+                    href={application.logs_href}
+                    class="max-sm:w-full sm:hidden"
+                    data-testid="open-logs-phone">Logs</Button
                 >
             {/if}
             {#if can.update}
@@ -945,11 +954,21 @@
     <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="live-log-card">
         <div class="mb-2.5 flex items-center justify-between gap-3">
             <h3 class="type-h3 m-0">Live log</h3>
-            {#if !log.loading && !log.error}
-                <span class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                    <span class="status-dot-pulse size-1.75 rounded-full bg-success" aria-hidden="true"></span>Following
-                </span>
-            {/if}
+            <div class="flex items-center gap-3">
+                {#if !log.loading && !log.error}
+                    <span class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <span class="status-dot-pulse size-1.75 rounded-full bg-success" aria-hidden="true"
+                        ></span>Following
+                    </span>
+                {/if}
+                {#if can.viewLogs}
+                    <Link
+                        href={application.logs_href}
+                        class="focus-ring rounded-sm text-[13px] font-medium text-primary underline-offset-2 hover:underline"
+                        data-testid="open-logs">Open logs</Link
+                    >
+                {/if}
+            </div>
         </div>
         <div
             class="terminal h-49 px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
