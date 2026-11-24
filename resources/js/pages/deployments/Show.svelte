@@ -5,14 +5,17 @@
 <script lang="ts">
     import { router } from '@inertiajs/svelte'
     import { CircleSlash, OctagonAlert, TriangleAlert } from '@lucide/svelte'
-    import { onDestroy, onMount, tick } from 'svelte'
+    import { onDestroy, onMount, untrack } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
+    import StreamedLog from '@/components/logs/StreamedLog.svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import { realtime, realtimeConfigured } from '@/lib/echo'
     import type { EntityState } from '@/lib/fleet'
+    import { GAP_MS, LogFeed } from '@/lib/logs/feed'
+    import { Reveal } from '@/lib/logs/reveal.svelte'
     import { cn } from '@/lib/utils'
 
     type Phase = { key: string; label: string; state: string; duration: string }
@@ -22,6 +25,7 @@
         status: string
         state: EntityState & { live: boolean }
         log: string
+        log_bytes: number
         phases: Phase[]
         failed_phase: string | null
         failure_reason: string | null
@@ -63,13 +67,14 @@
             current_release: string | null
         }
         deployment: Deployment
-        deployment_links: { cancel: string }
+        deployment_links: { cancel: string; log: string }
         back: { label: string; href: string }
         streaming: boolean
         can: { deploy: boolean }
     } = $props()
 
-    const POLL_MS = 3000
+    const FOLLOW_MS = 1000
+    const ENDED = ['succeeded', 'failed', 'cancelled']
 
     const FAILURES: Record<string, string> = {
         clone: 'The clone failed',
@@ -93,21 +98,27 @@
         health: 'the health check'
     }
 
-    type Pushed = Omit<Deployment, 'log'> & { log: string | null }
+    type Status = Omit<Deployment, 'log'>
 
-    let pushed = $state<Deployment | null>(null)
+    let status = $state<Status | null>(null)
     let downgraded = $state(false)
-    let terminal = $state<HTMLDivElement | null>(null)
     let now = $state(Date.now())
     let poller: ReturnType<typeof setInterval> | null = null
     let clock: ReturnType<typeof setInterval> | null = null
     let retrying = $state(false)
     let cancelling = $state(false)
+    let phaseAnnouncement = $state('')
+    let feed: LogFeed<Status> | null = null
+    let reloaded = false
 
-    const live = $derived(pushed && pushed.id === deployment.id ? pushed : deployment)
-    const finished = $derived(['succeeded', 'failed', 'cancelled'].includes(live.status))
+    const output = new Reveal(untrack(() => deployment.log))
+    const deploymentId = $derived(deployment.id)
+    const logHref = $derived(deployment_links.log)
+    const live = $derived(status && status.id === deployment.id ? status : deployment)
+    const finished = $derived(ENDED.includes(live.status))
     const running = $derived(live.status === 'running' || live.status === 'pending')
-    const lines = $derived(live.log === '' ? [] : live.log.split('\n'))
+    const runningPhase = $derived(live.phases.find((phase) => phase.state === 'running')?.label ?? null)
+    const filename = $derived(`${application.name}-${live.release ?? 'deploy'}.log`.replace(/[^A-Za-z0-9._-]+/g, '-'))
     const stopping = $derived(live.cancel_requested || cancelling)
     const liveFailure = $derived(
         live.failed_worker ? `${live.failed_worker} did not start` : live.start_failed ? FAILURES.watch : FAILURES.swap
@@ -131,55 +142,34 @@
         return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
     })
 
-    async function followOutput() {
-        const element = terminal
-
-        if (!element) {
+    function applyStatus(next: Status) {
+        if (next.id !== untrack(() => deployment.id)) {
             return
         }
 
-        const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 80
+        status = next
+        feed?.behind(next.log_bytes, ENDED.includes(next.status) ? 0 : GAP_MS)
 
-        await tick()
-
-        if (nearBottom || !finished) {
-            element.scrollTop = element.scrollHeight
-        }
-    }
-
-    function refresh(only: string[]) {
-        router.reload({ only, onSuccess: () => ((pushed = null), void followOutput()) })
-    }
-
-    function apply(next: Pushed) {
-        pushed = { ...next, log: next.log ?? live.log }
-        void followOutput()
-
-        if (['succeeded', 'failed', 'cancelled'].includes(next.status)) {
+        if (ENDED.includes(next.status)) {
             stopPolling()
 
-            if (next.log === null) {
-                refresh(['deployment', 'application'])
-            } else {
+            if (!reloaded) {
+                reloaded = true
                 router.reload({ only: ['application'] })
             }
-
-            return
-        }
-
-        if (next.log === null && !poller) {
-            downgraded = true
-            refresh(['deployment'])
-            startPolling()
         }
     }
 
     function startPolling() {
-        if (poller || finished) {
+        if (poller || untrack(() => finished)) {
             return
         }
 
-        poller = setInterval(() => refresh(['deployment', 'application']), POLL_MS)
+        poller = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                void feed?.fill()
+            }
+        }, FOLLOW_MS)
     }
 
     function stopPolling() {
@@ -187,6 +177,11 @@
             clearInterval(poller)
             poller = null
         }
+    }
+
+    function downgrade() {
+        downgraded = true
+        startPolling()
     }
 
     function retry() {
@@ -199,7 +194,7 @@
         router.post(
             deployment_links.cancel,
             {},
-            { preserveScroll: true, onSuccess: () => (pushed = null), onFinish: () => (cancelling = false) }
+            { preserveScroll: true, onSuccess: () => (status = null), onFinish: () => (cancelling = false) }
         )
     }
 
@@ -209,47 +204,79 @@
         }
     })
 
-    onMount(() => {
-        if (terminal) {
-            terminal.scrollTop = terminal.scrollHeight
-        }
-
-        clock = setInterval(() => (now = Date.now()), 1000)
-
-        const echo = streaming && realtimeConfigured() ? realtime() : null
-
-        if (!echo) {
-            startPolling()
-
-            return
-        }
-
-        try {
-            echo.private(`deployments.${deployment.id}`)
-                .listen('.deployment.updated', (event: Pushed) => apply(event))
-                .error(() => ((downgraded = true), startPolling()))
-
-            const socket = (
-                echo.connector as { pusher?: { connection?: { bind(event: string, handler: () => void): void } } }
-            ).pusher?.connection
-
-            socket?.bind('unavailable', () => ((downgraded = true), startPolling()))
-            socket?.bind('failed', () => ((downgraded = true), startPolling()))
-        } catch {
-            downgraded = true
-            startPolling()
+    $effect(() => {
+        if (runningPhase) {
+            phaseAnnouncement = `${runningPhase} started.`
         }
     })
 
+    $effect(() => {
+        feed?.behind(deployment.log_bytes)
+    })
+
+    $effect(() => {
+        const id = deploymentId
+        const href = logHref
+        const initial = untrack(() => deployment)
+        const current = new LogFeed<Status>({
+            href,
+            held: initial.log_bytes,
+            onText: (text) => output.push(text),
+            onStatus: applyStatus
+        })
+
+        untrack(() => {
+            status = null
+            downgraded = false
+            reloaded = false
+            output.reset(initial.log)
+        })
+        feed = current
+
+        const echo = streaming && realtimeConfigured() ? realtime() : null
+
+        if (echo) {
+            try {
+                echo.private(`deployments.${id}`)
+                    .listen('.deployment.updated', (event: Status) => applyStatus(event))
+                    .listen('.deployment.log', (event: { offset: number; text: string }) =>
+                        current.receive(event.offset, event.text)
+                    )
+                    .subscribed(() => void current.fill())
+                    .error(downgrade)
+
+                const socket = (
+                    echo.connector as { pusher?: { connection?: { bind(event: string, handler: () => void): void } } }
+                ).pusher?.connection
+
+                socket?.bind('unavailable', downgrade)
+                socket?.bind('failed', downgrade)
+            } catch {
+                downgrade()
+            }
+        } else {
+            untrack(startPolling)
+        }
+
+        return () => {
+            current.close()
+            stopPolling()
+
+            if (echo) {
+                echo.leave(`deployments.${id}`)
+            }
+        }
+    })
+
+    onMount(() => {
+        clock = setInterval(() => (now = Date.now()), 1000)
+    })
+
     onDestroy(() => {
-        stopPolling()
+        output.destroy()
 
         if (clock) {
             clearInterval(clock)
-        }
-
-        if (streaming && realtimeConfigured()) {
-            realtime()?.leave(`deployments.${deployment.id}`)
         }
     })
 </script>
@@ -417,28 +444,17 @@
         </p>
     </div>
 
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div
-        bind:this={terminal}
+    <StreamedLog
+        log={output}
+        {running}
+        {filename}
+        label="Deployment output"
+        empty="Waiting for a worker to pick up the deploy…"
         class={cn(
-            'terminal h-99 max-[900px]:h-75 max-sm:px-3.5 max-sm:py-3 max-sm:text-[11px] max-sm:leading-[1.65]',
+            'h-99 max-[900px]:h-75 max-sm:px-3.5 max-sm:py-3 max-sm:text-[11px] max-sm:leading-[1.65]',
             finished ? 'max-sm:h-37.5' : 'max-sm:h-57.5'
         )}
-        data-testid="deployment-log"
-        tabindex="0"
-        role="log"
-        aria-live="polite"
-        aria-label="Deployment output"
-    >
-        {#each lines as line, index (index)}
-            <div class="whitespace-pre-wrap">{line}</div>
-        {:else}
-            <div class="opacity-60">Waiting for a worker to pick up the deploy…</div>
-        {/each}
-        {#if running}
-            <div class="opacity-60" aria-hidden="true">▍</div>
-        {/if}
-    </div>
+    />
 </div>
 
 {#if running}
@@ -468,5 +484,6 @@
         ? 'Finished'
         : streaming && realtimeConfigured() && !downgraded
           ? 'Streaming live'
-          : `Refreshing every ${POLL_MS / 1000}s`}
+          : 'Following every second'}
 </p>
+<p class="sr-only" aria-live="polite" data-testid="phase-announcement">{phaseAnnouncement}</p>

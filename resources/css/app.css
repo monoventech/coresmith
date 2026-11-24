@@ -390,6 +390,18 @@
     animation: status-pulse 1s var(--ease-in-out-soft) infinite;
 }
 
+input[type='search']::-webkit-search-cancel-button {
+    filter: grayscale(1);
+    opacity: 0.7;
+    cursor: pointer;
+}
+
+@keyframes log-line-in {
+    from {
+        opacity: 0;
+    }
+}
+
 @keyframes spin-slow {
     to {
         transform: rotate(360deg);
@@ -419,6 +431,68 @@
         border-radius: var(--radius);
         padding: 1rem 1.25rem;
         overflow: auto;
+    }
+
+    .terminal .log-time {
+        color: oklch(0.62 0.01 80);
+    }
+
+    .terminal .log-phase {
+        color: oklch(0.94 0.008 80);
+        font-weight: 500;
+    }
+
+    .terminal .log-command {
+        color: oklch(0.84 0.14 45);
+    }
+
+    .terminal .log-warning {
+        color: oklch(0.88 0.13 75);
+    }
+
+    .terminal .log-error {
+        color: oklch(0.8 0.13 25);
+        background: oklch(0.3 0.07 25 / 0.35);
+    }
+
+    .terminal .log-success {
+        color: oklch(0.84 0.13 150);
+    }
+
+    .terminal .log-match {
+        background: oklch(0.64 0.11 75);
+        color: oklch(0.16 0.008 60);
+        border-radius: 2px;
+    }
+
+    .terminal .log-match-current {
+        background: oklch(0.86 0.15 80);
+        color: oklch(0.16 0.008 60);
+        border-radius: 2px;
+        outline: 1px solid oklch(0.94 0.1 80);
+    }
+
+    .terminal .log-line-new {
+        animation: log-line-in var(--dur-fast) var(--ease-out-soft) both;
+    }
+
+    .terminal .log-line-flash {
+        outline: 1px solid oklch(0.8 0.13 25);
+        outline-offset: 1px;
+    }
+
+    .terminal .log-cursor {
+        opacity: 0.65;
+    }
+
+    .log-pill {
+        border-color: oklch(0.4 0.01 60);
+        background: oklch(0.24 0.01 60);
+        color: oklch(0.92 0.008 80);
+    }
+
+    .log-pill:hover {
+        background: oklch(0.28 0.01 60);
     }
 
     .type-display-xl {

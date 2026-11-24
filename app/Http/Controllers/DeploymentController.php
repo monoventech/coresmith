@@ -86,6 +86,7 @@ final class DeploymentController extends Controller
             ],
             'deployment_links' => [
                 'cancel' => route('servers.applications.deployments.cancel', [$server, $application, $deployment]),
+                'log' => route('servers.applications.deployments.log', [$server, $application, $deployment]),
             ],
             'deployment' => self::present($deployment, $phases),
             'back' => $this->back((string) $request->query('from'), $server, $application, $request->user()),
