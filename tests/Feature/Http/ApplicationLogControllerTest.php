@@ -33,7 +33,7 @@ function logRouteApp(Team $team): Application
 
 function logRouteUrl(Application $application): string
 {
-    return route('servers.applications.logs', [$application->server, $application]);
+    return route('servers.applications.logs.recent', [$application->server, $application]);
 }
 
 function logRouteRead(Application $application, FakeSSHTransport $transport): void
@@ -139,7 +139,7 @@ test('logs addressed through another server are a not found', function () {
     $other = Server::factory()->for($team)->create();
 
     $this->actingAs(logRouteMember($team, TeamRole::Owner))
-        ->get(route('servers.applications.logs', [$other, $application]))
+        ->get(route('servers.applications.logs.recent', [$other, $application]))
         ->assertNotFound();
 
     Queue::assertNothingPushed();
@@ -150,7 +150,7 @@ test('the logs endpoint requires authentication and is rate limited', function (
 
     $this->get(logRouteUrl($application))->assertRedirect(route('login'));
 
-    expect(Route::getRoutes()->getByName('servers.applications.logs')->gatherMiddleware())->toContain('throttle:30,1,app-logs');
+    expect(Route::getRoutes()->getByName('servers.applications.logs.recent')->gatherMiddleware())->toContain('throttle:30,1,app-logs');
 });
 
 test('a read caches the application requests with the moment they were read', function () {
