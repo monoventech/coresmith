@@ -11,6 +11,7 @@ namespace App\Services\Panel;
 use App\Enums\Ability;
 use App\Enums\DeploymentStatus;
 use App\Enums\Edition;
+use App\Enums\ServerStatus;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Project;
@@ -46,6 +47,10 @@ final class CommandPalette
 
         foreach ($fleet?->servers() ?? [] as $server) {
             $commands[] = $this->openServer($server, $fleet);
+
+            if ($server->status === ServerStatus::Active && ($this->user->can('openTerminal', $server) || $this->user->can('openRootTerminal', $server))) {
+                $commands[] = ['label' => 'Open a terminal on ' . $server->name, 'icon' => 'terminal', 'hint' => $this->user->can('openRootTerminal', $server) ? "as root or an app's user" : "as an app's user", 'href' => route('servers.terminal', $server)];
+            }
         }
 
         if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::CreateApplication)) {
@@ -84,6 +89,15 @@ final class CommandPalette
                 'hint' => implode(' · ', [...$application->tags, 'on ' . $application->server?->name]),
                 'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
             ];
+
+            if ($application->current_release !== null && $application->server?->status === ServerStatus::Active && $this->user->can('openTerminal', $application->server)) {
+                $commands[] = [
+                    'label' => 'Open a terminal as ' . $application->name,
+                    'icon' => 'terminal',
+                    'hint' => 'in its live release on ' . $application->server->name,
+                    'href' => route('servers.terminal', [app(RouteKeys::class)->server($application->server_id), 'app' => $application->getRouteKey()]),
+                ];
+            }
         }
 
         return $commands;

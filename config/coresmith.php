@@ -209,6 +209,10 @@ return [
         ],
     ],
 
+    'terminals' => [
+        'max' => max(1, (int) (env('HORIZON_TERMINALS_PROCESSES') ?: 4)),
+    ],
+
     'cloud' => [
         'catalog_seconds' => 600,
         'min_memory_mb' => 1024,

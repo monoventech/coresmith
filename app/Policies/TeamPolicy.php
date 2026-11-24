@@ -35,6 +35,11 @@ final class TeamPolicy
         return $user->hasTeamAbility($team, Ability::TransferOwnership);
     }
 
+    public function manageRootTerminals(User $user, Team $team): bool
+    {
+        return $user->hasTeamAbility($team, Ability::OpenRootTerminal);
+    }
+
     public function manageBilling(User $user, Team $team): bool
     {
         return $user->hasTeamAbility($team, Ability::ManageBilling);

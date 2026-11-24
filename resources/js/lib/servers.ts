@@ -59,5 +59,6 @@ export type ServerHeader = {
     } | null
     cloud: CloudServer | null
     tabs: { apps: string; databases: string; network: string; hardening: string; activity: string }
+    terminal_href: string | null
     can: { update: boolean; delete: boolean; manageFirewall: boolean; createApplication: boolean }
 }

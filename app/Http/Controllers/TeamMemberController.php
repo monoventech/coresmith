@@ -10,6 +10,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Edition;
 use App\Enums\TeamRole;
+use App\Enums\TerminalEndReason;
 use App\Http\Controllers\Settings\AccountGitController;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
@@ -17,6 +18,7 @@ use App\Models\User;
 use App\Services\Billing\PlanGate;
 use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamInvitations;
+use App\Services\Terminal\TerminalSessions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -103,6 +105,10 @@ final class TeamMemberController extends Controller
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'from' => $from?->value, 'to' => $role->value])->log('member_role_changed');
 
+        if ($from !== $role) {
+            app(TerminalSessions::class)->endFor($user, TerminalEndReason::RoleChanged, $team);
+        }
+
         $this->syncServers($team);
 
         return back()->with('success', 'Role updated.');
@@ -125,6 +131,8 @@ final class TeamMemberController extends Controller
         AccountGitController::removeOwn($team, (string) $user->getKey());
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email])->log('member_removed');
+
+        app(TerminalSessions::class)->endFor($user, TerminalEndReason::LeftTeam, $team);
 
         $this->syncServers($team);
 

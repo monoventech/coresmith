@@ -25,6 +25,7 @@ use App\Http\Controllers\Settings\TeamDeletionController;
 use App\Http\Controllers\Settings\TeamDomainController;
 use App\Http\Controllers\Settings\TeamMoveController;
 use App\Http\Controllers\Settings\TeamNameController;
+use App\Http\Controllers\Settings\TeamRootTerminalsController;
 use App\Http\Controllers\Settings\TeamUrlController;
 use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -83,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware(['cloud', 'password.confirm', 'throttle:6,1,team-delete'])
         ->name('teams.destroy');
     Route::put('settings/team/name', [TeamNameController::class, 'update'])->name('settings.team-name.update');
+    Route::put('settings/team/root-terminals', [TeamRootTerminalsController::class, 'update'])->name('settings.root-terminals.update');
     Route::put('settings/team/url', [TeamUrlController::class, 'update'])->name('settings.team-url.update');
     Route::post('settings/team/domain', [TeamDomainController::class, 'store'])->middleware('self-hosted')->name('settings.team-domain.store');
     Route::post('settings/team/domain/verify', [TeamDomainController::class, 'verify'])

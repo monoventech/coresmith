@@ -191,6 +191,8 @@ Schedule::job(new PollRepositories)->everyMinute()->name('coresmith:poll-reposit
 
 Schedule::job(new ResumeCloudTasks)->everyMinute()->name('coresmith:resume-cloud-tasks')->withoutOverlapping();
 
+Schedule::command('coresmith:sweep-terminals')->everyMinute()->name('coresmith:sweep-terminals')->withoutOverlapping();
+
 Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresmith:prune-metrics')->withoutOverlapping();
 Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith:prune-activity')->withoutOverlapping();
 

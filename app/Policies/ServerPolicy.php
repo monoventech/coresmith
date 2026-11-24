@@ -52,6 +52,18 @@ final class ServerPolicy
         return $this->added($user, $server, Ability::ManageFirewall);
     }
 
+    public function openTerminal(User $user, Server $server): Response|bool
+    {
+        return $this->added($user, $server, Ability::OpenTerminal);
+    }
+
+    public function openRootTerminal(User $user, Server $server): Response|bool
+    {
+        $allowed = $this->within($user, $server, Ability::OpenRootTerminal);
+
+        return $allowed === true ? (bool) $server->team->root_terminals : $allowed;
+    }
+
     private function added(User $user, Server $server, Ability $ability): Response|bool
     {
         $allowed = $this->within($user, $server, $ability);

@@ -16,6 +16,8 @@ use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
+use App\Enums\TerminalMode;
+use App\Enums\TerminalStatus;
 use App\Exceptions\ProcessDidNotStart;
 use App\Jobs\InstallRuntimes;
 use App\Jobs\ReadSchedulerLog;
@@ -33,6 +35,7 @@ use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
 use App\Models\TeamSsoConnection;
+use App\Models\TerminalSession;
 use App\Models\User;
 use App\Services\Cloud\CloudCatalog;
 use App\Services\Cloud\Tasks\CloudTask;
@@ -109,6 +112,11 @@ final class E2ESeeder extends Seeder
     private Server $bench;
 
     private SourceProvider $github;
+
+    public static function terminalId(string $code): string
+    {
+        return '01kv' . str_repeat('0', 19) . $code;
+    }
 
     public function run(): void
     {
@@ -223,6 +231,18 @@ final class E2ESeeder extends Seeder
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "stuck_{$code}", 'db_user' => "stuck_{$code}", 'db_password' => null, 'status' => ManagedDatabase::FAILED]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
+            $shell = $this->server("shell-{$code}", '198.51.100.' . (90 + $index), ServerStatus::Active);
+            TerminalSession::query()->create([
+                'id' => self::terminalId($code),
+                'team_id' => $this->team->id,
+                'server_id' => $shell->id,
+                'user_id' => User::query()->where('email', self::OWNER_EMAIL)->value('id'),
+                'mode' => TerminalMode::Root,
+                'status' => TerminalStatus::Open,
+                'started_at' => now(),
+                'last_input_at' => now(),
+                'last_seen_at' => now(),
+            ]);
             $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
