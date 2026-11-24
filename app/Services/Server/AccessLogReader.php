@@ -57,10 +57,10 @@ final class AccessLogReader
     }
 
     /**
-     * @param  list<string>  $domains
+     * @param  list<string>|null  $domains
      * @return array{at: float|null, method: string, path: string, status: int, ms: int, bytes: int, ip: string|null, agent: string|null, referer: string|null, host: string, proto: string|null}|null
      */
-    public function request(mixed $entry, array $domains, int $pathLength = self::PATH_LENGTH): ?array
+    public function request(mixed $entry, ?array $domains, int $pathLength = self::PATH_LENGTH): ?array
     {
         if (!is_array($entry) || !isset($entry['request']) || !is_array($entry['request'])) {
             return null;
@@ -69,7 +69,7 @@ final class AccessLogReader
         $request = $entry['request'];
         $host = strtolower((string) ($request['host'] ?? ''));
 
-        if (!in_array($host, $domains, true)) {
+        if ($domains !== null && !in_array($host, $domains, true)) {
             return null;
         }
 

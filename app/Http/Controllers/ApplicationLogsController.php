@@ -105,7 +105,7 @@ final class ApplicationLogsController extends Controller
      * @param  array<string, mixed>  $entry
      * @return array<string, mixed>
      */
-    private static function present(array $entry): array
+    public static function present(array $entry): array
     {
         return [
             'id' => $entry['id'],
