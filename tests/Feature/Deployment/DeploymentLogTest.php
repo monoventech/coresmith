@@ -10,6 +10,7 @@ use App\Models\Deployment;
 use App\Services\Deployment\DeploymentLog;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 
 /**
  * @return Collection<int, DeploymentLogAppended>
@@ -148,4 +149,24 @@ test('output that is only blank lines changes nothing and sends nothing', functi
     expect((string) $deployment->fresh()->log)->toBe('$ npm ci');
 
     Event::assertNothingDispatched();
+});
+
+test('the log is still saved when its live updates cannot be queued, and the failure is reported once', function () {
+    Exceptions::fake();
+    config(['broadcasting.default' => 'reverb']);
+    app()->instance('queue', new class
+    {
+        public function connection(): never
+        {
+            throw new RuntimeException('Queue is down');
+        }
+    });
+    $deployment = Deployment::factory()->create(['status' => DeploymentStatus::Running, 'log' => '']);
+
+    app(DeploymentLog::class)->append($deployment, '$ npm ci');
+    app(DeploymentLog::class)->stream($deployment, 'added 1204 packages in 41s');
+
+    expect((string) $deployment->fresh()->log)->toBe("\$ npm ci\nadded 1204 packages in 41s");
+
+    Exceptions::assertReportedCount(1);
 });

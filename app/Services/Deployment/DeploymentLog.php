@@ -15,9 +15,13 @@ use App\Events\DeploymentLogAppended;
 use App\Events\DeploymentUpdated;
 use App\Models\Deployment;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 final class DeploymentLog
 {
+    /** @var array<string, true> */
+    private static array $unsent = [];
+
     public function __construct(private readonly LogSanitizer $sanitizer) {}
 
     public function stamp(): string
@@ -28,7 +32,7 @@ final class DeploymentLog
     public function append(Deployment $deployment, string $output): void
     {
         if ($this->write($deployment, $output)) {
-            DeploymentUpdated::dispatch($deployment);
+            $this->send($deployment, new DeploymentUpdated($deployment));
         }
     }
 
@@ -135,13 +139,14 @@ final class DeploymentLog
         }
 
         $deployment->forceFill(['log' => $before . $added])->save();
-        $this->broadcast((string) $deployment->getKey(), strlen($before), $added);
+        $this->broadcast($deployment, strlen($before), $added);
 
         return true;
     }
 
-    private function broadcast(string $deploymentId, int $offset, string $text): void
+    private function broadcast(Deployment $deployment, int $offset, string $text): void
     {
+        $deploymentId = (string) $deployment->getKey();
         $start = 0;
 
         while ($start < strlen($text)) {
@@ -153,8 +158,20 @@ final class DeploymentLog
                 $piece = new DeploymentLogAppended($deploymentId, $offset + $start, mb_strcut($text, $start, $bytes, 'UTF-8'));
             }
 
-            event($piece);
+            $this->send($deployment, $piece);
             $start += strlen($piece->text);
+        }
+    }
+
+    private function send(Deployment $deployment, object $event): void
+    {
+        try {
+            event($event);
+        } catch (Throwable $e) {
+            if (!isset(self::$unsent[(string) $deployment->getKey()])) {
+                self::$unsent[(string) $deployment->getKey()] = true;
+                report($e);
+            }
         }
     }
 
