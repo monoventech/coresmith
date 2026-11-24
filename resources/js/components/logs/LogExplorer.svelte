@@ -188,16 +188,23 @@
         window.history.replaceState(window.history.state, '', address)
     }
 
-    function schedule(ms: number) {
+    function clearTick() {
         if (timer) {
             clearTimeout(timer)
+            timer = null
         }
+    }
+
+    function schedule(ms: number) {
+        clearTick()
 
         if (!live && !pending) {
             return
         }
 
         timer = setTimeout(() => {
+            timer = null
+
             if (document.visibilityState === 'visible') {
                 void load(false)
             } else {
@@ -207,6 +214,7 @@
     }
 
     async function load(reset: boolean) {
+        clearTick()
         controller?.abort()
         controller = new AbortController()
 
@@ -330,6 +338,8 @@
 
         if (!halted) {
             void load(false)
+        } else if (!pending) {
+            clearTick()
         }
     }
 
@@ -906,9 +916,9 @@
         {/if}
     </div>
 
-    {#if selected?.request}
+    {#if selected?.request && !phone.current}
         <aside
-            class="w-80 flex-[1_1_18rem] rounded-xl border border-border bg-card px-4.5 py-4 max-sm:hidden"
+            class="w-80 flex-[1_1_18rem] rounded-xl border border-border bg-card px-4.5 py-4"
             aria-label="Request details"
         >
             {@render details(selected)}
