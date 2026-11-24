@@ -212,6 +212,15 @@ test.describe('the log tools', () => {
         await expect(output(page).locator('[data-line]').first()).toHaveCSS('white-space', 'pre')
     })
 
+    test('on a phone lines wrap even when Wrap lines was turned off on a wider screen', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'From 640px up Wrap lines decides; phones always wrap and hide the button')
+
+        await page.addInitScript(() => window.localStorage.setItem('log-wrap', 'off'))
+        await openFailedDeploy(page)
+
+        await expect(output(page).locator('[data-line]').first()).toHaveCSS('white-space', 'pre-wrap')
+    })
+
     test('First error jumps to the first error and marks it', async ({ page }) => {
         await openFailedDeploy(page)
         await output(page).evaluate((element) => (element.scrollTop = element.scrollHeight))

@@ -80,7 +80,7 @@ final class LogEntryParser
      * @param  array<string, array{0: string, 1: string|null}>  $units
      * @return list<array<string, mixed>>
      */
-    public function entries(array $sections, Application $application, array $units): array
+    public function entries(array $sections, ?Application $application, array $units = []): array
     {
         $offset = 0;
         $entries = [];
@@ -99,6 +99,11 @@ final class LogEntryParser
                 'scheduler' => $this->file($section['lines'], 'scheduler', null, $application, $offset, false),
                 'php' => $this->journal($section['lines'], $application, fn(array $record): array => ['php', null]),
                 'units' => $this->journal($section['lines'], $application, fn(array $record): array => $units[(string) ($record['UNIT'] ?? '')] ?? ['php', null]),
+                'web' => $this->journal($section['lines'], null, fn(array $record): array => ['web', null]),
+                'signins' => $this->journal($section['lines'], null, fn(array $record): array => ['signins', null]),
+                'firewall' => $this->file($section['lines'], 'firewall', null, null, $offset, false),
+                'apps' => $this->journal($section['lines'], null, fn(array $record): array => ['apps', self::appUnit($record)]),
+                'system' => $this->journal($section['lines'], null, fn(array $record): ?array => self::ownedElsewhere($record) ? null : ['system', null]),
                 default => [],
             };
 
@@ -112,9 +117,9 @@ final class LogEntryParser
      * @param  list<string>  $lines
      * @return list<array<string, mixed>>
      */
-    private function requests(array $lines, Application $application): array
+    private function requests(array $lines, ?Application $application): array
     {
-        $domains = $application->allDomains();
+        $domains = $application?->allDomains();
         $entries = [];
 
         foreach ($this->content($lines) as $line) {
@@ -130,7 +135,7 @@ final class LogEntryParser
                 'source' => 'requests',
                 'process' => null,
                 'level' => $request['status'] >= 500 ? 'error' : ($request['status'] >= 400 ? 'warning' : 'info'),
-                'text' => "{$request['method']} {$request['path']} {$request['status']} {$request['ms']}ms",
+                'text' => "{$request['method']} " . ($application === null ? $request['host'] : '') . "{$request['path']} {$request['status']} {$request['ms']}ms",
                 'more' => [],
                 'request' => $request,
             ];
@@ -143,7 +148,7 @@ final class LogEntryParser
      * @param  list<string>  $lines
      * @return list<array<string, mixed>>
      */
-    private function file(array $lines, string $source, ?string $process, Application $application, int $offset, bool $headed): array
+    private function file(array $lines, string $source, ?string $process, ?Application $application, int $offset, bool $headed): array
     {
         if (preg_match('/^\d+ (\d+)$/', trim($lines[0] ?? ''), $stat) !== 1) {
             return [];
@@ -196,10 +201,10 @@ final class LogEntryParser
 
     /**
      * @param  list<string>  $lines
-     * @param  callable(array<string, mixed>): array{0: string, 1: string|null}  $origin
+     * @param  callable(array<string, mixed>): (array{0: string, 1: string|null}|null)  $origin
      * @return list<array<string, mixed>>
      */
-    private function journal(array $lines, Application $application, callable $origin): array
+    private function journal(array $lines, ?Application $application, callable $origin): array
     {
         $entries = [];
 
@@ -207,6 +212,12 @@ final class LogEntryParser
             $record = json_decode($line, true);
 
             if (!is_array($record) || !isset($record['__REALTIME_TIMESTAMP']) || !is_numeric($record['__REALTIME_TIMESTAMP'])) {
+                continue;
+            }
+
+            $place = $origin($record);
+
+            if ($place === null) {
                 continue;
             }
 
@@ -219,7 +230,7 @@ final class LogEntryParser
                 continue;
             }
 
-            [$source, $process] = $origin($record);
+            [$source, $process] = $place;
             $at = (float) $record['__REALTIME_TIMESTAMP'] / 1_000_000;
             $priority = is_numeric($record['PRIORITY'] ?? null) ? (int) $record['PRIORITY'] : 6;
             $level = $this->unitLevel($text) ?? $this->level($text);
@@ -244,7 +255,7 @@ final class LogEntryParser
         return $lines;
     }
 
-    private function clean(string $line, Application $application): string
+    private function clean(string $line, ?Application $application): string
     {
         $plain = (string) preg_replace(self::CONTROL, '', (string) preg_replace(self::TERMINAL_CODE, '', mb_scrub($line, 'UTF-8')));
 
@@ -267,6 +278,31 @@ final class LogEntryParser
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private static function appUnit(array $record): ?string
+    {
+        $name = (string) ($record['SYSLOG_IDENTIFIER'] ?? '') === 'systemd' || ($record['_PID'] ?? '') === '1'
+            ? (string) ($record['UNIT'] ?? '')
+            : (string) ($record['SYSLOG_IDENTIFIER'] ?? $record['_SYSTEMD_UNIT'] ?? '');
+
+        $short = (string) preg_replace(['/^coresmith-app-/', '/\.service$/'], '', $name);
+
+        return $short === '' ? null : $short;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private static function ownedElsewhere(array $record): bool
+    {
+        $unit = (string) ($record['_SYSTEMD_UNIT'] ?? '');
+        $about = (string) ($record['UNIT'] ?? '');
+
+        return str_starts_with($unit, 'coresmith-app-') || str_starts_with($about, 'coresmith-app-') || in_array($unit, ['caddy.service', 'ssh.service', 'sshd.service', 'fail2ban.service'], true);
     }
 
     private function level(string $text): string

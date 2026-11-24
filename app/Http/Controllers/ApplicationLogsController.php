@@ -105,7 +105,7 @@ final class ApplicationLogsController extends Controller
      * @param  array<string, mixed>  $entry
      * @return array<string, mixed>
      */
-    private static function present(array $entry): array
+    public static function present(array $entry): array
     {
         return [
             'id' => $entry['id'],
@@ -185,6 +185,7 @@ final class ApplicationLogsController extends Controller
                     'href' => route('servers.applications.deployments.show', [$server, $application, $deployment]),
                 ];
             })
+            ->filter(fn(array $entry): bool => $query->search === '' || mb_stripos($entry['text'], $query->search) !== false)
             ->values()
             ->all();
     }
