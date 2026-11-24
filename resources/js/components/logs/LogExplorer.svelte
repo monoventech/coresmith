@@ -188,16 +188,23 @@
         window.history.replaceState(window.history.state, '', address)
     }
 
-    function schedule(ms: number) {
+    function clearTick() {
         if (timer) {
             clearTimeout(timer)
+            timer = null
         }
+    }
+
+    function schedule(ms: number) {
+        clearTick()
 
         if (!live && !pending) {
             return
         }
 
         timer = setTimeout(() => {
+            timer = null
+
             if (document.visibilityState === 'visible') {
                 void load(false)
             } else {
@@ -207,6 +214,7 @@
     }
 
     async function load(reset: boolean) {
+        clearTick()
         controller?.abort()
         controller = new AbortController()
 
@@ -330,6 +338,8 @@
 
         if (!halted) {
             void load(false)
+        } else if (!pending) {
+            clearTick()
         }
     }
 
@@ -410,6 +420,10 @@
     function duration(ms: number | null): string {
         if (ms === null) {
             return '—'
+        }
+
+        if (ms < 1) {
+            return '<1 ms'
         }
 
         return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`
@@ -705,7 +719,11 @@
         <span class="text-[12px] font-medium text-muted-foreground">Response time, p95</span>
         <span class="font-mono text-[22px] font-medium max-sm:text-[19px]">{duration(stats?.p95 ?? null)}</span>
         <span class="text-[12px] text-muted-foreground max-sm:hidden"
-            >{stats?.p50 == null ? 'Reading' : `Half answer within ${duration(stats.p50)}`}</span
+            >{stats?.p50 == null
+                ? 'Reading'
+                : stats.p50 < 1
+                  ? 'Half answer in under 1 ms'
+                  : `Half answer within ${duration(stats.p50)}`}</span
         >
     </div>
     <div
@@ -898,9 +916,9 @@
         {/if}
     </div>
 
-    {#if selected?.request}
+    {#if selected?.request && !phone.current}
         <aside
-            class="w-80 flex-[1_1_18rem] rounded-xl border border-border bg-card px-4.5 py-4 max-sm:hidden"
+            class="w-80 flex-[1_1_18rem] rounded-xl border border-border bg-card px-4.5 py-4"
             aria-label="Request details"
         >
             {@render details(selected)}

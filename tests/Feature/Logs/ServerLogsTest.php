@@ -84,3 +84,39 @@ test('system warnings leave out what the other sources already show', function (
     expect($entries)->toHaveCount(1)
         ->and($entries[0])->toMatchArray(['source' => 'system', 'level' => 'error', 'text' => 'Out of memory: Killed process 4242 (node)']);
 });
+
+test("the system read skips the firewall's packet log before it takes the newest lines, and searches before that too", function () {
+    $script = app(ServerLogs::class)->script(new LogQuery('1h', 'oom'), 'b0undary');
+    $system = collect(explode("\n", $script))->first(fn(string $line): bool => str_contains($line, '== system'));
+
+    expect($system)->toContain('journalctl -o json --no-pager -r -p warning')
+        ->toContain("grep -v -F '\"MESSAGE\":\"[UFW '")
+        ->and(strpos($system, "grep -F -i -e 'oom'"))->toBeLessThan(strpos($system, 'head -n 500'))
+        ->and($system)->toEndWith('head -n 500 | tac');
+});
+
+test("Coresmith's own sign-ins stay out of Sign-ins, and everyone else's stay in", function () {
+    $parser = app(LogEntryParser::class);
+    $entries = $parser->entries($parser->sections(implode("\n", [
+        "==b0undary== meta\n1795500000\n+0000",
+        '==b0undary== signins',
+        serverLogsJournal('Accepted publickey for root from 127.0.0.1 port 49984 ssh2: ED25519 SHA256:CoresmithKeyFingerprint', ['_PID' => '700']),
+        serverLogsJournal('pam_unix(sshd:session): session opened for user root(uid=0) by root(uid=0)', ['_PID' => '700']),
+        serverLogsJournal('Accepted publickey for oseughu from 192.168.0.250 port 58747 ssh2: ED25519 SHA256:SomeoneElsesKey', ['_PID' => '701']),
+        serverLogsJournal('pam_unix(sshd:session): session opened for user oseughu(uid=1000) by oseughu(uid=0)', ['_PID' => '701']),
+        serverLogsJournal('pam_unix(sshd:session): session closed for user root', ['_PID' => '700']),
+        '',
+    ]), 'b0undary'), null, [], 'SHA256:CoresmithKeyFingerprint');
+
+    expect(array_column($entries, 'text'))->toBe([
+        'Accepted publickey for oseughu from 192.168.0.250 port 58747 ssh2: ED25519 SHA256:SomeoneElsesKey',
+        'pam_unix(sshd:session): session opened for user oseughu(uid=1000) by oseughu(uid=0)',
+    ]);
+});
+
+test("the server read knows Coresmith's own key by its fingerprint", function () {
+    expect(ServerLogs::keyFingerprint('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl coresmith'))
+        ->toBe('SHA256:' . rtrim(base64_encode(hash('sha256', base64_decode('AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl'), true)), '='))
+        ->and(ServerLogs::keyFingerprint(null))->toBeNull()
+        ->and(ServerLogs::keyFingerprint('not a key'))->toBeNull();
+});

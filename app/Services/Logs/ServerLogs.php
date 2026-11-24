@@ -26,7 +26,7 @@ final class ServerLogs
     {
         $boundary = bin2hex(random_bytes(8));
         $output = $connection->execute($this->script($query, $boundary), sudo: true, timeout: AppLogs::READ_SECONDS + 5)->output;
-        $entries = $this->parser->entries($this->parser->sections($output, $boundary), null);
+        $entries = $this->parser->entries($this->parser->sections($output, $boundary), null, [], self::keyFingerprint($connection->server()->ssh_public_key));
         $since = $query->since(now()->getTimestamp());
         $until = $query->until();
 
@@ -57,8 +57,15 @@ final class ServerLogs
             $mark('signins') . '; ' . $journal('-u ssh -u sshd'),
             $mark('firewall') . '; ' . self::file(self::FIREWALL_LOG, $query->bytes(), $search),
             $mark('apps') . '; ' . $journal(escapeshellarg('--unit=coresmith-app-*')),
-            $mark('system') . '; ' . $journal('-p warning'),
+            $mark('system') . '; journalctl -o json --no-pager -r -p warning' . $range . ' 2>/dev/null | grep -v -F ' . escapeshellarg('"MESSAGE":"[UFW ') . $search . ' | head -n ' . self::JOURNAL_ENTRIES . ' | tac',
         ]);
+    }
+
+    public static function keyFingerprint(?string $publicKey): ?string
+    {
+        $blob = base64_decode(explode(' ', trim((string) $publicKey))[1] ?? '', true);
+
+        return $blob === false || $blob === '' ? null : 'SHA256:' . rtrim(base64_encode(hash('sha256', $blob, true)), '=');
     }
 
     private static function file(string $path, int $bytes, string $filter): string
