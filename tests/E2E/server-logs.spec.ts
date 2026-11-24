@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { asMember, blockingViolations, expect, test, useTheme } from './support/fixtures'
+import { asMember, blockingViolations, expect, gotoServer, isMobile, test, useTheme } from './support/fixtures'
 
 function card(page: Page, name: string) {
     return page.getByTestId('server-card').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -49,14 +49,24 @@ function lines() {
     }
 }
 
-test.describe("a server's logs", () => {
-    test('the fleet card opens them, with sign-ins, blocked addresses, app crashes and system warnings', async ({
-        page
-    }) => {
-        await page.route(/\/logs\/lines/, (route) => route.fulfill({ json: lines() }))
+async function openServerLogs(page: Page, mobile: boolean) {
+    await page.route(/\/logs\/lines/, (route) => route.fulfill({ json: lines() }))
+
+    if (mobile) {
+        await gotoServer(page, 'forge-01')
+        await page.getByTestId('server-logs').click()
+    } else {
         await page.goto('/dashboard')
         await card(page, 'forge-01').getByRole('link', { name: 'Logs' }).click()
-        await page.waitForURL(/\/logs$/)
+    }
+
+    await page.waitForURL(/\/logs$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Logs' })).toBeVisible()
+}
+
+test.describe("a server's logs", () => {
+    test('they show sign-ins, blocked addresses, app crashes and system warnings', async ({ page }, testInfo) => {
+        await openServerLogs(page, isMobile(testInfo))
 
         const timeline = page.getByTestId('logs-timeline')
 
@@ -66,12 +76,19 @@ test.describe("a server's logs", () => {
         await expect(timeline).toContainText('Out of memory: Killed process 4242 (node)')
     })
 
+    test("the server's page opens them too", async ({ page }) => {
+        await page.route(/\/logs\/lines/, (route) => route.fulfill({ json: lines() }))
+        await gotoServer(page, 'forge-01')
+        await page.getByTestId('server-logs').click()
+
+        await page.waitForURL(/\/logs$/)
+        await expect(page.getByTestId('logs-timeline')).toContainText('Ban 203.0.113.9')
+    })
+
     for (const theme of ['light', 'dark'] as const) {
-        test(`they have no serious or critical accessibility violations in ${theme}`, async ({ page }) => {
+        test(`they have no serious or critical accessibility violations in ${theme}`, async ({ page }, testInfo) => {
             await useTheme(page, theme)
-            await page.route(/\/logs\/lines/, (route) => route.fulfill({ json: lines() }))
-            await page.goto('/dashboard')
-            await card(page, 'forge-01').getByRole('link', { name: 'Logs' }).click()
+            await openServerLogs(page, isMobile(testInfo))
             await expect(page.getByTestId('logs-timeline')).toContainText('Ban 203.0.113.9')
 
             expect(await blockingViolations(page)).toEqual([])
@@ -80,11 +97,19 @@ test.describe("a server's logs", () => {
 })
 
 asMember.describe("a server's logs for a member", () => {
-    asMember('a member who cannot change the server is taken to its activity instead', async ({ page }) => {
-        await page.goto('/dashboard')
-        await card(page, 'forge-01').getByRole('link', { name: 'Logs' }).click()
+    asMember(
+        'a member who cannot change the server gets its activity instead, and no Logs button on its page',
+        async ({ page }, testInfo) => {
+            if (!isMobile(testInfo)) {
+                await page.goto('/dashboard')
+                await card(page, 'forge-01').getByRole('link', { name: 'Logs' }).click()
 
-        await page.waitForURL(/\/activity$/)
-        await expect(page.getByTestId('server-activity')).toBeVisible()
-    })
+                await page.waitForURL(/\/activity$/)
+                await expect(page.getByTestId('server-activity')).toBeVisible()
+            }
+
+            await gotoServer(page, 'forge-01')
+            await expect(page.getByTestId('server-logs')).toHaveCount(0)
+        }
+    )
 })

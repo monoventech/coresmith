@@ -33,6 +33,7 @@
     kicker={server.name}
     description="Every app's requests, sign-ins, blocked addresses and system warnings on {server.name}, as they happen."
     label="Logs for {server.name}"
+    wideTags
     {sources}
     processes={[]}
     {windows}

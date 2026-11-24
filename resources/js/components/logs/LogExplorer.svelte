@@ -70,6 +70,7 @@
         kicker,
         description,
         label,
+        wideTags = false,
         sources: initialSources,
         processes: initialProcesses,
         windows,
@@ -80,6 +81,7 @@
         kicker: string
         description: string
         label: string
+        wideTags?: boolean
         sources: Source[]
         processes: Process[]
         windows: Array<{ key: string; label: string }>
@@ -795,7 +797,10 @@
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
             bind:this={timeline}
-            class="terminal relative h-110 px-2 py-2.5 text-[12.5px] leading-[1.55] max-sm:h-120 max-sm:px-1 max-sm:text-[11.5px]"
+            class={cn(
+                'terminal relative h-110 px-2 py-2.5 text-[12.5px] leading-[1.55] max-sm:h-120 max-sm:px-1 max-sm:text-[11.5px]',
+                wideTags && 'log-wide-tags'
+            )}
             role="log"
             aria-live="off"
             aria-label={label}
