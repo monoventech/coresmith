@@ -30,8 +30,8 @@
 >
     <h3 id="terminals-heading" class="type-h3 m-0">Terminals</h3>
     <p class="m-0 mt-1 mb-3 text-[13px] text-muted-foreground">
-        Owners and developers can open a shell on a server as the user one of its apps runs as. A shell ends on its own
-        after 10 minutes without typing, or after an hour.
+        Owners, and developers on servers they added, can open a shell as an app's user. A shell ends on its own after
+        10 minutes without typing, or after an hour.
     </p>
     <ToggleRow
         label="Root terminals"
