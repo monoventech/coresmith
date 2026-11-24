@@ -120,3 +120,45 @@ test('a secret split across two chunks is still masked in the log', function () 
         ->not->toContain('s3cr3t-value-xyz')
         ->not->toContain('s3cr');
 });
+
+test('a private key printed over several flushes is held until it ends, so the log masks all of it', function () {
+    $application = Application::factory()->create(['env_variables' => '']);
+    $deployment = Deployment::factory()->create(['application_id' => $application->id, 'log' => '']);
+    [$output, $wait] = deploymentOutputHarness(fn(string $text) => app(DeploymentLog::class)->append($deployment, $text));
+
+    $wait(300);
+    $output->write("loading the signing key\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n");
+    $wait(300);
+    $output->write("bKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj\n");
+    $wait(300);
+    $output->write("-----END PRIVATE KEY-----\nkey loaded\n");
+    $output->finish();
+
+    expect((string) $deployment->fresh()->log)->toContain('loading the signing key')
+        ->toContain('[REDACTED_PRIVATE_KEY]')
+        ->toContain('key loaded')
+        ->not->toContain('MIIEvQIBADANBgkqhkiG9w0BAQEFAASC')
+        ->not->toContain('bKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj');
+});
+
+test('a key block that never ends is let go once it passes 16 KB', function () {
+    [$output, $wait, $flushed] = deploymentOutputHarness();
+
+    $wait(300);
+    $output->write("-----BEGIN PRIVATE KEY-----\n" . str_repeat("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n", 300));
+
+    expect($flushed())->toHaveCount(1);
+});
+
+test('a line longer than 16 KB is cut after a space, so a secret in it is not split', function () {
+    $application = Application::factory()->create(['env_variables' => "APP_SECRET=s3cr3t-value-xyz\n"]);
+    $deployment = Deployment::factory()->create(['application_id' => $application->id, 'log' => '']);
+    [$output] = deploymentOutputHarness(fn(string $text) => app(DeploymentLog::class)->append($deployment, $text));
+
+    $output->write(str_repeat('word ', intdiv(DeploymentOutput::LONG_LINE_BYTES, 5)) . 'token s3cr');
+    $output->write("3t-value-xyz and more\n");
+    $output->finish();
+
+    expect((string) $deployment->fresh()->log)->toContain('[REDACTED:APP_SECRET]')
+        ->not->toContain('s3cr3t-value-xyz');
+});
