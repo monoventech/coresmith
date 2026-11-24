@@ -13,6 +13,7 @@
         Rocket,
         Search,
         Server,
+        SquareTerminal,
         SunMoon,
         TriangleAlert,
         Undo2
@@ -34,7 +35,8 @@
         'key-round': KeyRound,
         'credit-card': CreditCard,
         layers: Layers,
-        folder: Folder
+        folder: Folder,
+        terminal: SquareTerminal
     } as const
 
     let query = $state('')

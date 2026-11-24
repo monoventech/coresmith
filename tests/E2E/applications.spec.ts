@@ -238,6 +238,7 @@ test.describe('an application', () => {
     }, testInfo) => {
         const name = own(testInfo, 'scratch')
         let moved = false
+        let ended = false
 
         await page.route(/\/deployments\//, async (route) => {
             if (moved || route.request().headers()['x-inertia-partial-data'] === undefined) {
@@ -253,11 +254,21 @@ test.describe('an application', () => {
 
             await route.fulfill({ response, json: { ...body, url: `${body.url}&release=named` } })
         })
+        await page.route(/\/deployments\/[^/?]+\/log/, async (route) => {
+            const response = await route.fetch()
+            const delta = (await response.json()) as { deployment: Record<string, unknown> }
+
+            await route.fulfill({
+                response,
+                json: ended ? { ...delta, deployment: { ...delta.deployment, status: 'failed' } } : delta
+            })
+        })
 
         await gotoApplication(page, 'bench-01', name)
         await page.getByRole('button', { name: 'Deploy', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: `Deploying ${name}` })).toBeVisible()
+        ended = true
         await expect(page).toHaveURL(/release=named$/, { timeout: 15_000 })
 
         await page.goBack()

@@ -60,6 +60,7 @@ final class ServerPresenter
             'region' => $server->region,
             'tags' => $server->tags,
             'tags_href' => $canUpdate ? route('servers.tags.update', $server) : null,
+            'terminal_href' => $server->status === ServerStatus::Active && ($user->can('openTerminal', $server) || $user->can('openRootTerminal', $server)) ? route('servers.terminal', $server) : null,
             'tag_suggestions' => $canUpdate && $server->team !== null ? AppTags::serverSuggestions($user, $server->team) : [],
             'state' => $state,
             'meta' => $fleet->meta($server, long: true),

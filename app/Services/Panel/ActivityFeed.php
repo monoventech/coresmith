@@ -301,6 +301,11 @@ final class ActivityFeed
             'monitor_recovered' => [$this->text($this->recovered($properties['kind'] ?? null) . ' back to normal on '), $this->mono($server?->name), $this->text(is_numeric($properties['minutes'] ?? null) ? ' after ' . $this->span((int) $properties['minutes']) : '')],
             'provisioning_failed' => [$this->text('Provisioning stopped on '), $this->mono($server?->name), $this->text(' at phase ' . (int) ($properties['phase'] ?? 1) . ', ' . ($properties['name'] ?? 'Provisioning'))],
             'firewall_rule_changed' => [$this->text('Firewall ' . ($properties['action'] ?? 'changed') . ' port ' . ($properties['port'] ?? '') . ' on '), $this->mono($server?->name)],
+            'terminal_opened' => [$this->text(($properties['mode'] ?? '') === 'root' ? 'Root terminal opened on ' : 'Terminal opened as ' . ($properties['app'] ?? 'an app') . "'s user on "), $this->mono($server?->name), $this->text($this->cancelledBy($properties['by'] ?? null))],
+            'terminal_ended' => ($properties['reason'] ?? '') === 'failed' && (int) ($properties['minutes'] ?? 0) === 0
+                ? [$this->text("A terminal couldn't open on "), $this->mono($server?->name)]
+                : [$this->text(is_string($properties['by'] ?? null) && $properties['by'] !== '' ? $properties['by'] . "'s terminal on " : 'Terminal on '), $this->mono($server?->name), $this->text(' ended ' . $this->terminalEnding($properties))],
+            'terminal_changed' => [$this->text('A terminal session on '), $this->mono($server?->name), $this->text(' changed ' . $this->terminalChanges((array) ($properties['changes'] ?? [])) . $this->cancelledBy($properties['by'] ?? null))],
             'tunnel_opened' => [$this->text('Visitors reach '), $this->mono($server?->name), $this->text(' through Cloudflare now, over IPv4 and IPv6')],
             'tunnel_closed' => [$this->text('Visitors reach '), $this->mono($server?->name), $this->text(' directly again, not through Cloudflare')],
             'server_unreachable' => [$this->mono($server?->name), $this->text(' stopped answering over SSH')],
@@ -438,6 +443,45 @@ final class ActivityFeed
             'load' => 'Load',
             'cpu' => 'Processor',
             default => 'Server',
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $properties
+     */
+    private function terminalEnding(array $properties): string
+    {
+        $minutes = (int) ($properties['minutes'] ?? 0);
+        $after = $minutes < 1 ? 'after less than a minute' : "after {$minutes} " . ($minutes === 1 ? 'minute' : 'minutes');
+
+        return $after . match ((string) ($properties['reason'] ?? '')) {
+            'idle' => ', 10 minutes after the last typing',
+            'hour' => ', the most a session stays open',
+            'left' => ', when its page closed',
+            'signed_out' => ', at sign-out',
+            'password_changed' => ', when the password changed',
+            'two_factor_off' => ', when two-factor sign-in was turned off',
+            'role_changed' => ', when a role changed',
+            'left_team' => ', when its user left the team',
+            'root_off' => ', when Root terminals was turned off',
+            'server_unavailable' => ', when the server became unavailable',
+            'updated' => ', while Coresmith updated',
+            'failed' => ', when the connection failed',
+            default => '',
+        };
+    }
+
+    /**
+     * @param  array<int, mixed>  $changes
+     */
+    private function terminalChanges(array $changes): string
+    {
+        $titles = array_values(array_map(fn(mixed $title): string => lcfirst((string) $title), array_filter($changes, is_string(...))));
+
+        return match (count($titles)) {
+            0 => 'what Coresmith looks after',
+            1 => $titles[0],
+            default => implode(', ', array_slice($titles, 0, -1)) . ' and ' . $titles[count($titles) - 1],
         };
     }
 

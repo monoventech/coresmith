@@ -155,6 +155,11 @@ class Server extends Model
         return $this->hasMany(ServerFrontDoor::class, 'door_server_id');
     }
 
+    public function terminals(): HasMany
+    {
+        return $this->hasMany(TerminalSession::class);
+    }
+
     public function metrics(): HasMany
     {
         return $this->hasMany(ServerMetric::class);

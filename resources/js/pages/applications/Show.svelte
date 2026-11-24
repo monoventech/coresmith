@@ -151,6 +151,7 @@
             deploy_href: string
             repository_check: RepositoryCheck | null
             logs_href: string
+            terminal_href: string | null
             recent_log_href: string
             last_failed: boolean
             last_failed_live: boolean
@@ -550,7 +551,7 @@
             </div>
         {/if}
     </div>
-    {#if application.running_href || can.deploy || can.update || can.viewLogs}
+    {#if application.running_href || can.deploy || can.update || can.viewLogs || application.terminal_href}
         <div class="flex flex-wrap gap-2 max-sm:w-full">
             {#if application.running_href}
                 <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
@@ -568,6 +569,14 @@
                     href={application.logs_href}
                     class="max-sm:w-full sm:hidden"
                     data-testid="open-logs-phone">Logs</Button
+                >
+            {/if}
+            {#if application.terminal_href}
+                <Button
+                    variant="outline"
+                    href={application.terminal_href}
+                    class="max-sm:w-full"
+                    data-testid="open-terminal">Terminal</Button
                 >
             {/if}
             {#if can.update}

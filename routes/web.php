@@ -53,6 +53,8 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberAccessController;
 use App\Http\Controllers\TeamMemberController;
+use App\Http\Controllers\TerminalController;
+use App\Http\Controllers\TerminalSessionController;
 use App\Http\Controllers\ThisMachineController;
 use App\Http\Controllers\ThisMachineSshController;
 use App\Jobs\RestoreProtection;
@@ -133,6 +135,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('servers/{server}/runtimes', [ServerRuntimeController::class, 'update'])
         ->middleware('throttle:10,1,runtime-update')
         ->name('servers.runtimes.update');
+
+    Route::get('servers/{server}/terminal', [TerminalController::class, 'create'])
+        ->name('servers.terminal');
+    Route::post('servers/{server}/terminal', [TerminalController::class, 'store'])
+        ->middleware('throttle:6,1,terminal-open')
+        ->name('servers.terminal.store');
+    Route::scopeBindings()->group(function () {
+        Route::get('servers/{server}/terminal/{terminal}', [TerminalController::class, 'show'])
+            ->name('servers.terminal.show');
+        Route::post('servers/{server}/terminal/{terminal}/input', [TerminalSessionController::class, 'input'])
+            ->middleware('throttle:1200,1,terminal-input')
+            ->name('servers.terminal.input');
+        Route::post('servers/{server}/terminal/{terminal}/resize', [TerminalSessionController::class, 'resize'])
+            ->middleware('throttle:120,1,terminal-resize')
+            ->name('servers.terminal.resize');
+        Route::post('servers/{server}/terminal/{terminal}/check-in', [TerminalSessionController::class, 'checkIn'])
+            ->middleware('throttle:60,1,terminal-check-in')
+            ->name('servers.terminal.check-in');
+        Route::get('servers/{server}/terminal/{terminal}/screen', [TerminalSessionController::class, 'screen'])
+            ->middleware('throttle:60,1,terminal-screen')
+            ->name('servers.terminal.screen');
+        Route::delete('servers/{server}/terminal/{terminal}', [TerminalSessionController::class, 'destroy'])
+            ->name('servers.terminal.destroy');
+    });
 
     Route::get('servers/{server}/hardening', [ServerTabsController::class, 'hardening'])
         ->withTrashed()

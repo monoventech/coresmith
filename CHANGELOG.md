@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.36 (2026-11-24)
+
+### Changed
+- Owners and developers can open a terminal on a server from the browser, as root or as an app's user, with sessions that end on their own and a check of what changed (#182)
+- A server's System logs skip the firewall's packet log, Sign-ins leave out Coresmith's own, Pause stops reading, and only a page visit changes your team (#181)
+
 ## v0.8.35 (2026-11-24)
 
 ### Added

@@ -28,6 +28,8 @@ enum TeamRole: string
                     Ability::DeleteTeam,
                     Ability::TransferOwnership,
                     Ability::ManageBilling,
+                    Ability::OpenTerminal,
+                    Ability::OpenRootTerminal,
                 ], true),
             )),
             self::Developer => [
@@ -52,6 +54,7 @@ enum TeamRole: string
                 Ability::RestoreDatabase,
                 Ability::ViewDatabaseCredentials,
                 Ability::ManageProjects,
+                Ability::OpenTerminal,
             ],
             self::Member => [
                 Ability::ViewTeam,

@@ -264,10 +264,8 @@ test.describe('cancelling a deploy', () => {
         const stream = await streamDeploys(page)
 
         await watch(page, own(testInfo, 'streamed'))
-        await stream.push((deployment) => ({
-            ...deployment,
-            log: `${deployment.log}\n[12:00:00] build: compiling assets`
-        }))
+        await stream.push((deployment) => deployment)
+        await stream.append('\n[12:00:00] build: compiling assets')
         await expect(page.getByLabel('Deployment output')).toContainText('build: compiling assets')
 
         await page.getByRole('button', { name: 'Cancel', exact: true }).click()

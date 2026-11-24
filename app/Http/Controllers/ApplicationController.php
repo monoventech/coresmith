@@ -263,6 +263,9 @@ final class ApplicationController extends Controller
                     'apply_href' => route('servers.applications.repository-check.apply', [$server, $application]),
                 ] : null,
                 'logs_href' => route('servers.applications.logs', [$server, $application]),
+                'terminal_href' => $application->current_release !== null && $server->status === ServerStatus::Active && $user->can('openTerminal', $server)
+                    ? route('servers.terminal', [$server, 'app' => $application->getRouteKey()])
+                    : null,
                 'recent_log_href' => route('servers.applications.logs.recent', [$server, $application]),
                 'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
                 'last_failed_live' => $failedLive,

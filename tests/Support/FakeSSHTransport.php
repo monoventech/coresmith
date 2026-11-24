@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Services\Runtime\Catalog;
+use App\Services\SSH\Contracts\ShellTransport;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnection;
@@ -14,8 +15,26 @@ use phpseclib3\Exception\BadDecryptionException;
 use phpseclib3\Exception\ConnectionClosedException;
 use phpseclib3\Exception\UnableToConnectException;
 
-final class FakeSSHTransport implements SSHTransport
+final class FakeSSHTransport implements ShellTransport, SSHTransport
 {
+    /** @var list<string> */
+    private array $shellOutput = [];
+
+    private bool $shellOpen = false;
+
+    private bool $shellEnds = false;
+
+    private string $shellTyped = '';
+
+    private ?string $shellCommand = null;
+
+    /** @var list<array{0: int, 1: int}> */
+    private array $shellSizes = [];
+
+    private ?Closure $shellRead = null;
+
+    private ?Closure $shellOpened = null;
+
     public const STAGED_UPLOAD = '/tmp/coresmith-upload.Fake000001';
 
     public const HOST_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBoM6eEh29z9GyfaiV/OH8xLRwdtOyw0trj85BenDW4';
@@ -180,6 +199,99 @@ final class FakeSSHTransport implements SSHTransport
     public function commands(): array
     {
         return $this->commands;
+    }
+
+    public function shellPrints(string ...$chunks): self
+    {
+        array_push($this->shellOutput, ...$chunks);
+
+        return $this;
+    }
+
+    public function shellEndsAfterOutput(): self
+    {
+        $this->shellEnds = true;
+
+        return $this;
+    }
+
+    public function onShellRead(Closure $callback): self
+    {
+        $this->shellRead = $callback;
+
+        return $this;
+    }
+
+    public function onShellOpen(Closure $callback): self
+    {
+        $this->shellOpened = $callback;
+
+        return $this;
+    }
+
+    public function openShell(int $columns, int $rows, string $command): void
+    {
+        $this->shellOpen = true;
+        $this->shellCommand = $command;
+        $this->shellSizes[] = [$columns, $rows];
+
+        if ($this->shellOpened !== null) {
+            ($this->shellOpened)($this);
+        }
+    }
+
+    public function readShell(float $seconds): ?string
+    {
+        if ($this->shellRead !== null) {
+            ($this->shellRead)($this);
+        }
+
+        if (!$this->shellOpen) {
+            return null;
+        }
+
+        if ($this->shellOutput !== []) {
+            return array_shift($this->shellOutput);
+        }
+
+        if ($this->shellEnds) {
+            $this->shellOpen = false;
+
+            return null;
+        }
+
+        return '';
+    }
+
+    public function writeShell(string $bytes): void
+    {
+        $this->shellTyped .= $bytes;
+    }
+
+    public function resizeShell(int $columns, int $rows): void
+    {
+        $this->shellSizes[] = [$columns, $rows];
+    }
+
+    public function closeShell(): void
+    {
+        $this->shellOpen = false;
+    }
+
+    public function shellTyped(): string
+    {
+        return $this->shellTyped;
+    }
+
+    public function shellCommand(): ?string
+    {
+        return $this->shellCommand;
+    }
+
+    /** @return list<array{0: int, 1: int}> */
+    public function shellSizes(): array
+    {
+        return $this->shellSizes;
     }
 
     /** @return list<string> */

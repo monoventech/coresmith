@@ -44,6 +44,9 @@ enum Ability: string
 
     case ManageProjects = 'project.manage';
 
+    case OpenTerminal = 'terminal.open';
+    case OpenRootTerminal = 'terminal.root';
+
     public function coversWholeTeam(): bool
     {
         return $this === self::UpdateTeam || $this === self::ManageProviders;

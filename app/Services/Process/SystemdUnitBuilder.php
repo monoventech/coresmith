@@ -95,6 +95,13 @@ final class SystemdUnitBuilder
         UNIT;
     }
 
+    public function path(Application $application): string
+    {
+        $paths = new ReleasePaths($application);
+
+        return $this->pathFor($application, $paths->appDirectory($paths->current()));
+    }
+
     public function webCommand(Application $application): ?string
     {
         return $application->type->language()->webCommand($application);

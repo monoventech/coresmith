@@ -80,10 +80,11 @@ final class LogEntryParser
      * @param  array<string, array{0: string, 1: string|null}>  $units
      * @return list<array<string, mixed>>
      */
-    public function entries(array $sections, ?Application $application, array $units = []): array
+    public function entries(array $sections, ?Application $application, array $units = [], ?string $ownKey = null): array
     {
         $offset = 0;
         $entries = [];
+        $own = [];
 
         foreach ($sections as $section) {
             if ($section['name'] === 'meta') {
@@ -100,7 +101,15 @@ final class LogEntryParser
                 'php' => $this->journal($section['lines'], $application, fn(array $record): array => ['php', null]),
                 'units' => $this->journal($section['lines'], $application, fn(array $record): array => $units[(string) ($record['UNIT'] ?? '')] ?? ['php', null]),
                 'web' => $this->journal($section['lines'], null, fn(array $record): array => ['web', null]),
-                'signins' => $this->journal($section['lines'], null, fn(array $record): array => ['signins', null]),
+                'signins' => $this->journal($section['lines'], null, function (array $record) use ($ownKey, &$own): ?array {
+                    $pid = (string) ($record['_PID'] ?? '');
+
+                    if ($ownKey !== null && str_starts_with((string) ($record['MESSAGE'] ?? ''), 'Accepted publickey ') && str_contains((string) $record['MESSAGE'], $ownKey)) {
+                        $own[$pid] = true;
+                    }
+
+                    return $pid !== '' && isset($own[$pid]) ? null : ['signins', null];
+                }),
                 'firewall' => $this->file($section['lines'], 'firewall', null, null, $offset, false),
                 'apps' => $this->journal($section['lines'], null, fn(array $record): array => ['apps', self::appUnit($record)]),
                 'system' => $this->journal($section['lines'], null, fn(array $record): ?array => self::ownedElsewhere($record) ? null : ['system', null]),

@@ -42,6 +42,8 @@ function developerRoleTable(): array
         'manage cloud accounts' => [Ability::ManageProviders, false],
         'manage a firewall' => [Ability::ManageFirewall, true],
         'manage projects' => [Ability::ManageProjects, true],
+        "open a shell as an app's user" => [Ability::OpenTerminal, true],
+        'open a root shell' => [Ability::OpenRootTerminal, false],
     ];
 }
 
