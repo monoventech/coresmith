@@ -248,7 +248,7 @@
 <BackLink href={server.tabs.apps} label={server.name} />
 
 {#if ended}
-    <section class="mx-auto max-w-[44rem]" aria-labelledby="terminal-ended-title" data-testid="terminal-summary">
+    <section class="mx-auto max-w-176" aria-labelledby="terminal-ended-title" data-testid="terminal-summary">
         <p class="m-0 font-mono text-[12.5px] text-muted-foreground">{server.name} · {terminal.as}</p>
         <h1 id="terminal-ended-title" class="type-h1 m-0 mt-1.5 max-sm:text-[24px]">Session ended</h1>
         <p class="m-0 mt-2 text-[14px]">

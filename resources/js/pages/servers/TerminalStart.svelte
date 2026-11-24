@@ -71,7 +71,7 @@
 
 <BackLink href={server.tabs.apps} label={server.name} />
 
-<div class="mx-auto max-w-[46rem]">
+<div class="mx-auto max-w-184">
     <p class="m-0 font-mono text-[12.5px] text-muted-foreground">{server.name}</p>
     <h1 class="type-h1 m-0 mt-1.5 max-sm:text-[24px]">Open a terminal</h1>
     <p class="m-0 mt-1.5 text-[14px] text-muted-foreground">
