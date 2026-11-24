@@ -93,6 +93,7 @@ final class ServerPresenter
             'tabs' => [
                 'apps' => route('servers.show', $server),
                 'databases' => route('servers.databases.index', $server),
+                'network' => route('servers.network', $server),
                 'hardening' => route('servers.hardening', $server),
                 'activity' => route('servers.activity', $server),
             ],

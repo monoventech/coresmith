@@ -34,12 +34,14 @@ test('every tabbed page sends the abilities its tab strip needs', function (stri
             ->where('server.tabs', [
                 'apps' => route('servers.show', $server),
                 'databases' => route('servers.databases.index', $server),
+                'network' => route('servers.network', $server),
                 'hardening' => route('servers.hardening', $server),
                 'activity' => route('servers.activity', $server),
             ]));
 })->with([
     ['servers.show', 'servers/Show'],
     ['servers.databases.index', 'servers/Databases'],
+    ['servers.network', 'servers/Network'],
     ['servers.hardening', 'servers/Hardening'],
     ['servers.activity', 'servers/Activity'],
 ]);

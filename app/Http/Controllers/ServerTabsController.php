@@ -12,7 +12,10 @@ use App\Models\Server;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ProtectionRows;
+use App\Services\Panel\ServerFrontDoorPresenter;
+use App\Services\Panel\ServerNetworkPresenter;
 use App\Services\Panel\ServerPresenter;
+use App\Services\Panel\ServerTunnelPresenter;
 use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\PasswordLogins;
 use App\Services\Server\SecurityHardening;
@@ -69,6 +72,22 @@ final class ServerTabsController extends Controller
                 'user' => (string) $server->ssh_user,
                 'people' => $hardening->signInPeople($server),
             ],
+        ]);
+    }
+
+    public function network(Request $request, Server $server, ServerPresenter $presenter, ServerNetworkPresenter $network, ServerTunnelPresenter $tunnels, ServerFrontDoorPresenter $frontDoors): Response|RedirectResponse
+    {
+        if ($server->trashed()) {
+            return $this->destroyedServer($server);
+        }
+
+        $this->authorize('view', $server);
+
+        return Inertia::render('servers/Network', [
+            'server' => $presenter->header($server, $request->user()),
+            'addresses' => $network->addresses($server),
+            'tunnel' => $tunnels->present($server, $request->user()),
+            'frontDoor' => $frontDoors->present($server, $request->user()),
         ]);
     }
 

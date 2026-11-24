@@ -37,6 +37,7 @@ final class Breadcrumbs
 
     private const SERVER_PAGES = [
         'servers.hardening' => 'Hardening',
+        'servers.network' => 'Network',
         'servers.activity' => 'Activity',
         'servers.logs' => 'Logs',
         'servers.databases.index' => 'Databases',

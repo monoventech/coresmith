@@ -65,7 +65,7 @@ test('a domain the internet cannot reach fails the check and says what to fix', 
     addressCheckNetwork(['151.226.169.196'], new DirectReach('151.226.169.196', false, false));
 
     expect(Artisan::call('coresmith:address-check', ['host' => 'coresmith.example.com']))->toBe(1)
-        ->and(Artisan::output())->toBe("coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248.\n");
+        ->and(Artisan::output())->toBe("coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its Network tab, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248.\n");
 });
 
 test('when it cannot ask, the check says so without failing', function () {

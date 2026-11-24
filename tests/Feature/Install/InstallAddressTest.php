@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
-const INSTALL_ADDRESS_REFUSAL = "beelink.coresmith.io points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its page, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248.";
+const INSTALL_ADDRESS_REFUSAL = "beelink.coresmith.io points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Add this machine to Coresmith as a server and turn on IPv4 through Cloudflare on its Network tab, then check again. If 151.226.169.196 is yours alone, you can instead forward those ports to 192.168.0.248.";
 
 const INSTALL_ADDRESS_NOTE = "If beelink.coresmith.io doesn't load inside your own network, add 192.168.0.248 beelink.coresmith.io to your local DNS or /etc/hosts.";
 

@@ -137,6 +137,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('servers/{server}/hardening', [ServerTabsController::class, 'hardening'])
         ->withTrashed()
         ->name('servers.hardening');
+    Route::get('servers/{server}/network', [ServerTabsController::class, 'network'])
+        ->withTrashed()
+        ->name('servers.network');
     Route::get('servers/{server}/activity', [ServerTabsController::class, 'activity'])
         ->withTrashed()
         ->name('servers.activity');

@@ -127,7 +127,7 @@ test('a door that takes visitors in for another server cannot be removed', funct
 
     $this->actingAs(frontDoorControllerUser($home->team))
         ->delete(route('servers.destroy', $door))
-        ->assertSessionHas('error', "beelink takes visitors through web-1. Turn that off on beelink's page first.");
+        ->assertSessionHas('error', "beelink takes visitors through web-1. Turn that off on beelink's Network tab first.");
 
     expect($door->fresh())->not->toBeNull();
 });
@@ -138,17 +138,17 @@ test('a server that takes visitors through another one cannot be detached until 
 
     $this->actingAs(frontDoorControllerUser($home->team))
         ->delete(route('servers.destroy', $home))
-        ->assertSessionHas('error', "beelink takes visitors through web-1. Turn that off on beelink's page first.");
+        ->assertSessionHas('error', "beelink takes visitors through web-1. Turn that off on beelink's Network tab first.");
 
     expect($home->fresh()->trashed())->toBeFalse();
 });
 
-test('the server page offers the team\'s other open servers as doors, and never the server itself', function () {
+test('the server\'s Network tab offers the team\'s other open servers as doors, and never the server itself', function () {
     [$home, $door] = frontDoorControllerServers();
     Server::factory()->create(['team_id' => $home->team_id, 'status' => ServerStatus::Active, 'public_addresses' => ['ipv4' => '203.0.113.11', 'ipv4_open' => false]]);
 
     $this->actingAs(frontDoorControllerUser($home->team))
-        ->get(route('servers.show', $home))
+        ->get(route('servers.network', $home))
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('frontDoor.state', 'off')
             ->where('frontDoor.doors', [['key' => $door->id, 'name' => 'web-1', 'ipv4' => '203.0.113.9']])
@@ -160,7 +160,7 @@ test('a server whose IPv4 address answers has no front door card unless one is o
     [, $door] = frontDoorControllerServers();
 
     $this->actingAs(frontDoorControllerUser($door->team))
-        ->get(route('servers.show', $door))
+        ->get(route('servers.network', $door))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('frontDoor', null));
 });
 
@@ -172,7 +172,7 @@ test('domains that do not point at the door yet come with the records to set', f
     ]);
 
     $this->actingAs(frontDoorControllerUser($home->team))
-        ->get(route('servers.show', $home))
+        ->get(route('servers.network', $home))
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('frontDoor.state', 'open')
             ->where('frontDoor.door', ['name' => 'web-1', 'url' => route('servers.show', $door)])
@@ -189,7 +189,7 @@ test('the card knows whether Coresmith points the domains itself', function (str
     [$home] = frontDoorControllerServers();
 
     $this->actingAs(frontDoorControllerUser($home->team))
-        ->get(route('servers.show', $home))
+        ->get(route('servers.network', $home))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('frontDoor.automatic_dns', $automatic));
 })->with([
     'self-hosted with a token' => ['self-hosted', true, true],

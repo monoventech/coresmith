@@ -34,10 +34,9 @@ use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
-use App\Services\Panel\ServerFrontDoorPresenter;
+use App\Services\Panel\ServerNetworkPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Panel\ServerProcesses;
-use App\Services\Panel\ServerTunnelPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\Server\CoresmithKey;
@@ -159,8 +158,7 @@ final class ServerController extends Controller
                 'can_update' => $request->user()->can('update', $server),
                 'href' => route('servers.runtimes.update', $server),
             ],
-            'tunnel' => app(ServerTunnelPresenter::class)->present($server, $request->user()),
-            'frontDoor' => app(ServerFrontDoorPresenter::class)->present($server, $request->user()),
+            'network' => app(ServerNetworkPresenter::class)->notice($server, $request->user()),
             'processes' => app(ServerProcesses::class)->for($server, $request->user()),
         ]);
     }

@@ -53,7 +53,7 @@ class ServerFrontDoor extends Model
         $home = $frontDoor?->home;
         $door = $frontDoor?->door;
 
-        return $home === null || $door === null ? null : "{$home->name} takes visitors through {$door->name}. Turn that off on {$home->name}'s page first.";
+        return $home === null || $door === null ? null : "{$home->name} takes visitors through {$door->name}. Turn that off on {$home->name}'s Network tab first.";
     }
 
     public static function forThisMachine(): ?self
