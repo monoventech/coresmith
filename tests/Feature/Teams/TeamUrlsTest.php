@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TeamRole;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\StartSession;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\TeamDomain;
@@ -97,6 +98,23 @@ test('an address in the path picks the team and every link keeps it', function (
             ->where('servers.0.href', 'http://localhost/acme/servers/acme-web'));
 
     expect($user->fresh()->current_team_id)->toBe($acme->id);
+});
+
+test('a page refreshing itself in the background reads its own team without changing the one the person last chose', function () {
+    [$user, $monoven, $acme] = teamUrlsTwoTeams();
+    $user->forceFill(['current_team_id' => $monoven->id])->save();
+
+    $this->actingAs($user)
+        ->withHeaders([StartSession::REFRESH => '1'])
+        ->get('/acme/dashboard')
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('panel.team.slug', 'acme')->where('servers.0.name', 'acme-web'));
+
+    $this->get('/servers/acme-web')
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('panel.team.slug', 'acme'));
+
+    expect($user->fresh()->current_team_id)->toBe($monoven->id);
 });
 
 test('a team address on its own goes to that team fleet', function () {

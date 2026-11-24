@@ -51,7 +51,7 @@ final class EnsureTeamContext
 
         $team = $this->context->team();
 
-        if ($team !== null && $user->current_team_id !== $team->getKey()) {
+        if ($team !== null && $user->current_team_id !== $team->getKey() && !StartSession::refreshes($request)) {
             $user->forceFill(['current_team_id' => $team->getKey()])->saveQuietly();
         }
 
