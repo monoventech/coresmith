@@ -782,7 +782,7 @@
     </p>
 {:else if capped}
     <p class="mb-3 text-[13px] text-muted-foreground" data-testid="logs-capped">
-        Showing the newest lines only. Pick a shorter window or search to see older ones.
+        Showing the newest lines only. Search to find older ones.
     </p>
 {/if}
 

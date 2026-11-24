@@ -246,3 +246,19 @@ test('a read caches what the reader found on the server', function () {
     expect($cached['error'])->toBeNull()
         ->and(array_column($cached['entries'], 'text'))->toBe(['Processing SendReceipt']);
 });
+
+test('a search leaves out the deploys that do not match it, like every other source', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $application = appLogsPageApp($team);
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => '20261124-115800', 'commit_hash' => str_repeat('a1b2c3d', 5) . 'aaaaa', 'commit_message' => 'Fix tax on gift cards', 'created_at' => now()->subMinutes(3), 'finished_at' => now()->subMinutes(3)]);
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed, 'release' => '20261124-115900', 'created_at' => now()->subMinutes(2), 'finished_at' => now()->subMinutes(2)]);
+    appLogsPageCache($application, [], new LogQuery('1h', 'GIFT'));
+
+    $this->actingAs(appLogsPageMember($team))
+        ->getJson(appLogsPageLines($application, ['q' => 'GIFT']))
+        ->assertOk()
+        ->assertJsonCount(1, 'entries')
+        ->assertJsonPath('entries.0.source', 'deploys')
+        ->assertJsonPath('entries.0.text', fn(string $text): bool => str_contains($text, 'Fix tax on gift cards'));
+});

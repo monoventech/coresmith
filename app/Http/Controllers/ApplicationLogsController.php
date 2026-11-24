@@ -185,6 +185,7 @@ final class ApplicationLogsController extends Controller
                     'href' => route('servers.applications.deployments.show', [$server, $application, $deployment]),
                 ];
             })
+            ->filter(fn(array $entry): bool => $query->search === '' || mb_stripos($entry['text'], $query->search) !== false)
             ->values()
             ->all();
     }
