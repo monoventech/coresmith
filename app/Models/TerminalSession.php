@@ -29,7 +29,7 @@ final class TerminalSession extends Model
 
     public function server(): BelongsTo
     {
-        return $this->belongsTo(Server::class);
+        return $this->belongsTo(Server::class)->withTrashed();
     }
 
     public function user(): BelongsTo

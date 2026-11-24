@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\Panel\Realtime;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Teams\TeamAccess;
+use App\Services\Terminal\TerminalChanges;
 use App\Services\Terminal\TerminalScreen;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,7 +50,7 @@ final class TerminalController extends Controller
         return Inertia::render('servers/TerminalStart', [
             'server' => $presenter->header($server, $user),
             'modes' => [
-                'app' => ['allowed' => $app, 'reason' => $app ? null : "You can open a terminal only on servers you added."],
+                'app' => ['allowed' => $app, 'reason' => $app ? null : 'You can open a terminal only on servers you added.'],
                 'root' => ['allowed' => $root, 'reason' => $root ? null : $this->rootRefusal($user, $server)],
             ],
             'applications' => $this->applications($access, $user, $server),
@@ -154,6 +155,9 @@ final class TerminalController extends Controller
      */
     public static function present(TerminalSession $terminal): array
     {
+        $opened = $terminal->started_at !== null;
+        $checking = $opened && $terminal->changes === null && $terminal->ended_at !== null && $terminal->ended_at->gt(now()->subMinutes(2));
+
         return [
             'id' => $terminal->getKey(),
             'mode' => $terminal->mode->value,
@@ -166,8 +170,14 @@ final class TerminalController extends Controller
             'ended' => $terminal->live() ? null : [
                 'reason' => $terminal->end_reason?->value,
                 'sentence' => $terminal->end_reason?->sentence(),
-                'minutes' => $terminal->started_at === null || $terminal->ended_at === null ? 0 : (int) round($terminal->started_at->diffInMinutes($terminal->ended_at)),
-                'changes' => array_values((array) $terminal->changes),
+                'minutes' => !$opened || $terminal->ended_at === null ? 0 : (int) round($terminal->started_at->diffInMinutes($terminal->ended_at)),
+                'opened' => $opened,
+                'checking' => $checking,
+                'changes' => match (true) {
+                    !$opened, $checking => [],
+                    $terminal->changes === null => [TerminalChanges::unchecked()],
+                    default => array_values((array) $terminal->changes),
+                },
             ],
         ];
     }

@@ -8,10 +8,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Enums\TerminalEndReason;
-use App\Services\Terminal\TerminalSessions;
 use App\Enums\Edition;
 use App\Enums\TeamRole;
+use App\Enums\TerminalEndReason;
 use App\Http\Controllers\Settings\AccountGitController;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
@@ -19,6 +18,7 @@ use App\Models\User;
 use App\Services\Billing\PlanGate;
 use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamInvitations;
+use App\Services\Terminal\TerminalSessions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;

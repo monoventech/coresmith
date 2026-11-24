@@ -18,7 +18,7 @@ use App\Models\User;
 
 final class TerminalSessions
 {
-    public function __construct(private readonly TerminalInbox $inbox) {}
+    public function __construct(private readonly TerminalInbox $inbox, private readonly TerminalScreen $screens) {}
 
     public function end(TerminalSession $session, TerminalEndReason $reason): bool
     {
@@ -32,7 +32,8 @@ final class TerminalSessions
         }
 
         $session->refresh();
-        rescue(fn() => $this->inbox->push($session, ['type' => 'close', 'reason' => $reason->value]), report: false);
+        rescue(fn() => $this->inbox->close($session, $reason->value), report: false);
+        rescue(fn() => $this->screens->forget($session), report: false);
         rescue(fn() => event(new TerminalEnded((string) $session->getKey(), $reason)), report: false);
 
         activity()->performedOn($session->server)->causedBy($session->user)->withProperties([
@@ -40,6 +41,7 @@ final class TerminalSessions
             'app' => $session->application?->name,
             'reason' => $reason->value,
             'minutes' => $session->started_at === null ? 0 : (int) round($session->started_at->diffInMinutes(now())),
+            'by' => $session->user?->name,
         ])->log('terminal_ended');
 
         return true;

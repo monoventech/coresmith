@@ -13,8 +13,12 @@ use App\Models\Team;
 use App\Models\TerminalSession;
 use App\Models\User;
 use App\Services\Terminal\TerminalInbox;
+use App\Services\Terminal\TerminalScreen;
+use App\Services\Terminal\TerminalSessions;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
 use Spatie\Activitylog\Models\Activity;
 
@@ -78,6 +82,7 @@ test('a password change and turning off two-factor sign-in end the sessions', fu
 });
 
 test("a role change ends the person's sessions in that team only", function () {
+    Queue::fake();
     $server = endTerminalsServer();
     $owner = endTerminalsMember($server->team);
     $developer = endTerminalsMember($server->team, TeamRole::Developer);
@@ -97,6 +102,7 @@ test("a role change ends the person's sessions in that team only", function () {
 });
 
 test('removing someone from the team ends their sessions there', function () {
+    Queue::fake();
     $server = endTerminalsServer();
     $owner = endTerminalsMember($server->team);
     $other = endTerminalsMember($server->team);
@@ -159,8 +165,20 @@ test('the sweep ends root shells when the switch was turned off another way', fu
 });
 
 test('the sweep runs every minute', function () {
-    $events = collect(app(Illuminate\Console\Scheduling\Schedule::class)->events())->filter(fn($event) => str_contains((string) $event->command, 'coresmith:sweep-terminals'));
+    $events = collect(app(Schedule::class)->events())->filter(fn($event) => str_contains((string) $event->command, 'coresmith:sweep-terminals'));
 
     expect($events)->toHaveCount(1)
         ->and($events->first()->expression)->toBe('* * * * *');
+});
+
+test('an ended session keeps none of what was typed or shown', function () {
+    $server = endTerminalsServer();
+    $session = endTerminalsSession(endTerminalsMember($server->team), $server);
+    app(TerminalInbox::class)->push($session, ['type' => 'input', 'id' => 'tab-1', 'n' => 1, 'data' => base64_encode('secret-password')]);
+    app(TerminalScreen::class)->save($session, 'mysql -p secret-password', 4);
+
+    app(TerminalSessions::class)->end($session, TerminalEndReason::Ended);
+
+    expect(app(TerminalInbox::class)->drain($session))->toBe([['type' => 'close', 'reason' => 'ended']])
+        ->and(app(TerminalScreen::class)->read($session))->toBe(['screen' => '', 'seq' => 0]);
 });

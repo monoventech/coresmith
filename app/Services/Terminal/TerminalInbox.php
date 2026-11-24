@@ -36,6 +36,18 @@ final class TerminalInbox
         });
     }
 
+    public function close(TerminalSession $session, string $reason): void
+    {
+        $key = self::key($session);
+
+        Cache::lock($key . ':lock', 5)->block(2, fn() => Cache::put($key, [['type' => 'close', 'reason' => $reason]], self::TTL_SECONDS));
+    }
+
+    public function forget(TerminalSession $session): void
+    {
+        Cache::forget(self::key($session));
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

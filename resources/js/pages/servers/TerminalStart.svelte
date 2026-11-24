@@ -124,7 +124,8 @@
                             <span id="terminal-root-summary" class="text-[13px] text-muted-foreground">
                                 {#if modes.root.allowed}
                                     Full control of the server. Install packages, run containers or a VM, change system
-                                    settings.
+                                    settings. Only owners can open one, while Root terminals is on under Settings ›
+                                    Team.
                                 {:else}
                                     {modes.root.reason}
                                 {/if}

@@ -9,11 +9,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\TerminalEndReason;
+use App\Enums\TerminalMode;
 use App\Enums\TerminalStatus;
 use App\Models\Server;
 use App\Models\TerminalSession;
 use App\Services\Terminal\TerminalInbox;
 use App\Services\Terminal\TerminalScreen;
+use App\Services\Terminal\TerminalSessions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -99,6 +101,13 @@ final class TerminalSessionController extends Controller
     private function own(Request $request, TerminalSession $terminal): void
     {
         abort_unless($terminal->user_id === $request->user()->id, 404);
+
+        $root = $terminal->mode === TerminalMode::Root;
+
+        if ($terminal->live() && !$request->user()->can($root ? 'openRootTerminal' : 'openTerminal', $terminal->server)) {
+            app(TerminalSessions::class)->end($terminal, $root && !$terminal->server->team?->root_terminals ? TerminalEndReason::RootOff : TerminalEndReason::RoleChanged);
+            $terminal->refresh();
+        }
     }
 
     private function state(TerminalSession $terminal): JsonResponse

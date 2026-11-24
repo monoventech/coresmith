@@ -13,11 +13,14 @@ use App\Enums\TerminalMode;
 use App\Enums\TerminalStatus;
 use App\Events\TerminalOutput;
 use App\Events\TerminalWarning;
+use App\Exceptions\SSHAuthenticationException;
 use App\Models\TerminalSession;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Process\SystemdUnitBuilder;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Terminal\ServerFingerprint;
+use App\Services\Terminal\TerminalChanges;
 use App\Services\Terminal\TerminalInbox;
 use App\Services\Terminal\TerminalScreen;
 use App\Services\Terminal\TerminalSessions;
@@ -69,7 +72,7 @@ final class RunTerminal implements ShouldQueue
         $this->onQueue('terminals');
     }
 
-    public function handle(SSHConnectionManager $connections, TerminalInbox $inbox, TerminalScreen $screens, SystemdUnitBuilder $units): void
+    public function handle(SSHConnectionManager $connections, TerminalInbox $inbox, TerminalScreen $screens, SystemdUnitBuilder $units, ServerFingerprint $fingerprints, TerminalChanges $changes): void
     {
         $session = $this->session->fresh();
 
@@ -79,11 +82,13 @@ final class RunTerminal implements ShouldQueue
 
         $server = $session->server;
         $previous = $this->listenForStop();
+        $before = null;
 
         try {
             $connection = $connections->for($server);
 
             try {
+                $fingerprint = $fingerprints->take($connection, $server);
                 $connection->openShell((int) $session->cols, (int) $session->rows, $this->command($session, $units));
 
                 $opened = TerminalSession::query()
@@ -95,8 +100,9 @@ final class RunTerminal implements ShouldQueue
                     return;
                 }
 
+                $before = $fingerprint;
                 $session->refresh();
-                activity()->performedOn($server)->causedBy($session->user)->withProperties(['mode' => $session->mode->value, 'app' => $session->application?->name])->log('terminal_opened');
+                activity()->performedOn($server)->causedBy($session->user)->withProperties(['mode' => $session->mode->value, 'app' => $session->application?->name, 'by' => $session->user?->name])->log('terminal_opened');
                 $this->emit($session, $this->opening($session));
                 $this->run($session, $connection, $inbox, $screens);
             } finally {
@@ -108,6 +114,10 @@ final class RunTerminal implements ShouldQueue
             report($e);
         } finally {
             $this->restore($previous);
+        }
+
+        if ($before !== null) {
+            $this->check($session, $connections, $fingerprints, $changes, $before);
         }
     }
 
@@ -239,8 +249,40 @@ final class RunTerminal implements ShouldQueue
 
     private function end(TerminalSession $session, TerminalEndReason $reason, TerminalScreen $screens): void
     {
-        if (app(TerminalSessions::class)->end($session, $reason)) {
-            $screens->save($session, $this->screen, $this->seq);
+        app(TerminalSessions::class)->end($session, $reason);
+        $screens->forget($session);
+        app(TerminalInbox::class)->forget($session);
+        $this->screen = '';
+    }
+
+    /**
+     * @param  array<string, string>  $before
+     */
+    private function check(TerminalSession $session, SSHConnectionManager $connections, ServerFingerprint $fingerprints, TerminalChanges $changes, array $before): void
+    {
+        $server = $session->server->fresh() ?? $session->server;
+        $connection = $connections->fresh($server);
+
+        try {
+            $connection->connect();
+            $after = $fingerprints->take($connection, $server);
+            $items = $before === [] || $after === [] ? [TerminalChanges::unchecked()] : $changes->between($server, $before, $after);
+        } catch (SSHAuthenticationException) {
+            $items = [(int) ($before['key'] ?? 0) > 0 ? TerminalChanges::lostKey($server) : TerminalChanges::unchecked()];
+
+            if ($items[0]['key'] === 'key') {
+                $server->forceFill(['unreachable_since' => $server->unreachable_since ?? now(), 'last_connection_error' => "Coresmith's sign-in key was removed from the server during a terminal session."])->save();
+            }
+        } catch (Throwable) {
+            $items = [TerminalChanges::unchecked()];
+        } finally {
+            rescue(fn() => $connection->disconnect(), report: false);
+        }
+
+        $session->forceFill(['changes' => $items])->save();
+
+        if ($items !== [] && $items[0]['key'] !== 'unchecked') {
+            activity()->performedOn($server)->causedBy($session->user)->withProperties(['changes' => array_column($items, 'title'), 'by' => $session->user?->name])->log('terminal_changed');
         }
     }
 

@@ -1,6 +1,14 @@
 import { realtime, realtimeConfigured } from '@/lib/echo'
 
-export type Ended = { reason: string | null; sentence: string | null; minutes: number; changes: unknown[] }
+export type Change = { key: string; title: string; detail: string }
+export type Ended = {
+    reason: string | null
+    sentence: string | null
+    minutes: number
+    changes: Change[]
+    checking: boolean
+    opened: boolean
+}
 export type Links = { input: string; resize: string; check_in: string; screen: string; end: string; again: string }
 export type LinkState = 'connecting' | 'connected' | 'reconnecting' | 'ended' | 'offline'
 export type Warning = { reason: 'idle' | 'hour'; endsAt: number }
@@ -70,7 +78,7 @@ export class TerminalLink {
     private queued = ''
     private sending = false
     private seq = 0
-    private readonly held = new Map<number, Uint8Array>()
+    private held: Record<number, Uint8Array> = {}
     private gapTimer: ReturnType<typeof setTimeout> | null = null
     private resizeTimer: ReturnType<typeof setTimeout> | null = null
     private checkTimer: ReturnType<typeof setInterval> | null = null
@@ -199,9 +207,9 @@ export class TerminalLink {
                 this.screen.write(decode(saved.screen))
                 this.seq = saved.seq
 
-                for (const seq of [...this.held.keys()]) {
+                for (const seq of Object.keys(this.held).map(Number)) {
                     if (seq <= this.seq) {
-                        this.held.delete(seq)
+                        delete this.held[seq]
                     }
                 }
 
@@ -235,28 +243,32 @@ export class TerminalLink {
             return
         }
 
-        this.held.set(seq, decode(data))
+        this.held[seq] = decode(data)
         this.drain()
 
-        if (this.held.size > 0 && !this.gapTimer) {
+        if (this.waiting() && !this.gapTimer) {
             this.gapTimer = setTimeout(() => {
                 this.gapTimer = null
 
-                if (this.held.size > 0) {
+                if (this.waiting()) {
                     void this.sync()
                 }
             }, GAP_MS)
         }
     }
 
+    private waiting(): boolean {
+        return Object.keys(this.held).length > 0
+    }
+
     private drain(): void {
-        let next = this.held.get(this.seq + 1)
+        let next = this.held[this.seq + 1]
 
         while (next) {
-            this.held.delete(this.seq + 1)
+            delete this.held[this.seq + 1]
             this.seq++
             this.screen.write(next)
-            next = this.held.get(this.seq + 1)
+            next = this.held[this.seq + 1]
         }
     }
 

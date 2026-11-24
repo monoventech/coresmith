@@ -9,9 +9,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Enums\TerminalEndReason;
-use App\Services\Terminal\TerminalSessions;
 use App\Http\Controllers\Controller;
 use App\Services\Teams\TeamContext;
+use App\Services\Terminal\TerminalSessions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 

@@ -16,6 +16,7 @@ use App\Models\Server;
 use App\Models\TerminalSession;
 use App\Models\User;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Terminal\ServerFingerprint;
 use App\Services\Terminal\TerminalInbox;
 use App\Services\Terminal\TerminalScreen;
 use Illuminate\Support\Facades\Event;
@@ -256,7 +257,7 @@ test('a page that comes back gets the screen saved at once', function () {
         ->and(base64_decode($saved['screen'] ?? ''))->toEndWith('$ uptime');
 });
 
-test("Coresmith restarting its workers ends the session as an update, and the worker still hears the stop", function () {
+test('Coresmith restarting its workers ends the session as an update, and the worker still hears the stop', function () {
     $session = runTerminalSession();
     $heard = 0;
     $worker = function () use (&$heard) {
@@ -317,4 +318,80 @@ test("a server Coresmith can't reach ends the session as failed", function () {
     expect($session->fresh()->status)->toBe(TerminalStatus::Closed)
         ->and($session->fresh()->end_reason)->toBe(TerminalEndReason::Failed)
         ->and($session->fresh()->end_reason->sentence())->toBe("It couldn't open a shell on the server.");
+});
+
+function runTerminalPrint(array $values): string
+{
+    return implode("\n", array_map(fn(string $key, string $value): string => ServerFingerprint::MARK . " {$key}={$value}", array_keys($values), $values)) . "\n";
+}
+
+test('the check after a session names what changed and writes it to Activity', function () {
+    $session = runTerminalSession();
+    Application::factory()->for($session->server)->create(['name' => 'shop', 'slug' => 'shop', 'processes' => [['name' => 'worker', 'command' => 'php artisan queue:work']]]);
+    $same = ['key' => '1', 'sudo' => 'a1', 'units' => 'b1', 'settings' => 'c1', 'web' => 'd1', 'running' => 'active'];
+    $transport = (new FakeSSHTransport)
+        ->respondToSequence(ServerFingerprint::MARK, [
+            [runTerminalPrint([...$same, 'firewall' => 'e1', 'processes' => 'coresmith-app-shop-worker'])],
+            [runTerminalPrint([...$same, 'firewall' => 'e2', 'processes' => ''])],
+        ])
+        ->shellEndsAfterOutput();
+
+    runTerminalHandle(new RunTerminal($session), $transport);
+
+    expect(array_column($session->fresh()->changes, 'key'))->toBe(['firewall', 'processes'])
+        ->and($session->fresh()->changes[1]['detail'])->toBe("These stopped: shop's worker. Start them again from each app's page.")
+        ->and(Activity::query()->where('description', 'terminal_changed')->sole()->properties['changes'])->toBe(['The firewall rules', "The apps' processes"]);
+});
+
+test('a session that changed nothing says so', function () {
+    $session = runTerminalSession();
+    $print = runTerminalPrint(['key' => '1', 'sudo' => 'a1', 'units' => 'b1', 'settings' => 'c1', 'web' => 'd1', 'firewall' => 'e1', 'running' => 'active', 'processes' => '']);
+    $transport = (new FakeSSHTransport)->respondTo(ServerFingerprint::MARK, $print)->shellEndsAfterOutput();
+
+    runTerminalHandle(new RunTerminal($session), $transport);
+
+    expect($session->fresh()->changes)->toBe([])
+        ->and(Activity::query()->where('description', 'terminal_changed')->exists())->toBeFalse();
+});
+
+test("removing Coresmith's key marks the server unreachable at once", function () {
+    $session = runTerminalSession();
+    $reads = 0;
+    $transport = (new FakeSSHTransport)->respondTo(ServerFingerprint::MARK, runTerminalPrint(['key' => '1', 'firewall' => 'e1']));
+    $transport->onShellRead(function (FakeSSHTransport $transport) use ($session, &$reads) {
+        $reads++;
+
+        if ($reads === 1) {
+            $transport->failLogin();
+            runTerminalPush($session, ['type' => 'close']);
+        }
+    });
+
+    runTerminalHandle(new RunTerminal($session), $transport);
+
+    expect(array_column($session->fresh()->changes, 'key'))->toBe(['key'])
+        ->and($session->server->fresh()->unreachable_since)->not->toBeNull()
+        ->and($session->server->fresh()->last_connection_error)->toBe("Coresmith's sign-in key was removed from the server during a terminal session.");
+});
+
+test("a server Coresmith couldn't read before the session gets no guesses afterwards", function () {
+    $session = runTerminalSession();
+    $transport = (new FakeSSHTransport)->shellEndsAfterOutput();
+
+    runTerminalHandle(new RunTerminal($session), $transport);
+
+    expect(array_column($session->fresh()->changes, 'key'))->toBe(['unchecked']);
+});
+
+test('the fingerprint reads each thing Coresmith looks after in one command, as root', function () {
+    $server = runTerminalSession()->server;
+    $script = app(ServerFingerprint::class)->script($server);
+
+    expect($script)->toContain('authorized_keys')
+        ->toContain('/etc/sudoers.d/')
+        ->toContain('/etc/systemd/system/coresmith-*')
+        ->toContain('/etc/coresmith')
+        ->toContain('/config/')
+        ->toContain('systemctl is-active caddy')
+        ->and(ServerFingerprint::parse("motd line\n" . ServerFingerprint::MARK . " key=1\n" . ServerFingerprint::MARK . " web=abc\n"))->toBe(['key' => '1', 'web' => 'abc']);
 });

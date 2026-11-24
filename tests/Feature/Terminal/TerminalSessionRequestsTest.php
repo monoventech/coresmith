@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Broadcasting\TerminalChannel;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Enums\TerminalEndReason;
@@ -131,9 +132,21 @@ test("a session's channel is only for the person who opened it", function () {
     $session = terminalRequestsSession();
     $other = User::factory()->create();
     $session->team->members()->attach($other, ['role' => TeamRole::Owner->value]);
-    $channel = new App\Broadcasting\TerminalChannel;
+    $channel = new TerminalChannel;
 
     expect($channel->join($session->user, (string) $session->id))->toBeTrue()
         ->and($channel->join($other, (string) $session->id))->toBeFalse()
         ->and($channel->join($session->user, 'missing'))->toBeFalse();
+});
+
+test('someone who lost the right to a root shell is cut off at their next keystroke', function () {
+    $session = terminalRequestsSession();
+    $session->team->forceFill(['root_terminals' => false])->save();
+
+    $this->actingAs($session->user)
+        ->postJson(terminalRequestsUrl('servers.terminal.input', $session), ['id' => 'tab-1', 'n' => 1, 'data' => base64_encode('id')])
+        ->assertOk()
+        ->assertJson(['status' => 'closed', 'ended' => ['reason' => 'root_off']]);
+
+    expect(app(TerminalInbox::class)->drain($session))->toBe([['type' => 'close', 'reason' => 'root_off']]);
 });

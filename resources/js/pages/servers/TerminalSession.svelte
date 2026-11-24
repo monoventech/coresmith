@@ -90,6 +90,8 @@
 
         return { tone: 'success', text: `Connected · ${clockText(elapsed)}` }
     })
+    const changes = $derived((ended?.changes ?? []).filter((change) => change.key !== 'unchecked'))
+    const unchecked = $derived(ended?.changes.find((change) => change.key === 'unchecked') ?? null)
     const remaining = $derived(link.warning ? Math.max(0, Math.round(link.warning.endsAt - now / 1000)) : 0)
     const pasteLines = $derived(pasting === null ? [] : pasting.replace(/\r?\n$/, '').split(/\r?\n/))
 
@@ -108,7 +110,9 @@
     }
 
     function ranFor(minutes: number): string {
-        return minutes < 1 ? 'It ran for less than a minute.' : `It ran for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`
+        return minutes < 1
+            ? 'It ran for less than a minute.'
+            : `It ran for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`
     }
 
     function ready(api: ShellApi) {
@@ -205,6 +209,25 @@
 
     const onFull = () => (full = document.fullscreenElement === frame && frame !== null)
 
+    $effect(() => {
+        if (!ended?.checking) {
+            return
+        }
+
+        const started = Date.now()
+        const poll = setInterval(() => {
+            if (Date.now() - started > 60_000) {
+                clearInterval(poll)
+
+                return
+            }
+
+            void link.sync()
+        }, 2000)
+
+        return () => clearInterval(poll)
+    })
+
     onMount(() => {
         clock = setInterval(() => (now = Date.now()), 1000)
         document.addEventListener('fullscreenchange', onFull)
@@ -230,10 +253,58 @@
         <h1 id="terminal-ended-title" class="type-h1 m-0 mt-1.5 max-sm:text-[24px]">Session ended</h1>
         <p class="m-0 mt-2 text-[14px]">
             {ended.sentence ?? 'It ended.'}
-            {ranFor(ended.minutes)}
+            {ended.opened ? ranFor(ended.minutes) : ''}
         </p>
+
+        {#if ended.opened && ended.checking}
+            <p
+                class="m-0 mt-5 flex items-center gap-2 text-[13.5px] text-muted-foreground"
+                role="status"
+                data-testid="terminal-checking"
+            >
+                <StateDot tone="accent" size="sm" state="running" />Checking what changed on {server.name}…
+            </p>
+        {:else if ended.opened && unchecked}
+            <p class="m-0 mt-5 text-[13.5px] text-muted-foreground" data-testid="terminal-unchecked">
+                {unchecked.detail}
+            </p>
+        {:else if ended.opened && changes.length === 0}
+            <div class="tint-success mt-5 rounded-xl border px-4.5 py-3.5" data-testid="terminal-unchanged">
+                <p class="m-0 text-[13.5px] font-medium">Everything Coresmith looks after is as it was</p>
+                <p class="m-0 mt-0.5 text-[12.5px] text-muted-foreground">
+                    The web server's settings, the apps, the firewall, and Coresmith's key and account.
+                </p>
+            </div>
+        {:else if ended.opened}
+            <section
+                class="mt-5 rounded-xl border border-border bg-card px-5 py-4.5 max-sm:px-4"
+                aria-labelledby="terminal-changed-title"
+                data-testid="terminal-changes"
+            >
+                <h2 id="terminal-changed-title" class="m-0 text-[14px] font-medium">What changed</h2>
+                <ul class="m-0 mt-3 flex list-none flex-col gap-3 p-0">
+                    {#each changes as change (change.key)}
+                        <li class="flex items-start gap-2.5">
+                            <StateDot
+                                tone={change.key === 'key' || change.key === 'running' ? 'destructive' : 'warning'}
+                                size="sm"
+                                class="mt-2"
+                            />
+                            <span class="min-w-0">
+                                <span class="block text-[13.5px] font-medium">{change.title}</span>
+                                <span class="block text-[13px] text-muted-foreground">{change.detail}</span>
+                            </span>
+                        </li>
+                    {/each}
+                </ul>
+            </section>
+        {/if}
+
         <div class="mt-5 flex flex-wrap gap-2.5">
             <Button href={links.again} class="max-sm:w-full">Open a new session</Button>
+            {#if changes.some((change) => change.key === 'firewall' || change.key === 'key')}
+                <Button href={server.tabs.hardening} variant="outline" class="max-sm:w-full">Go to Hardening</Button>
+            {/if}
             <Button href={server.tabs.activity} variant="outline" class="max-sm:w-full">See it in Activity</Button>
         </div>
     </section>
@@ -247,13 +318,19 @@
         <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
                 <h1 class="m-0 truncate font-mono text-[15px] font-medium">{server.name}</h1>
-                <Badge variant={terminal.mode === 'root' ? 'warning' : 'outline'}>{terminal.mode === 'root' ? 'Root' : who}</Badge>
+                <Badge variant={terminal.mode === 'root' ? 'warning' : 'outline'}
+                    >{terminal.mode === 'root' ? 'Root' : who}</Badge
+                >
                 <span
                     role="status"
                     class="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground tabular-nums"
                     data-testid="terminal-status"
                 >
-                    <StateDot tone={status.tone} size="sm" state={status.tone === 'success' ? 'live' : ''} />{status.text}
+                    <StateDot
+                        tone={status.tone}
+                        size="sm"
+                        state={status.tone === 'success' ? 'live' : ''}
+                    />{status.text}
                 </span>
             </div>
             <div class="flex flex-wrap items-center gap-1.5">
@@ -261,7 +338,9 @@
                     <Search class="size-4" aria-hidden="true" /><span class="max-sm:sr-only">Find</span>
                 </Button>
                 <Button variant="ghost" size="sm" onclick={copy}>
-                    <Copy class="size-4" aria-hidden="true" /><span class="max-sm:sr-only">{copied ? 'Copied' : 'Copy'}</span>
+                    <Copy class="size-4" aria-hidden="true" /><span class="max-sm:sr-only"
+                        >{copied ? 'Copied' : 'Copy'}</span
+                    >
                 </Button>
                 <Button variant="ghost" size="sm" onclick={pasteFromClipboard}>
                     <ClipboardPaste class="size-4" aria-hidden="true" /><span class="max-sm:sr-only">Paste</span>
@@ -345,7 +424,9 @@
         <div
             class={cn(
                 'terminal overflow-hidden p-2',
-                full ? 'min-h-0 flex-1' : 'h-[calc(100dvh-17rem)] min-h-72 max-sm:h-[calc(100dvh-22rem)] max-sm:min-h-56'
+                full
+                    ? 'min-h-0 flex-1'
+                    : 'h-[calc(100dvh-17rem)] min-h-72 max-sm:h-[calc(100dvh-22rem)] max-sm:min-h-56'
             )}
         >
             <Shell

@@ -67,6 +67,8 @@
     let observer: ResizeObserver | null = null
     let ctrl = false
 
+    const ARROWS = ['\x1b[A', '\x1b[B', '\x1b[C', '\x1b[D']
+
     function fitNow() {
         try {
             fit?.fit()
@@ -158,9 +160,7 @@
                 }
 
                 ontype(
-                    current.modes.applicationCursorKeysMode && /^\x1b\[[ABCD]$/.test(text)
-                        ? `\x1bO${text.slice(2)}`
-                        : text
+                    current.modes.applicationCursorKeysMode && ARROWS.includes(text) ? `\x1bO${text.slice(2)}` : text
                 )
                 current.focus()
             },
