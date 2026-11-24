@@ -1,10 +1,10 @@
 import type { Page } from '@playwright/test'
+import { answerLog, byteLength, streamDeploys } from './support/deploy-stream'
 import {
     asMember,
     blockingViolations,
     expect,
     expectWayBack,
-    fakeReverb,
     gotoApplication,
     goWayBack,
     isMobile,
@@ -29,42 +29,6 @@ function filters(page: Page) {
 
 function rows(page: Page) {
     return page.getByTestId('deployment-row')
-}
-
-type Pushed = Record<string, unknown> & { id: string; log: string }
-
-async function streamDeploys(page: Page, options: { refuse?: RegExp } = {}) {
-    let shown: Pushed | null = null
-
-    await page.route(
-        (url) => /\/deployments\/[^/]+$/.test(url.pathname),
-        async (route) => {
-            const response = await route.fetch()
-
-            if (!route.request().headers()['x-inertia']) {
-                return route.fulfill({ response })
-            }
-
-            const visit = await response.json()
-            shown = visit.props.deployment
-
-            await route.fulfill({ response, json: { ...visit, props: { ...visit.props, streaming: true } } })
-        }
-    )
-
-    const reverb = await fakeReverb(page, options)
-
-    return {
-        async push(change: (deployment: Pushed) => Record<string, unknown>) {
-            await expect
-                .poll(() => shown !== null && reverb.channels.includes(`private-deployments.${shown.id}`))
-                .toBe(true)
-
-            const deployment = shown as Pushed
-
-            reverb.emit(`private-deployments.${deployment.id}`, 'deployment.updated', change(deployment))
-        }
-    }
 }
 
 test.describe('the deployments list', () => {
@@ -166,39 +130,41 @@ test.describe('a deploy', () => {
         await expect(rail.locator('[data-phase][data-state="running"]')).toHaveCount(1)
         await expect(rail.locator('[data-phase="migrate"]')).toHaveAttribute('data-state', 'running')
         await expect(page.getByLabel('Deployment output')).toContainText('migrate: running migrations')
-        await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
+        await expect(page.getByTestId('log-transport')).toHaveText('Following every second')
     })
 
-    test('a log too long for the socket is fetched instead, and keeps coming every few seconds', async ({ page }) => {
+    test('a status update ahead of the streamed log fetches the output it missed', async ({ page }) => {
         const stream = await streamDeploys(page)
+        const missed = '\n[12:00:01] build: written while the socket was away'
+        let gap = -1
 
+        await answerLog(page, (from) => (from === gap ? missed : null))
         await page.goto('/dashboard')
         await page.getByTestId('live-deploy').click()
 
         const output = page.getByLabel('Deployment output')
 
-        await stream.push((deployment) => ({
-            ...deployment,
-            log: `${deployment.log}\n[12:00:00] build: compiling assets`
-        }))
+        await stream.append('\n[12:00:00] build: compiling assets')
         await expect(output).toContainText('build: compiling assets')
         await expect(page.getByTestId('log-transport')).toHaveText('Streaming live')
 
-        await stream.push((deployment) => ({ ...deployment, log: null }))
+        gap = stream.bytes()
+        await stream.push((deployment) => ({ ...deployment, log_bytes: gap + byteLength(missed) }))
 
-        await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
-        await expect(output).toContainText('migrate: running migrations')
-        await expect(output).not.toContainText('build: compiling assets')
+        await expect(output).toContainText('build: written while the socket was away')
+        await expect(page.getByTestId('log-transport')).toHaveText('Streaming live')
     })
 
-    test('a deploy whose live channel is refused refreshes every few seconds instead of freezing', async ({ page }) => {
+    test('a deploy whose live channel is refused follows the log every second instead of freezing', async ({
+        page
+    }) => {
         await streamDeploys(page, { refuse: /channel_name=private-deployments/ })
 
         await page.goto('/dashboard')
         await page.getByTestId('live-deploy').click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
-        await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
+        await expect(page.getByTestId('log-transport')).toHaveText('Following every second')
         await expect(page.getByLabel('Deployment output')).toContainText('migrate: running migrations')
     })
 
