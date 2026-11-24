@@ -41,10 +41,7 @@ final class DeploymentUpdated implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
-        $payload = DeploymentController::present($this->deployment, app(DeploymentPhases::class));
-        unset($payload['log']);
-
-        return $payload;
+        return DeploymentController::presentStatus($this->deployment, app(DeploymentPhases::class));
     }
 
     public function broadcastWhen(): bool
