@@ -444,7 +444,6 @@ test('removing single sign-on deletes the connection and the sign-ins linked thr
 });
 
 test('the team page lists a redirect uri for every address the team opens on', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
     $team = ssoTeam();
     $owner = ssoMember($team, TeamRole::Owner);
     TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
@@ -456,12 +455,11 @@ test('the team page lists a redirect uri for every address the team opens on', f
             ->where('sso.redirect_uris', [
                 'http://localhost/sso/callback',
                 'https://panel.acme.test/sso/callback',
-                'http://acme.coresmith.test/sso/callback',
             ]));
 });
 
 test('on Cloud the only redirect uri is Coresmith\'s own, whatever the team saved before', function () {
-    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+    config(['coresmith.edition' => 'cloud']);
     $team = ssoTeam();
     $owner = ssoMember($team, TeamRole::Owner);
     TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'panel.acme.test']);
@@ -471,8 +469,7 @@ test('on Cloud the only redirect uri is Coresmith\'s own, whatever the team save
         ->assertInertia(fn($page) => $page->where('sso.redirect_uris', ['http://localhost/sso/callback']));
 });
 
-test('an unverified custom domain and a missing tenant domain add no redirect uri', function () {
-    config(['coresmith.tenant_domain' => null]);
+test('an unverified custom domain adds no redirect uri', function () {
     $team = ssoTeam();
     $owner = ssoMember($team, TeamRole::Owner);
     TeamDomain::factory()->for($team)->create(['hostname' => 'panel.acme.test']);

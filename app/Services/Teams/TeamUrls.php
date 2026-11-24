@@ -25,27 +25,12 @@ final class TeamUrls
         return Edition::current()->isSelfHosted();
     }
 
-    public function tenantDomain(): ?string
-    {
-        $domain = strtolower(trim((string) config('coresmith.tenant_domain'), ". \t\n\r\0\x0B"));
-
-        return $domain === '' || !$this->allowsTeamHosts() ? null : $domain;
-    }
-
     public function teamForHost(string $host): ?Team
     {
         $host = strtolower(rtrim($host, '.'));
 
         if ($host === '' || $host === $this->mainHost() || !$this->allowsTeamHosts() || filter_var($host, FILTER_VALIDATE_IP) !== false) {
             return null;
-        }
-
-        $tenant = $this->tenantDomain();
-
-        if ($tenant !== null && str_ends_with($host, '.' . $tenant)) {
-            $label = substr($host, 0, -strlen('.' . $tenant));
-
-            return TeamSlug::isValid($label) ? $this->teamForSlug($label) : null;
         }
 
         return TeamDomain::query()
@@ -80,19 +65,6 @@ final class TeamUrls
     public function pathUrl(Team $team, ?Request $request = null): string
     {
         return $this->root($request) . '/' . $team->slug;
-    }
-
-    public function subdomainUrl(Team $team): ?string
-    {
-        $tenant = $this->tenantDomain();
-
-        if ($tenant === null) {
-            return null;
-        }
-
-        $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
-
-        return $scheme . '://' . $team->slug . '.' . $tenant;
     }
 
     public function home(Team $team, ?Request $request = null): string

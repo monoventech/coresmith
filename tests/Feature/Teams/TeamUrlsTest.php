@@ -248,23 +248,21 @@ test('the switcher lists every team with its address and marks the current one',
             ->where('panel.teams.1.current', false));
 });
 
-test('a team subdomain picks the team when the instance has a tenant domain', function () {
-    config(['coresmith.tenant_domain' => 'coresmith.test']);
+test('on a team domain the pages sit at the root and links stay on that domain', function () {
     [$user,, $acme] = teamUrlsTwoTeams();
-    $server = $acme->servers()->first();
+    TeamDomain::factory()->for($acme)->verified()->create(['hostname' => 'panel.acme.test']);
 
     $this->actingAs($user)
-        ->get('http://acme.coresmith.test/dashboard')
+        ->get('http://panel.acme.test/dashboard')
         ->assertOk()
         ->assertInertia(fn($page) => $page
             ->where('panel.team.slug', 'acme')
             ->where('panel.base', '')
             ->where('panel.viaHost', true)
-            ->where('servers.0.href', 'http://acme.coresmith.test/servers/acme-web'));
+            ->where('servers.0.href', 'http://panel.acme.test/servers/acme-web'));
 });
 
-test('a subdomain means nothing when no tenant domain is configured', function () {
-    config(['coresmith.tenant_domain' => null]);
+test('a subdomain named after a team opens nothing special', function () {
     [$user, $monoven] = teamUrlsTwoTeams();
     $user->forceFill(['current_team_id' => $monoven->id])->save();
 
@@ -291,18 +289,16 @@ test('a verified custom domain picks its team and an unverified one does not', f
         ->assertInertia(fn($page) => $page->where('panel.viaHost', false));
 });
 
-test('on Cloud a team opens only at its path, never on a subdomain or a domain of its own', function () {
-    config(['coresmith.edition' => 'cloud', 'coresmith.tenant_domain' => 'coresmith.test']);
+test('on Cloud a team opens only at its path, never on a domain of its own', function () {
+    config(['coresmith.edition' => 'cloud']);
     [$user, $monoven, $acme] = teamUrlsTwoTeams();
     $user->forceFill(['current_team_id' => $monoven->id])->save();
     TeamDomain::factory()->for($acme)->verified()->create(['hostname' => 'panel.acme.test']);
 
-    foreach (['http://acme.coresmith.test/deployments', 'http://panel.acme.test/deployments'] as $url) {
-        $this->actingAs($user)
-            ->get($url)
-            ->assertOk()
-            ->assertInertia(fn($page) => $page->where('panel.team.slug', 'monoven')->where('panel.viaHost', false));
-    }
+    $this->actingAs($user)
+        ->get('http://panel.acme.test/deployments')
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('panel.team.slug', 'monoven')->where('panel.viaHost', false));
 
     $this->actingAs($user)
         ->get('/acme/deployments')
