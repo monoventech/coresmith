@@ -84,6 +84,6 @@ final class MoveReach
 
     private static function tunnelRefusal(Server $server): string
     {
-        return "{$server->name} uses IPv4 through Cloudflare, which only works on self-hosted Coresmith. Turn it off on the server's page, then try again.";
+        return "{$server->name} uses IPv4 through Cloudflare, which only works on self-hosted Coresmith. Turn it off on the server's Network tab, then try again.";
     }
 }

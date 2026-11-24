@@ -153,11 +153,11 @@ test('turning off waits until the tunnel finishes setting up', function () {
     Queue::assertNothingPushed();
 });
 
-test("the server page offers the tunnel when the internet can't reach its IPv4 address", function () {
+test("the server's Network tab offers the tunnel when the internet can't reach its IPv4 address", function () {
     $server = tunnelControllerServer();
 
     $this->actingAs(tunnelControllerUser($server->team))
-        ->get(route('servers.show', $server))
+        ->get(route('servers.network', $server))
         ->assertInertia(fn($page) => $page
             ->where('tunnel.state', 'off')
             ->where('tunnel.ipv4', '151.226.169.196')
@@ -172,7 +172,7 @@ test('while the server takes visitors through another one, its tunnel card names
     ServerFrontDoor::query()->create(['server_id' => $server->id, 'door_server_id' => $door->id, 'state' => ServerFrontDoor::OPEN, 'subnet' => '10.205.0.0/24', 'door_address' => '10.205.0.1', 'home_address' => '10.205.0.2']);
 
     $this->actingAs(tunnelControllerUser($server->team))
-        ->get(route('servers.show', $server))
+        ->get(route('servers.network', $server))
         ->assertInertia(fn($page) => $page->where('tunnel.state', 'off')->where('tunnel.front_door', 'web-1'));
 });
 
@@ -180,11 +180,11 @@ test('a server the internet reaches on IPv4 has no tunnel card, unless a tunnel 
     $server = tunnelControllerServer(['ipv4' => '203.0.113.7', 'ipv4_open' => true, 'ipv6' => []]);
     $owner = tunnelControllerUser($server->team);
 
-    $this->actingAs($owner)->get(route('servers.show', $server))->assertInertia(fn($page) => $page->where('tunnel', null));
+    $this->actingAs($owner)->get(route('servers.network', $server))->assertInertia(fn($page) => $page->where('tunnel', null));
 
     ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPEN, 'hosts' => ['beelink.coresmith.io', 'monoven.com'], 'diverted' => [['host' => 'monoven.com', 'to' => 'cloudflare.vc']], 'checked_at' => now()]);
 
-    $this->actingAs($owner)->get(route('servers.show', $server))->assertInertia(fn($page) => $page
+    $this->actingAs($owner)->get(route('servers.network', $server))->assertInertia(fn($page) => $page
         ->where('tunnel.state', 'open')
         ->where('tunnel.hosts', ['beelink.coresmith.io', 'monoven.com'])
         ->where('tunnel.diverted', [['host' => 'monoven.com', 'to' => 'cloudflare.vc']])

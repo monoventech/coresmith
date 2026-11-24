@@ -63,7 +63,7 @@ final class AddressPresenter
             'check' => AddressCheck::current(),
             'reach' => AddressReading::current($host),
             'cloudflare' => $this->cloudflare($carried ? $tunnel : null, $tunnel === null ? null : $machine),
-            'machine' => $machine === null ? null : route('servers.show', $machine),
+            'machine' => $machine === null ? null : route('servers.network', $machine),
             'follow' => ($change['state'] ?? null) !== 'done' ? null : [
                 'github' => GitHubApp::query()->exists() ? route('source-providers.index') : null,
                 'sso' => TeamSsoConnection::query()->exists() ? $url . SignIn::CALLBACK_PATH : null,
@@ -107,7 +107,7 @@ final class AddressPresenter
             'host' => $status['host'] ?? null,
             'error' => $carrying === null ? ($status['error'] ?? null) : $carrying->error,
             'synced' => Formats::when($carrying === null ? $synced : $carrying->checked_at),
-            'tunnel' => $using === null ? null : ['name' => $using->name, 'url' => route('servers.show', $using)],
+            'tunnel' => $using === null ? null : ['name' => $using->name, 'url' => route('servers.network', $using)],
         ];
     }
 }

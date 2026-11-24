@@ -147,7 +147,7 @@ test('a server Coresmith Cloud could not reach stops the move before anything pa
         ->and(moveAwayServer($team)->status)->toBe(ServerStatus::Active);
 })->with([
     'a home network' => [fn(Server $server) => $server->forceFill(['ip_address' => '192.168.0.10'])->save(), "web-01 is at 192.168.0.10, which Coresmith Cloud can't reach. Give it a public address or remove it from the team, then try again."],
-    'IPv4 through Cloudflare' => [fn(Server $server) => ServerTunnel::query()->create(['server_id' => $server->id, 'state' => 'open']), "web-01 uses IPv4 through Cloudflare, which only works on self-hosted Coresmith. Turn it off on the server's page, then try again."],
+    'IPv4 through Cloudflare' => [fn(Server $server) => ServerTunnel::query()->create(['server_id' => $server->id, 'state' => 'open']), "web-01 uses IPv4 through Cloudflare, which only works on self-hosted Coresmith. Turn it off on the server's Network tab, then try again."],
 ]);
 
 test('the machine Coresmith runs on waits for its owner to agree, and says so beside the agreement', function () {

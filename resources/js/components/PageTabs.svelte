@@ -10,13 +10,26 @@
     let { tabs = [], label = 'Sections', class: className }: { tabs: Tab[]; label?: string; class?: string } = $props()
 
     let nav = $state<HTMLElement | null>(null)
+    let more = $state({ start: false, end: false })
 
     const path = $derived(new URL(page.url, 'http://localhost').pathname)
+
+    function measure() {
+        if (!nav) {
+            return
+        }
+
+        const hidden = nav.scrollWidth - nav.clientWidth
+
+        more = { start: nav.scrollLeft > 1, end: hidden - nav.scrollLeft > 1 }
+    }
 
     function showActiveTab() {
         const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
 
         if (!nav || !active) {
+            measure()
+
             return
         }
 
@@ -28,6 +41,8 @@
         } else if (tab.left < strip.left) {
             nav.scrollLeft -= strip.left - tab.left
         }
+
+        measure()
     }
 
     $effect(() => {
@@ -53,7 +68,17 @@
     }
 </script>
 
-<nav bind:this={nav} class={cn('flex gap-5 overflow-x-auto border-b border-border', className)} aria-label={label}>
+<nav
+    bind:this={nav}
+    onscroll={measure}
+    class={cn(
+        'flex gap-5 overflow-x-auto border-b border-border max-sm:gap-4',
+        more.start && 'tabs-more-start',
+        more.end && 'tabs-more-end',
+        className
+    )}
+    aria-label={label}
+>
     {#each tabs as tab (tab.href)}
         {@const current = tab.current ?? path === pathOf(tab.href)}
         <Link

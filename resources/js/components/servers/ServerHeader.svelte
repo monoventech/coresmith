@@ -38,6 +38,7 @@
     const tabs = $derived([
         { label: 'Apps', href: server.tabs.apps },
         { label: 'Databases', href: server.tabs.databases },
+        { label: 'Network', href: server.tabs.network },
         { label: 'Hardening', href: server.tabs.hardening },
         { label: 'Activity', href: server.tabs.activity }
     ])

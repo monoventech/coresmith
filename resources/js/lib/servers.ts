@@ -58,6 +58,6 @@ export type ServerHeader = {
         audit: ServerAudit | null
     } | null
     cloud: CloudServer | null
-    tabs: { apps: string; databases: string; hardening: string; activity: string }
+    tabs: { apps: string; databases: string; network: string; hardening: string; activity: string }
     can: { update: boolean; delete: boolean; manageFirewall: boolean; createApplication: boolean }
 }

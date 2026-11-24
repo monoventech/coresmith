@@ -239,7 +239,11 @@ export async function gotoServer(page: Page, name: string) {
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
-export async function gotoServerTab(page: Page, server: string, tab: 'Apps' | 'Databases' | 'Hardening' | 'Activity') {
+export async function gotoServerTab(
+    page: Page,
+    server: string,
+    tab: 'Apps' | 'Databases' | 'Network' | 'Hardening' | 'Activity'
+) {
     await gotoServer(page, server)
 
     if (tab !== 'Apps') {
