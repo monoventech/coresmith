@@ -100,7 +100,7 @@ test('an address in the path picks the team and every link keeps it', function (
     expect($user->fresh()->current_team_id)->toBe($acme->id);
 });
 
-test('a page refreshing itself in the background reads its own team without changing the one the person last chose', function () {
+test('a request a page makes in the background reads its own team without changing the one the person last chose', function () {
     [$user, $monoven, $acme] = teamUrlsTwoTeams();
     $user->forceFill(['current_team_id' => $monoven->id])->save();
 
@@ -110,11 +110,14 @@ test('a page refreshing itself in the background reads its own team without chan
         ->assertOk()
         ->assertInertia(fn($page) => $page->where('panel.team.slug', 'acme')->where('servers.0.name', 'acme-web'));
 
-    $this->get('/servers/acme-web')
-        ->assertOk()
-        ->assertInertia(fn($page) => $page->where('panel.team.slug', 'acme'));
+    $this->flushHeaders()->getJson('/servers/acme-web')->assertOk();
+    $this->postJson('/acme/projects', [])->assertUnprocessable();
 
     expect($user->fresh()->current_team_id)->toBe($monoven->id);
+
+    $this->get('/acme/dashboard')->assertOk();
+
+    expect($user->fresh()->current_team_id)->toBe($acme->id);
 });
 
 test('a team address on its own goes to that team fleet', function () {

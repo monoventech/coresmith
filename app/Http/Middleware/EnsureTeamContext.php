@@ -51,11 +51,16 @@ final class EnsureTeamContext
 
         $team = $this->context->team();
 
-        if ($team !== null && $user->current_team_id !== $team->getKey() && !StartSession::refreshes($request)) {
+        if ($team !== null && $user->current_team_id !== $team->getKey() && $this->visitsPage($request)) {
             $user->forceFill(['current_team_id' => $team->getKey()])->saveQuietly();
         }
 
         return $next($request);
+    }
+
+    private function visitsPage(Request $request): bool
+    {
+        return $request->isMethod('GET') && !$request->wantsJson() && !StartSession::refreshes($request);
     }
 
     private function followRouteModels(Request $request, User $user): void
