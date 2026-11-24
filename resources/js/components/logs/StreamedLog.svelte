@@ -42,7 +42,9 @@
 
     let errorsChecked = 0
     let errorAt = -1
+    let errorsGeneration = -1
     let announced = untrack(() => log.lines.length)
+    let announcedGeneration = untrack(() => log.generation)
     let announceTimer: ReturnType<typeof setTimeout> | null = null
     let copyTimer: ReturnType<typeof setTimeout> | null = null
     let flashTimer: ReturnType<typeof setTimeout> | null = null
@@ -78,9 +80,11 @@
     const firstError = $derived.by(() => {
         const total = log.lines.length
         const settled = !log.revealing
+        const generation = log.generation
 
         return untrack(() => {
-            if (total < errorsChecked) {
+            if (generation !== errorsGeneration) {
+                errorsGeneration = generation
                 errorsChecked = 0
                 errorAt = -1
             }
@@ -251,6 +255,11 @@
 
     $effect(() => {
         const total = log.lines.length
+
+        if (log.generation !== announcedGeneration) {
+            announcedGeneration = log.generation
+            announced = total
+        }
 
         if (!running || total <= announced || announceTimer !== null) {
             return

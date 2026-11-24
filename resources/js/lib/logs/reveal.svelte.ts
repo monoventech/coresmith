@@ -18,6 +18,7 @@ export class Reveal {
     lines = $state<string[]>([])
     revealing = $state(false)
     settled = $state(0)
+    generation = $state(0)
 
     #text = ''
     #pending = ''
@@ -43,6 +44,7 @@ export class Reveal {
 
         this.lines = text === '' ? [] : text.split('\n')
         this.settled = this.lines.length
+        this.generation++
     }
 
     push(text: string): void {

@@ -195,6 +195,7 @@ test.describe('a deploy', () => {
         await expect(toast(page)).toContainText(`Deploying ${name}.`)
         await expect(page.getByTestId('deployment-status')).toHaveText('Queued')
         await expect(page.getByLabel('Deployment output')).toContainText('Waiting for a worker to pick up the deploy')
+        await expect(page.getByTestId('log-first-error')).toBeDisabled()
     })
 
     test('a finished deploy links to the releases it made', async ({ page }) => {
