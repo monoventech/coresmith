@@ -8,6 +8,7 @@ use App\Http\Controllers\ApplicationDatabaseController;
 use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
+use App\Http\Controllers\ApplicationLogsController;
 use App\Http\Controllers\ApplicationPhpLimitsController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationRuntimeController;
@@ -230,9 +231,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('servers/{server}/applications/{application}/cron-jobs/{cronJob}', [ApplicationCronJobController::class, 'destroy'])
         ->where('cronJob', '[0-9a-f]{16}')
         ->name('servers.applications.cron-jobs.destroy');
-    Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogController::class, 'index'])
-        ->middleware('throttle:30,1,app-logs')
+    Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogsController::class, 'show'])
         ->name('servers.applications.logs');
+    Route::get('servers/{server}/applications/{application}/logs/lines', [ApplicationLogsController::class, 'lines'])
+        ->middleware('throttle:90,1,app-log-lines')
+        ->name('servers.applications.logs.lines');
+    Route::get('servers/{server}/applications/{application}/logs/recent', [ApplicationLogController::class, 'index'])
+        ->middleware('throttle:30,1,app-logs')
+        ->name('servers.applications.logs.recent');
     Route::get('servers/{server}/applications/{application}/cron-jobs/log', [ApplicationSchedulerLogController::class, 'index'])
         ->middleware('throttle:30,1,scheduler-log')
         ->name('servers.applications.cron-jobs.log');

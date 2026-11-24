@@ -42,7 +42,7 @@ final class Breadcrumbs
         'servers.applications.create' => 'Add an app',
     ];
 
-    private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases', 'servers.applications.setup.edit' => 'Edit setup'];
+    private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases', 'servers.applications.setup.edit' => 'Edit setup', 'servers.applications.logs' => 'Logs'];
 
     public function __construct(private readonly TeamAccess $access) {}
 

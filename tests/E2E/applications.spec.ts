@@ -603,7 +603,7 @@ test.describe('what the full app page adds on a wider screen', () => {
     }
 
     test('the live log says it is following once the access log is read', async ({ page }) => {
-        await page.route('**/applications/*/logs', (route) =>
+        await page.route('**/applications/*/logs/recent', (route) =>
             route.fulfill({ json: { lines: [{ time: '09:41:02', text: 'GET /invoices 200 in 38ms' }], error: null } })
         )
         await gotoApplication(page, 'forge-01', 'atlas')
