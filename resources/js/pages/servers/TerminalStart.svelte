@@ -196,7 +196,8 @@
                 </ul>
                 <p class="m-0 mt-3 text-[13px]">
                     Change anything else freely. When you finish, a check names anything here that changed and what
-                    Coresmith does about it. Removing Coresmith's key cuts it off from the server.
+                    Coresmith does about it. For an app's folders, that means whether they're there and their owners and
+                    permissions, not the files inside. Removing Coresmith's key cuts it off from the server.
                 </p>
             </section>
 
