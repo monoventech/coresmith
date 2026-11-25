@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -31,13 +32,32 @@ final class ReleasesController extends Controller
 {
     public const PER_PAGE = 20;
 
-    public function overview(Request $request, ReleasesOverview $overview): Response
+    private const SEARCH_LENGTH = 100;
+
+    public function overview(Request $request, ReleasesOverview $overview): Response|RedirectResponse
     {
         $team = $this->currentTeam();
         $scope = ProjectScope::from($request, $request->user(), $team);
+        $search = mb_substr(trim((string) $request->query('q', '')), 0, self::SEARCH_LENGTH);
+        $listing = $overview->listing($request->user(), $team, $scope, $search);
+        $page = Paging::page($request->query('page'));
+        $apps = new LengthAwarePaginator(
+            array_slice($listing['ids'], ($page - 1) * ReleasesOverview::PER_PAGE, ReleasesOverview::PER_PAGE),
+            count($listing['ids']),
+            ReleasesOverview::PER_PAGE,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
+
+        if ($apps->isEmpty() && $page > 1) {
+            return redirect()->to($apps->url($apps->lastPage()));
+        }
 
         return Inertia::render('releases/Overview', [
-            'groups' => $overview->present($request->user(), $team, $scope),
+            'groups' => $overview->groups($apps->items(), $scope),
+            'pages' => Paging::present($apps),
+            'search' => $search,
+            'total' => $listing['total'],
             'scope' => $scope->value(),
             'scopes' => $team === null ? [] : ProjectScope::options($request->user(), $team),
         ]);

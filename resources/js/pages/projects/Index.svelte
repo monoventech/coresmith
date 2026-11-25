@@ -7,22 +7,26 @@
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import FleetHeader from '@/components/fleet/FleetHeader.svelte'
+    import Pager from '@/components/Pager.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import AppTags from '@/components/projects/AppTags.svelte'
     import ProjectNameDialog from '@/components/projects/ProjectNameDialog.svelte'
     import { Button } from '@/components/ui/button'
+    import type { Pages } from '@/lib/paging'
     import type { ProjectCard } from '@/lib/projects'
 
     let {
         counts,
         projects = [],
         unfiled = [],
+        unfiled_pages = null,
         narrowed = false,
         can
     }: {
         counts: { servers: number; applications: number }
         projects: ProjectCard[]
         unfiled: { id: string; name: string; server: string | null; href: string }[]
+        unfiled_pages?: Pages | null
         narrowed: boolean
         can: { create: boolean }
     } = $props()
@@ -122,7 +126,7 @@
             aria-labelledby="no-project"
             data-testid="no-project"
         >
-            <h2 id="no-project" class="type-label m-0 text-muted-foreground">No project</h2>
+            <h2 id="no-project" class="type-label m-0 scroll-mt-6 text-muted-foreground">No project</h2>
             <p class="m-0 mt-1 mb-2 text-[12.5px] text-muted-foreground">
                 Apps show here until someone adds them to a project.
             </p>
@@ -138,6 +142,15 @@
                     </li>
                 {/each}
             </ul>
+            {#if unfiled_pages}
+                <Pager
+                    pages={unfiled_pages}
+                    label="App pages"
+                    noun="apps"
+                    only={['unfiled', 'unfiled_pages']}
+                    class="mt-2 border-t border-border pt-3"
+                />
+            {/if}
         </section>
     {/if}
 </div>

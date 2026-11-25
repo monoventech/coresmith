@@ -9,8 +9,7 @@ import {
     noSidewaysScroll,
     test,
     toast,
-    useTheme,
-    withProps
+    useTheme
 } from './support/fixtures'
 
 async function gotoReleases(page: Page) {
@@ -26,33 +25,14 @@ function appRow(page: Page, name: string) {
 
 async function gotoReleasesOf(page: Page, application: string) {
     await gotoReleases(page)
+    await page.getByRole('searchbox', { name: 'Search apps' }).fill(application)
+    await page.waitForURL((url) => url.searchParams.get('q') === application)
     await appRow(page, application).click()
     await expect(page.getByRole('heading', { level: 1, name: `Releases · ${application}` })).toBeVisible()
 }
 
 function rows(page: Page) {
     return page.getByTestId('release-row')
-}
-
-function manyApps(count: number) {
-    return Array.from({ length: Math.ceil(count / 10) }, (_, project) => ({
-        name: `Project ${String(project + 1).padStart(2, '0')}`,
-        apps: Array.from({ length: 10 }, (_, index) => {
-            const number = project * 10 + index + 1
-
-            return {
-                id: `app-${number}`,
-                name: `service-${String(number).padStart(2, '0')}-with-a-long-name`,
-                server: `worker-${(number % 7) + 1}`,
-                tags: index % 2 === 0 ? ['production'] : ['staging'],
-                href: '/releases',
-                release: index % 3 === 0 ? null : `releases/20261114-${String(number).padStart(6, '0')}`,
-                tag: index % 4 === 0 ? `v1.${number}.0` : null,
-                when: index % 3 === 0 ? null : `${number} minutes ago`,
-                full: null
-            }
-        })
-    }))
 }
 
 test.describe('releases', () => {
@@ -93,22 +73,23 @@ test.describe('releases', () => {
         await expect(appRow(page, 'atlas')).toBeVisible()
     })
 
-    test('sixty apps stay one readable list that search narrows, with no sideways scroll', async ({ page }) => {
-        await withProps(page, /\/releases$/, (props) => {
-            props.groups = manyApps(60)
-        })
+    test('apps come fifty a page, and search finds one on any page, with no sideways scroll', async ({ page }) => {
         await gotoReleases(page)
 
-        await expect(page.getByTestId('releases-app')).toHaveCount(60)
-        await expect(page.getByTestId('releases-group')).toHaveCount(6)
-        await expect(page.getByTestId('releases-count')).toHaveText('60 apps')
+        await expect(page.getByTestId('releases-app')).toHaveCount(50)
+        await expect(page.getByTestId('pager-range')).toHaveText(/^1–50 of \d+ apps$/)
+        await expect(appRow(page, 'warehouse')).toHaveCount(0)
         await noSidewaysScroll(page)
 
-        await page.getByRole('searchbox', { name: 'Search apps' }).fill('service-42')
+        await page.getByTestId('pager-older').click()
+        await page.waitForURL((url) => url.searchParams.get('page') === '2')
+        await expect(page.getByTestId('pager-range')).toHaveText(/^51–100 of \d+ apps$/)
 
-        await expect(page.getByTestId('releases-app')).toHaveCount(1)
-        await expect(page.getByTestId('releases-group')).toHaveCount(1)
-        await expect(page.getByTestId('releases-group')).toHaveAccessibleName('Project 05')
+        await page.getByRole('searchbox', { name: 'Search apps' }).fill('warehouse')
+
+        await expect(appRow(page, 'warehouse')).toBeVisible()
+        await expect(page.getByTestId('releases-count')).toHaveText(/^1 of \d+ apps$/)
+        await page.waitForURL((url) => url.searchParams.get('q') === 'warehouse' && !url.searchParams.has('page'))
     })
 
     for (const theme of ['light', 'dark'] as const) {
