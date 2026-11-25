@@ -85,3 +85,14 @@ test('the connection only offers the ssh algorithms the security checklist allow
             ->and(array_values($preferred[$direction]['comp']))->toBe(['none']);
     }
 });
+
+test('a terminal read that waits with nothing to show keeps the shell open, and only a closed shell or dropped connection ends it', function (string|bool $data, bool $timedOut, bool $interactive, bool $connected, ?string $read) {
+    expect(Phpseclib3Transport::shellRead($data, $timedOut, $interactive, $connected))->toBe($read);
+})->with([
+    'output' => ['root@web-1:~# ', false, true, true, 'root@web-1:~# '],
+    'a quiet wait on an open shell' => [true, true, true, true, ''],
+    'the shell exited' => [true, false, false, true, null],
+    'a quiet wait as the shell closes' => [true, true, false, true, null],
+    'a failed read on a live connection' => [false, false, true, true, ''],
+    'a dropped connection' => [false, false, true, false, null],
+]);

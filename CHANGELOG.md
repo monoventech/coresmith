@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.39 (2026-11-25)
+
+### Fixed
+- fix: a browser terminal stays open while its shell is quiet, and the specs from the 0.8.38 browser run (#191)
+
+### Changed
+- Releases and the Projects page list fifty apps a page, Releases searches every app, and a control focused on a phone scrolls clear of the bottom tabs (#190)
+
 ## v0.8.38 (2026-11-25)
 
 ### Fixed

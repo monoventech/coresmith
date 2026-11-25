@@ -36,7 +36,8 @@ test.describe('projects', () => {
 
         await expect(storefront.filter({ hasText: /^\s*storefront production\s*$/ })).toHaveCount(1)
         await expect(storefront.filter({ hasText: /^\s*storefront-staging staging\s*$/ })).toHaveCount(1)
-        await expect(page.getByTestId('no-project')).toContainText('ledger')
+        await expect(page.getByTestId('no-project')).toContainText('apex-shop')
+        await expect(page.getByTestId('no-project').getByTestId('pager-range')).toHaveText(/^1–50 of \d+ apps$/)
         await expect(nav(page).getByRole('link', { name: 'Fleet', exact: true })).toHaveAttribute(
             'aria-current',
             'page'
@@ -45,6 +46,21 @@ test.describe('projects', () => {
         await fleetViews(page).getByRole('link', { name: 'Servers', exact: true }).click()
         await page.waitForURL(/\/dashboard$/)
         await expect(page.getByTestId('server-card').first()).toBeVisible()
+    })
+
+    test('apps in no project come fifty a page, and the next page opens in place', async ({ page }) => {
+        await page.goto('/projects')
+
+        const unfiled = page.getByTestId('no-project')
+
+        await expect(unfiled.getByTestId('pager-range')).toHaveText(/^1–50 of \d+ apps$/)
+        await expect(unfiled.getByRole('link', { name: 'ledger', exact: true })).toHaveCount(0)
+
+        await unfiled.getByTestId('pager-older').click()
+
+        await expect(unfiled.getByTestId('pager-range')).toHaveText(/^51–100 of \d+ apps$/)
+        await expect(unfiled.getByRole('link', { name: 'ledger', exact: true })).toBeVisible()
+        await expect(page).toHaveURL(/[?&]page=2/)
     })
 
     test('a project page shows each app with its tags and last deploy, then deploys, servers and who can see it', async ({

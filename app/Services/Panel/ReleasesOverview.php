@@ -10,6 +10,8 @@ namespace App\Services\Panel;
 
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Project;
+use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Projects\ProjectScope;
@@ -19,36 +21,74 @@ use Illuminate\Support\Collection;
 
 final readonly class ReleasesOverview
 {
+    public const PER_PAGE = 50;
+
     public function __construct(private TeamAccess $access) {}
 
     /**
-     * @return list<array{name: string|null, apps: list<array<string, mixed>>}>
+     * @return array{ids: list<string>, total: int}
      */
-    public function present(User $user, ?Team $team, ProjectScope $scope): array
+    public function listing(User $user, ?Team $team, ProjectScope $scope, string $search): array
     {
         if ($team === null) {
+            return ['ids' => [], 'total' => 0];
+        }
+
+        $applications = $scope->apply($this->access->applications($user, $team))->get(['applications.id', 'applications.name', 'applications.tags', 'applications.server_id', 'applications.project_id']);
+        $servers = Server::query()->whereIn('id', $applications->pluck('server_id')->filter()->unique()->values())->pluck('name', 'id');
+        $projects = Project::query()->whereIn('id', $applications->pluck('project_id')->filter()->unique()->values())->pluck('name', 'id');
+        $project = fn(Application $application): ?string => $projects->get((string) $application->project_id);
+        $needle = mb_strtolower($search);
+
+        $ids = $applications
+            ->when($needle !== '', fn(Collection $all): Collection => $all->filter(fn(Application $application): bool => collect([$application->name, $servers->get((string) $application->server_id), ...$application->tags, $project($application)])
+                ->contains(fn(?string $field): bool => $field !== null && str_contains(mb_strtolower($field), $needle))))
+            ->sortBy([
+                fn(Application $a, Application $b): int => ($project($a) === null) <=> ($project($b) === null),
+                fn(Application $a, Application $b): int => strcasecmp((string) $project($a), (string) $project($b)),
+                fn(Application $a, Application $b): int => strcmp((string) $a->project_id, (string) $b->project_id),
+                fn(Application $a, Application $b): int => strcasecmp($a->name, $b->name),
+                fn(Application $a, Application $b): int => strcasecmp(implode(' ', $a->tags), implode(' ', $b->tags)),
+                fn(Application $a, Application $b): int => strcmp((string) $a->getKey(), (string) $b->getKey()),
+            ])
+            ->map(fn(Application $application): string => (string) $application->getKey())
+            ->values()
+            ->all();
+
+        return ['ids' => $ids, 'total' => $applications->count()];
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return list<array{name: string|null, apps: list<array<string, mixed>>}>
+     */
+    public function groups(array $ids, ProjectScope $scope): array
+    {
+        if ($ids === []) {
             return [];
         }
 
-        $applications = $scope->apply($this->access->applications($user, $team))
+        $order = array_flip($ids);
+        $applications = Application::query()
+            ->whereIn('id', $ids)
             ->with(['server', 'project'])
-            ->orderBy('name')
-            ->get();
+            ->get()
+            ->sortBy(fn(Application $application): int => $order[(string) $application->getKey()])
+            ->values();
         $live = $this->liveDeployments($applications);
+        $groups = [];
 
-        return $applications
-            ->groupBy(fn(Application $application): string => (string) $application->project_id)
-            ->map(fn(Collection $apps): array => [
-                'name' => $apps->first()?->project?->name,
-                'apps' => $apps
-                    ->sortBy([fn(Application $a, Application $b): int => strcasecmp($a->name, $b->name), fn(Application $a, Application $b): int => strcasecmp(implode(' ', $a->tags), implode(' ', $b->tags))])
-                    ->map(fn(Application $application): array => $this->row($application, $live->get($application->getKey()), $scope->query()))
-                    ->values()
-                    ->all(),
-            ])
-            ->sortBy([fn(array $a, array $b): int => ($a['name'] === null) <=> ($b['name'] === null), fn(array $a, array $b): int => strcasecmp((string) $a['name'], (string) $b['name'])])
-            ->values()
-            ->all();
+        foreach ($applications as $application) {
+            $key = (string) $application->project_id;
+
+            if ($groups === [] || $groups[array_key_last($groups)]['key'] !== $key) {
+                $groups[] = ['key' => $key, 'name' => $application->project?->name, 'apps' => []];
+            }
+
+            $groups[array_key_last($groups)]['apps'][] = $this->row($application, $live->get($application->getKey()), $scope->query());
+        }
+
+        return array_map(fn(array $group): array => ['name' => $group['name'], 'apps' => $group['apps']], $groups);
     }
 
     /**
