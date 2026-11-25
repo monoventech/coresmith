@@ -2,6 +2,9 @@
     // Copyright 2026 Monoven Ltd. All rights reserved.
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
+    import CardFact from '@/components/CardFact.svelte'
+    import CardFacts from '@/components/CardFacts.svelte'
+    import SectionCard from '@/components/SectionCard.svelte'
     import type { ProcessRow } from '@/lib/app-page'
     import { cn } from '@/lib/utils'
 
@@ -42,42 +45,42 @@
     )
 </script>
 
-<div
-    class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-    data-testid="health-card"
->
-    <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Health</h3>
-    {#if uptime}
-        <div class="mb-3 flex flex-col gap-2" data-testid="app-uptime">
-            <div class="flex flex-wrap items-baseline gap-2">
-                <span class="font-display text-[26px] leading-none font-semibold">{uptime.percent}</span>
-                <span class="text-[12.5px] text-muted-foreground">answering over 30 days</span>
-            </div>
-            <div role="img" aria-label={uptime.label} class="flex gap-0.5">
-                {#each uptime.days as day (day.date)}
-                    <span class="h-5.5 flex-1 rounded-xs {tones[day.state]}" title={day.title}></span>
-                {/each}
-            </div>
-            <p class="m-0 text-[12px] text-muted-foreground">{uptime.note}</p>
-        </div>
-    {:else}
-        <p class="m-0 mb-3 text-[12.5px] text-muted-foreground" data-testid="app-uptime-empty">
-            {domain
-                ? 'No uptime yet. It shows here once Coresmith has checked the app from outside.'
-                : 'Uptime shows here once the app has a domain to check from outside.'}
-        </p>
+<SectionCard title="Health" testid="health-card">
+    {#snippet description()}
+        {#if uptime}
+            <p class="m-0">{uptime.note}</p>
+        {:else}
+            <p class="m-0" data-testid="app-uptime-empty">
+                {domain
+                    ? 'No uptime yet. It shows here once Coresmith has checked the app from outside.'
+                    : 'Uptime shows here once the app has a domain to check from outside.'}
+            </p>
+        {/if}
+    {/snippet}
+    {#if uptime || summary}
+        <CardFacts>
+            {#if uptime}
+                <CardFact label="Uptime, 30 days" class="max-sm:col-span-full" testid="app-uptime">
+                    <span class="block">{uptime.percent}</span>
+                    <span role="img" aria-label={uptime.label} class="mt-2 flex h-4 gap-0.5">
+                        {#each uptime.days as day (day.date)}
+                            <span class="flex-1 rounded-xs {tones[day.state]}" title={day.title}></span>
+                        {/each}
+                    </span>
+                </CardFact>
+            {/if}
+            {#if summary}
+                <CardFact label="Processes" class="max-sm:col-span-full">
+                    <a
+                        href="#processes"
+                        class={cn(
+                            'focus-ring relative inline-block rounded-sm underline-offset-4 hover:underline pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3',
+                            failed > 0 ? 'text-destructive-strong' : trouble ? 'text-warning-strong' : 'text-foreground'
+                        )}
+                        data-testid="health-processes">{summary}</a
+                    >
+                </CardFact>
+            {/if}
+        </CardFacts>
     {/if}
-    {#if summary}
-        <div class="mt-auto border-t border-border pt-1.5">
-            <a
-                href="#processes"
-                class={cn(
-                    'focus-ring -mx-2 flex min-h-10 items-center justify-between gap-3 rounded-md px-2 text-[13.5px] no-underline transition-colors duration-(--dur-fast) hover:bg-muted max-sm:min-h-11',
-                    failed > 0 ? 'text-destructive-strong' : trouble ? 'text-warning-strong' : 'text-foreground'
-                )}
-                data-testid="health-processes"
-                ><span class="text-muted-foreground">Processes</span><span>{summary}</span></a
-            >
-        </div>
-    {/if}
-</div>
+</SectionCard>

@@ -50,3 +50,5 @@ export type Switchable = {
     starting: boolean
     failure: string | null
 }
+
+export type AppSetup = { href: string | null; rows: { label: string; value: string }[] }

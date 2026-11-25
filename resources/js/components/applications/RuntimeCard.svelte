@@ -3,6 +3,7 @@
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
     import { router } from '@inertiajs/svelte'
+    import SectionCard from '@/components/SectionCard.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
@@ -54,15 +55,12 @@
     }
 </script>
 
-<div class="min-w-0 overflow-hidden rounded-xl border border-border bg-card" data-testid="runtime-card">
-    <div class="px-5.5 pt-5 pb-3.5 max-sm:px-4 max-sm:pt-4">
-        <h2 id="runtime-title" class="type-h3 m-0 max-sm:text-[16px]">Runtime</h2>
-        <p class="m-0 mt-1 text-[12.5px] text-muted-foreground">
-            Versions install side by side on <span class="font-mono whitespace-nowrap">{server}</span>, so
-            <span class="font-mono whitespace-nowrap">{app}</span> keeps its own.
-        </p>
-    </div>
+{#snippet description()}
+    Versions install side by side on <span class="font-mono whitespace-nowrap">{server}</span>, so
+    <span class="font-mono whitespace-nowrap">{app}</span> keeps its own.
+{/snippet}
 
+<SectionCard title="Runtime" titleId="runtime-title" level={2} {description} testid="runtime-card">
     {#each runtimes as row, index (row.runtime)}
         <div class="flex flex-col gap-3 border-t border-border px-5.5 py-4 max-sm:px-4" data-testid="runtime-row">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -72,8 +70,11 @@
                 {/if}
                 <span class="text-[12.5px] text-muted-foreground">{row.source}</span>
                 {#if index === 0 && onchange}
-                    <Button variant="ghost" size="sm" class="ml-auto max-sm:-ml-3 max-sm:min-h-11" onclick={onchange}
-                        >Change version<span class="sr-only"> of {row.name}</span></Button
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="ml-auto max-sm:ml-0 max-sm:min-h-11 max-sm:w-full"
+                        onclick={onchange}>Change version<span class="sr-only"> of {row.name}</span></Button
                     >
                 {/if}
             </div>
@@ -125,7 +126,7 @@
             {/if}
         </div>
     {/each}
-</div>
+</SectionCard>
 
 <Dialog.Root open={confirming !== null} onOpenChange={(open) => !open && !sending && (confirming = null)}>
     <Dialog.Content>
