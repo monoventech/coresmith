@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.38 (2026-11-25)
+
+### Fixed
+- fix: a firewall changes page past the end shows the last page instead of saying nothing changed (#188)
+
+### Changed
+- Deploys, releases, a server's activity, a database's backups and firewall changes come a page at a time, and deploys are indexed by app (#187)
+
 ## v0.8.37 (2026-11-25)
 
 ### Changed
