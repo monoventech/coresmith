@@ -54,7 +54,7 @@ final class UpdateServerRuntime implements ShouldQueue
     }
 
     /**
-     * @return array{runtime: string, from: string, to: string, label: string, state: string, reason: ?string}|null
+     * @return array{runtime: string, from: string, to: string, label: string, state: string, reason: ?string, applications?: list<string>}|null
      */
     public static function state(Server $server): ?array
     {
@@ -72,6 +72,7 @@ final class UpdateServerRuntime implements ShouldQueue
             'label' => app(Catalog::class)->label($this->runtime) . ' ' . $this->to,
             'state' => $state,
             'reason' => $reason,
+            'applications' => $this->applications,
         ], $state === 'installing' ? now()->addSeconds($this->timeout + 300) : now()->addDay());
     }
 

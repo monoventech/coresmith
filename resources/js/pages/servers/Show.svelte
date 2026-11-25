@@ -7,8 +7,6 @@
     import { TriangleAlert } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
-    import ProcessesCard from '@/components/servers/ProcessesCard.svelte'
-    import type { ProcessRow } from '@/components/servers/ProcessesCard.svelte'
     import ProvisioningPanel from '@/components/servers/ProvisioningPanel.svelte'
     import RuntimesCard from '@/components/servers/RuntimesCard.svelte'
     import type { Runtimes } from '@/components/servers/RuntimesCard.svelte'
@@ -16,7 +14,7 @@
     import ServerMovePanel from '@/components/servers/ServerMovePanel.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
-    import type { EntityState } from '@/lib/fleet'
+    import type { EntityState, StateTone } from '@/lib/fleet'
     import { toneText } from '@/lib/fleet'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
@@ -30,27 +28,26 @@
         deployed: string | null
         state: EntityState
         href: string
+        processes: { label: string; tone: StateTone } | null
     }
 
     let {
         server,
         applications = [],
         runtimes,
-        network = null,
-        processes = []
+        network = null
     }: {
         server: ServerHeader
         applications: AppRow[]
         runtimes: Runtimes
         network?: { text: string; action: string; href: string } | null
-        processes?: ProcessRow[]
     } = $props()
 
     const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
     const stacks = $derived(new Set(applications.map((application) => application.kind)).size)
     const stackText = $derived(`${WORDS[stacks] ?? stacks} ${stacks === 1 ? 'stack' : 'stacks'}`)
-    const columns = 'grid grid-cols-[1.3fr_1fr_1fr_1fr_0.7fr] gap-3 max-sm:grid-cols-[1fr_auto]'
+    const columns = 'grid grid-cols-[1.3fr_0.9fr_1fr_1.1fr_0.8fr_0.7fr] gap-3 max-sm:grid-cols-[1fr_auto]'
 </script>
 
 <AppHead title={server.name} />
@@ -98,6 +95,7 @@
             <span class="type-caption text-muted-foreground">Application</span>
             <span class="type-caption text-muted-foreground max-sm:hidden">Runtime</span>
             <span class="type-caption text-muted-foreground max-sm:hidden">Domain</span>
+            <span class="type-caption text-muted-foreground max-sm:hidden">Processes</span>
             <span class="type-caption text-muted-foreground max-sm:hidden">Last deploy</span>
             <span class="type-caption text-muted-foreground">Status</span>
         </div>
@@ -117,6 +115,15 @@
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{application.runtime}</span>
                 <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden"
                     >{application.domain ?? 'No domain'}</span
+                >
+                <span
+                    class={cn(
+                        'truncate text-[12.5px] max-sm:hidden',
+                        application.processes && application.processes.tone !== 'default'
+                            ? toneText(application.processes.tone)
+                            : 'text-muted-foreground'
+                    )}
+                    data-testid="app-processes">{application.processes?.label ?? 'None'}</span
                 >
                 <span class="text-[12.5px] text-muted-foreground max-sm:hidden"
                     >{application.deployed ?? 'Not yet'}</span
@@ -138,9 +145,6 @@
             </p>
         </div>
     </div>
-    {#if processes.length > 0}
-        <ProcessesCard {processes} />
-    {/if}
     {#if runtimes.rows.length > 0}
         <RuntimesCard server={server.name} {runtimes} />
     {/if}

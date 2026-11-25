@@ -86,56 +86,59 @@
     <div class="flex min-w-0 flex-1 flex-col">
         <TopBar />
 
-        <main
-            id="main"
-            {...{ 'scroll-region': '' }}
-            class="grain relative min-w-0 flex-1 overflow-y-auto max-sm:scroll-pb-24"
-            data-testid="panel-main"
-        >
-            <div class="mx-auto flex min-h-full max-w-302 flex-col px-4.5 pt-3 pb-24 sm:px-10 sm:pt-8 sm:pb-8">
-                {#if !detail}
-                    <div class="mt-2 mb-0.5 flex items-center gap-2 sm:hidden">
-                        <CoresmithLogo variant="mark" label={null} class="size-6.5 shrink-0 text-foreground" />
-                        {#if explorer}
+        <div class="relative flex min-h-0 flex-1 flex-col">
+            <main
+                id="main"
+                {...{ 'scroll-region': '' }}
+                class="relative min-w-0 flex-1 overflow-y-auto max-sm:scroll-pb-24 sm:has-data-section-index:scroll-pt-16"
+                data-testid="panel-main"
+            >
+                <div class="mx-auto flex min-h-full max-w-302 flex-col px-4.5 pt-3 pb-24 sm:px-10 sm:pt-8 sm:pb-8">
+                    {#if !detail}
+                        <div class="mt-2 mb-0.5 flex items-center gap-2 sm:hidden">
+                            <CoresmithLogo variant="mark" label={null} class="size-6.5 shrink-0 text-foreground" />
+                            {#if explorer}
+                                <button
+                                    type="button"
+                                    class="focus-ring flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 rounded-md bg-transparent px-1 text-[15px] font-semibold"
+                                    onclick={() => (account = true)}
+                                >
+                                    <span class="truncate">{explorer.team.name}</span>
+                                    <ChevronsUpDown class="size-3.75 shrink-0 text-muted-foreground" />
+                                </button>
+                            {/if}
                             <button
                                 type="button"
-                                class="focus-ring flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 rounded-md bg-transparent px-1 text-[15px] font-semibold"
+                                class="focus-ring ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-transparent text-muted-foreground"
+                                aria-label="Search"
+                                onclick={() => (palette = true)}
+                            >
+                                <Search class="size-4.75" />
+                            </button>
+                            <button
+                                type="button"
+                                class="focus-ring inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent"
+                                aria-label="Account"
                                 onclick={() => (account = true)}
                             >
-                                <span class="truncate">{explorer.team.name}</span>
-                                <ChevronsUpDown class="size-3.75 shrink-0 text-muted-foreground" />
+                                <span
+                                    class="inline-flex size-8 items-center justify-center rounded-full border border-border bg-muted text-[11px] font-semibold text-muted-foreground"
+                                >
+                                    {getInitials(user.name)}
+                                </span>
                             </button>
-                        {/if}
-                        <button
-                            type="button"
-                            class="focus-ring ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-transparent text-muted-foreground"
-                            aria-label="Search"
-                            onclick={() => (palette = true)}
-                        >
-                            <Search class="size-4.75" />
-                        </button>
-                        <button
-                            type="button"
-                            class="focus-ring inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent"
-                            aria-label="Account"
-                            onclick={() => (account = true)}
-                        >
-                            <span
-                                class="inline-flex size-8 items-center justify-center rounded-full border border-border bg-muted text-[11px] font-semibold text-muted-foreground"
-                            >
-                                {getInitials(user.name)}
-                            </span>
-                        </button>
-                    </div>
-                {/if}
+                        </div>
+                    {/if}
 
-                {#if billing?.banner && !onBilling && !onBannerPage}
-                    <BillingBanner banner={billing.banner} href={billing.href} />
-                {/if}
+                    {#if billing?.banner && !onBilling && !onBannerPage}
+                        <BillingBanner banner={billing.banner} href={billing.href} />
+                    {/if}
 
-                {@render children?.()}
-            </div>
-        </main>
+                    {@render children?.()}
+                </div>
+            </main>
+            <div class="grain pointer-events-none absolute inset-0" aria-hidden="true"></div>
+        </div>
     </div>
 
     {#if explorer && !shell.wide}
