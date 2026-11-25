@@ -2,9 +2,11 @@
     import { Link } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
+    import Pager from '@/components/Pager.svelte'
     import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
     import { Badge } from '@/components/ui/badge'
     import type { EntityState } from '@/lib/fleet'
+    import type { Pages } from '@/lib/paging'
     import { cn } from '@/lib/utils'
 
     type Row = {
@@ -24,12 +26,14 @@
         filter,
         filters = [],
         deployments = [],
+        pages,
         scope = '',
         scopes = []
     }: {
         filter: string
         filters: { key: string; label: string; count: number; href: string }[]
         deployments: Row[]
+        pages: Pages
         scope: string
         scopes: { value: string; label: string }[]
     } = $props()
@@ -127,6 +131,7 @@
                 </span>
             </Link>
         {/each}
+        <Pager {pages} label="Deploy pages" noun="deploys" class="border-b border-border px-5.5 py-3 max-sm:px-4" />
         <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">
             A failed deploy never reaches visitors. The old release keeps serving until every phase passes.
         </p>

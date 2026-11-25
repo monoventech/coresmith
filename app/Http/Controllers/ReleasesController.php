@@ -14,18 +14,23 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\Formats;
+use App\Services\Panel\Paging;
 use App\Services\Panel\ReleasesOverview;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Projects\ProjectScope;
 use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class ReleasesController extends Controller
 {
+    public const PER_PAGE = 20;
+
     public function overview(Request $request, ReleasesOverview $overview): Response
     {
         $team = $this->currentTeam();
@@ -38,27 +43,32 @@ final class ReleasesController extends Controller
         ]);
     }
 
-    public function index(Request $request, Server $server, Application $application, RollbackHistory $history): Response
+    public function index(Request $request, Server $server, Application $application, RollbackHistory $history): Response|RedirectResponse
     {
         $this->authorize('view', $application);
         abort_unless($application->server_id === $server->id, 404);
 
         $team = $application->team;
         $scope = ProjectScope::from($request, $request->user(), $team);
-        $deployments = $application->deployments()
+        $released = fn(): HasMany => $application->deployments()
             ->where(fn(Builder $query) => $query
                 ->where('status', DeploymentStatus::Succeeded->value)
                 ->when($application->current_release, fn(Builder $query, string $live) => $query->orWhere(fn(Builder $query) => $query
                     ->where('status', DeploymentStatus::Failed->value)
                     ->where('release', $live))))
             ->whereNotNull('release')
-            ->with('triggeredBy')
             ->latest('finished_at')
-            ->limit(20)
-            ->get();
+            ->latest('id');
 
-        $onDisk = $deployments->take(ReleasePaths::KEEP_RELEASES)->pluck('release')->push($application->current_release)->filter()->all();
-        $current = $application->current_release ?? $deployments->first()?->release;
+        $deployments = $released()->with('triggeredBy')->paginate(self::PER_PAGE)->withQueryString();
+
+        if ($deployments->isEmpty() && $deployments->currentPage() > 1) {
+            return redirect()->to($deployments->url($deployments->lastPage()));
+        }
+
+        $newest = $released()->limit(ReleasePaths::KEEP_RELEASES)->pluck('release');
+        $onDisk = $newest->push($application->current_release)->filter()->all();
+        $current = $application->current_release ?? $newest->first();
         $rolledBack = $history->rolledBack($application);
 
         return Inertia::render('releases/Index', [
@@ -81,7 +91,7 @@ final class ReleasesController extends Controller
                 'current' => $each->id === $application->id,
             ])->values(),
             'overview_href' => route('releases.index', $scope->query()),
-            'releases' => $deployments->map(fn(Deployment $deployment): array => [
+            'releases' => $deployments->getCollection()->map(fn(Deployment $deployment): array => [
                 'id' => $deployment->id,
                 'release' => $deployment->release,
                 'directory' => 'releases/' . Formats::release($deployment->release),
@@ -95,6 +105,7 @@ final class ReleasesController extends Controller
                 'current' => $deployment->release === $current,
                 'on_disk' => in_array($deployment->release, $onDisk, true),
             ])->values(),
+            'pages' => Paging::present($deployments),
             'rollback' => $request->query('rollback'),
             'scope' => $scope->value(),
             'scopes' => $team === null ? [] : ProjectScope::options($request->user(), $team),

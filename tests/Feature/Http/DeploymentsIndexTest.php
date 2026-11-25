@@ -108,13 +108,75 @@ test('an unknown filter falls back to everything', function (string $status) {
         ->assertInertia(fn($page) => $page->where('filter', 'all')->has('deployments', 2));
 })->with(['cancelled', 'succeeded', 'everything']);
 
-test('the list is capped so a busy fleet cannot flood the page', function () {
+function deploymentsIndexMany(Application $application, int $count, DeploymentStatus $status = DeploymentStatus::Succeeded): array
+{
+    return array_map(fn(int $index): Deployment => Deployment::factory()->for($application)->create(['status' => $status, 'created_at' => now()->subMinutes($index)]), range(1, $count));
+}
+
+test('deploys come fifty to a page, newest first, and the next page carries on where the first stopped', function () {
     $team = Team::factory()->create();
-    Deployment::factory()->for(deploymentsIndexApp($team))->count(101)->create(['status' => DeploymentStatus::Succeeded]);
+    $deploys = deploymentsIndexMany(deploymentsIndexApp($team), 61);
+    $member = deploymentsIndexMember($team);
+
+    $this->actingAs($member)
+        ->get(route('deployments.index'))
+        ->assertInertia(fn($page) => $page
+            ->has('deployments', 50)
+            ->where('deployments.0.id', $deploys[0]->id)
+            ->where('deployments.49.id', $deploys[49]->id)
+            ->where('filters.0.count', 61)
+            ->where('pages.from', 1)
+            ->where('pages.to', 50)
+            ->where('pages.total', 61)
+            ->where('pages.newer', null)
+            ->where('pages.older', route('deployments.index', ['page' => 2])));
+
+    $this->actingAs($member)
+        ->get(route('deployments.index', ['page' => 2]))
+        ->assertInertia(fn($page) => $page
+            ->has('deployments', 11)
+            ->where('deployments.0.id', $deploys[50]->id)
+            ->where('pages.from', 51)
+            ->where('pages.to', 61)
+            ->where('pages.newer', route('deployments.index', ['page' => 1]))
+            ->where('pages.older', null));
+});
+
+test('a running deploy is pinned to the top of the first page only', function () {
+    $team = Team::factory()->create();
+    $application = deploymentsIndexApp($team);
+    deploymentsIndexMany($application, 55);
+    $running = Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Running, 'created_at' => now()->subDay()]);
+    $member = deploymentsIndexMember($team);
+
+    $this->actingAs($member)
+        ->get(route('deployments.index'))
+        ->assertInertia(fn($page) => $page->where('deployments.0.id', $running->id));
+
+    $this->actingAs($member)
+        ->get(route('deployments.index', ['page' => 2]))
+        ->assertInertia(fn($page) => $page->has('deployments', 6)->where('deployments', fn($rows): bool => !collect($rows)->contains('id', $running->id)));
+});
+
+test('page links keep the status filter', function () {
+    $team = Team::factory()->create();
+    deploymentsIndexMany(deploymentsIndexApp($team), 52, DeploymentStatus::Failed);
 
     $this->actingAs(deploymentsIndexMember($team))
-        ->get(route('deployments.index'))
-        ->assertInertia(fn($page) => $page->has('deployments', 100)->where('filters.0.count', 101));
+        ->get(route('deployments.index', ['status' => 'failed']))
+        ->assertInertia(fn($page) => $page
+            ->where('filter', 'failed')
+            ->where('pages.older', route('deployments.index', ['status' => 'failed', 'page' => 2]))
+            ->where('pages.links.1.href', route('deployments.index', ['status' => 'failed', 'page' => 2])));
+});
+
+test('a page past the end goes to the last page', function () {
+    $team = Team::factory()->create();
+    deploymentsIndexMany(deploymentsIndexApp($team), 3);
+
+    $this->actingAs(deploymentsIndexMember($team))
+        ->get(route('deployments.index', ['page' => 9]))
+        ->assertRedirect(route('deployments.index', ['page' => 1]));
 });
 
 test('a user without a team sees an empty history', function () {
