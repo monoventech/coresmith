@@ -1,8 +1,9 @@
 import type { StateTone } from '@/lib/fleet'
+import type { Pages } from '@/lib/paging'
 
 export type BackupRow = { stamp: string; when: string; size: string; on_server: boolean; in_s3: boolean }
 
-export type BackupList = { rows: BackupRow[]; server_error: string | null; s3_error: string | null }
+export type BackupList = { rows: BackupRow[]; pages?: Pages; server_error: string | null; s3_error: string | null }
 
 export type RestoreState = {
     state: 'running' | 'done' | 'failed'

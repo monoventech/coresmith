@@ -11,16 +11,18 @@ namespace App\Http\Controllers;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\Panel\DeploymentPresenter;
+use App\Services\Panel\Paging;
 use App\Services\Projects\ProjectScope;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class DeploymentsController extends Controller
 {
-    public const LIMIT = 100;
+    public const PER_PAGE = 50;
 
     public const FILTERS = [
         'all' => null,
@@ -29,7 +31,7 @@ final class DeploymentsController extends Controller
         'failed' => DeploymentStatus::Failed,
     ];
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $team = $this->currentTeam();
         $filter = array_key_exists((string) $request->query('status'), self::FILTERS) ? (string) $request->query('status') : 'all';
@@ -45,8 +47,13 @@ final class DeploymentsController extends Controller
             ->with('application.server')
             ->orderByRaw('case when status = ? then 0 else 1 end', [DeploymentStatus::Running->value])
             ->latest('created_at')
-            ->limit(self::LIMIT)
-            ->get();
+            ->latest('id')
+            ->paginate(self::PER_PAGE)
+            ->withQueryString();
+
+        if ($deployments->isEmpty() && $deployments->currentPage() > 1) {
+            return redirect()->to($deployments->url($deployments->lastPage()));
+        }
 
         return Inertia::render('deployments/Index', [
             'filter' => $filter,
@@ -56,7 +63,8 @@ final class DeploymentsController extends Controller
                 'count' => $base()->when($each !== null, fn(Builder $query) => $query->where('status', $each->value))->count(),
                 'href' => route('deployments.index', [...($key === 'all' ? [] : ['status' => $key]), ...$scope->query()]),
             ])->values(),
-            'deployments' => $deployments->map(fn(Deployment $deployment): array => DeploymentPresenter::row($deployment))->values(),
+            'deployments' => $deployments->getCollection()->map(fn(Deployment $deployment): array => DeploymentPresenter::row($deployment))->values(),
+            'pages' => Paging::present($deployments),
             'scope' => $scope->value(),
             'scopes' => ProjectScope::options($request->user(), $team),
         ]);

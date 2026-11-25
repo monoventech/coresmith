@@ -113,6 +113,35 @@ test.describe('the deployments list', () => {
 
         await noSidewaysScroll(page)
     })
+
+    test('older deploys are a page away, fifty at a time, and the filter stays as you page', async ({ page }) => {
+        await gotoDeployments(page)
+
+        const pager = page.getByRole('navigation', { name: 'Deploy pages' })
+
+        await expect(rows(page)).toHaveCount(50)
+        await expect(pager.getByTestId('pager-range')).toHaveText(/^1–50 of \d+ deploys$/)
+        await expect(pager.getByRole('link', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
+        await expect(pager.getByRole('link', { name: 'Newer' })).toHaveCount(0)
+
+        await pager.getByRole('link', { name: 'Older' }).click()
+        await page.waitForURL(/[?&]page=2(&|$)/)
+
+        await expect(pager.getByTestId('pager-range')).toHaveText(/^51–100 of \d+ deploys$/)
+        await expect(pager.getByRole('link', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page')
+        await expect(pager.getByRole('link', { name: 'Newer' })).toBeVisible()
+
+        await filters(page)
+            .getByRole('link', { name: /^Deployed/ })
+            .click()
+        await page.waitForURL(/status=deployed/)
+        await expect(page).not.toHaveURL(/[?&]page=/)
+        await expect(pager.getByTestId('pager-range')).toHaveText(/^1–50 of \d+ deploys$/)
+
+        await pager.getByRole('link', { name: 'Older' }).click()
+        await page.waitForURL(/status=deployed.*page=2|page=2.*status=deployed/)
+        await expect(filters(page).getByRole('link', { name: /^Deployed/ })).toHaveAttribute('aria-current', 'page')
+    })
 })
 
 test.describe('a deploy', () => {
@@ -160,6 +189,7 @@ test.describe('a deploy', () => {
     }) => {
         const stream = await streamDeploys(page)
         let reloads = 0
+        let finished = false
 
         page.on('request', (request) => {
             if (
@@ -177,7 +207,7 @@ test.describe('a deploy', () => {
 
                 await route.fulfill({
                     response,
-                    json: { ...delta, deployment: { ...delta.deployment, status: 'succeeded' } }
+                    json: finished ? { ...delta, deployment: { ...delta.deployment, status: 'succeeded' } } : delta
                 })
             }
         )
@@ -190,6 +220,7 @@ test.describe('a deploy', () => {
         await stream.append('\n[12:00:01] deployed. previous release kept for instant rollback.')
         await expect(output).toContainText('deployed. previous release kept')
 
+        finished = true
         await stream.push((deployment) => ({ ...deployment, status: 'succeeded', log_bytes: stream.bytes() }))
         await expect.poll(() => reloads).toBe(1)
         await page.waitForTimeout(1500)

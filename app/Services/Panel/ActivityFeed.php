@@ -36,6 +36,8 @@ use Spatie\Activitylog\Models\Activity;
 
 final class ActivityFeed
 {
+    public const PAGE = 25;
+
     private const QUIET = ['ssh_command_executed', 'authorized_keys_synced', SmartToggles::STARTED];
 
     private const PANEL_UPDATES = ['panel_updated', 'panel_update_rolled_back', 'panel_update_failed'];
@@ -68,7 +70,7 @@ final class ActivityFeed
             $applications = $access->applications($viewer, $team)->with('server')->get()->keyBy('id');
             $databases = $access->databases($viewer, $team)->get()->keyBy('id');
 
-            return $this->merge($servers, $applications, $databases, collect(), $limit, panel: true);
+            return $this->merge($servers, $applications, $databases, collect(), $limit, panel: true)['rows'];
         }
 
         $servers = Server::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
@@ -76,13 +78,21 @@ final class ActivityFeed
         $databases = ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
         $accounts = CloudProvider::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
 
-        return $this->merge($servers, $applications, $databases, $accounts, $limit, panel: true);
+        return $this->merge($servers, $applications, $databases, $accounts, $limit, panel: true)['rows'];
     }
 
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    public function forServer(Server $server, int $limit = 25, ?User $viewer = null, bool $alerts = false): array
+    public function forServer(Server $server, int $limit = self::PAGE, ?User $viewer = null, bool $alerts = false): array
+    {
+        return $this->serverPage($server, 1, $limit, $viewer, $alerts)['rows'];
+    }
+
+    /**
+     * @return array{rows: list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>, more: bool}
+     */
+    public function serverPage(Server $server, int $page, int $limit = self::PAGE, ?User $viewer = null, bool $alerts = false): array
     {
         $team = $server->team;
         $access = app(TeamAccess::class);
@@ -94,7 +104,7 @@ final class ActivityFeed
             ->when($narrowed, fn($query) => $query->whereIn('id', $access->databases($viewer, $team)->withTrashed()->select('id')))
             ->get()->keyBy('id');
 
-        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit, alerts: $alerts);
+        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit, alerts: $alerts, skip: (max(1, $page) - 1) * $limit);
     }
 
     /**
@@ -102,11 +112,12 @@ final class ActivityFeed
      * @param  Collection<string, Application>  $applications
      * @param  Collection<string, ManagedDatabase>  $databases
      * @param  Collection<string, CloudProvider>  $accounts
-     * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
+     * @return array{rows: list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>, more: bool}
      */
-    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit, bool $panel = false, bool $alerts = false): array
+    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit, bool $panel = false, bool $alerts = false, int $skip = 0): array
     {
         $rows = [];
+        $window = $skip + $limit + 1;
 
         $activities = Activity::query()
             ->whereNotIn('description', self::QUIET)
@@ -123,7 +134,7 @@ final class ActivityFeed
             })
             ->latest('created_at')
             ->latest('id')
-            ->limit($limit)
+            ->limit($window)
             ->get();
 
         $connections = $this->relinkedTo($activities);
@@ -145,7 +156,8 @@ final class ActivityFeed
             ->whereNot('status', DeploymentStatus::Cancelled->value)
             ->whereNotNull('started_at')
             ->latest('started_at')
-            ->limit($limit)
+            ->latest('id')
+            ->limit($window)
             ->get();
 
         foreach ($deployments as $deployment) {
@@ -158,7 +170,7 @@ final class ActivityFeed
 
         usort($rows, static fn(array $a, array $b): int => strcmp($b['at'], $a['at']));
 
-        return array_slice($rows, 0, $limit);
+        return ['rows' => array_slice($rows, $skip, $limit), 'more' => count($rows) > $skip + $limit];
     }
 
     /**

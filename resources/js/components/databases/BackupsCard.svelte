@@ -1,4 +1,5 @@
 <script lang="ts">
+    import Pager from '@/components/Pager.svelte'
     import { Button } from '@/components/ui/button'
     import { restoreStep } from '@/lib/databases'
     import type { BackupList, BackupRow, RestoreState } from '@/lib/databases'
@@ -89,7 +90,7 @@
         {/if}
 
         {#if backups.rows.length > 0}
-            <div class="flex max-h-80 flex-col overflow-y-auto" data-testid="backups-list">
+            <div class="flex flex-col" data-testid="backups-list">
                 {#each backups.rows as row (row.stamp)}
                     <div class="flex min-h-11 items-center gap-3 border-t border-border" data-testid="backup-row">
                         <span class="min-w-0 flex-1 font-mono text-[12.5px] text-muted-foreground">
@@ -107,6 +108,16 @@
                     </div>
                 {/each}
             </div>
+            {#if backups.pages}
+                <Pager
+                    pages={backups.pages}
+                    label="Backup pages"
+                    noun="backups"
+                    only={['backups']}
+                    preserveScroll
+                    class="border-t border-border pt-3"
+                />
+            {/if}
         {:else if !backups.server_error}
             <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="backups-empty">
                 No backups yet. Back up now to make the first one.
