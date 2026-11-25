@@ -344,7 +344,11 @@ final class RunTerminal implements ShouldQueue
         $where = $session->server->name;
         $who = $session->mode === TerminalMode::Root ? "You're root on {$where}." : "You're {$session->application?->name}'s user on {$where}, in its live release.";
 
-        return "\e[2m{$who} A check runs when you finish and names anything Coresmith looks after that changed.\r\n"
-            . "This session ends after 10 minutes without typing, or after an hour, so run long jobs in tmux.\e[0m\r\n\r\n";
+        $lines = array_map(fn(string $line): string => wordwrap($line, max(20, (int) $session->cols), "\r\n"), [
+            "{$who} A check runs when you finish and names anything Coresmith looks after that changed.",
+            'This session ends after 10 minutes without typing, or after an hour, so run long jobs in tmux.',
+        ]);
+
+        return "\e[2m" . implode("\r\n", $lines) . "\e[0m\r\n\r\n";
     }
 }
