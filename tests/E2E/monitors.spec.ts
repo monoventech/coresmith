@@ -208,8 +208,8 @@ test.describe('Monitors in Settings, Notifications', () => {
         await expect(card(page)).toContainText('part of Pro and Business')
     })
 
-    test('the card fits the screen and passes axe in light and dark, with its dialog open too', async ({ page }) => {
-        for (const theme of ['light', 'dark'] as const) {
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the card fits the screen and passes axe in ${theme}, with its dialog open too`, async ({ page }) => {
             await useTheme(page, theme)
             await gotoSettings(page, 'Notifications')
             await expect(card(page)).toBeVisible()
@@ -221,8 +221,9 @@ test.describe('Monitors in Settings, Notifications', () => {
             await expect(dialog(page)).toBeVisible()
             expect(await blockingViolations(page)).toEqual([])
             await dialog(page).getByRole('button', { name: 'Cancel' }).click()
-        }
-    })
+            await expect(dialog(page)).toBeHidden()
+        })
+    }
 })
 
 asMember('a member sees the monitors but cannot change them', async ({ page }) => {
