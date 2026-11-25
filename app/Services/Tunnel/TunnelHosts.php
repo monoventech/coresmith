@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Tunnel;
 
+use App\Models\Application;
 use App\Models\Server;
 use App\Services\Address\AddressChange;
 use App\Services\Address\CertificateSource;
@@ -53,6 +54,23 @@ final readonly class TunnelHosts
         }
 
         return $hosts;
+    }
+
+    /**
+     * @param  list<string>  $hosts
+     * @return list<Application>
+     */
+    public function owners(Server $server, array $hosts): array
+    {
+        if ($hosts === []) {
+            return [];
+        }
+
+        return array_values($server->applications()->get()->filter(function (Application $application) use ($hosts): bool {
+            $names = array_map(fn(string $domain): string => strtolower(trim($domain, '.')), [...$application->allDomains(), ...array_keys($this->twins->for($application))]);
+
+            return array_intersect($names, $hosts) !== [];
+        })->all());
     }
 
     public static function routable(string $host): bool

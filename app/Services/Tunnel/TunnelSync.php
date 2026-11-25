@@ -10,6 +10,7 @@ namespace App\Services\Tunnel;
 
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsupportedOperatingSystemException;
+use App\Jobs\CheckDomainReach;
 use App\Models\Server;
 use App\Models\ServerTunnel;
 use App\Services\Address\CloudflareConnection;
@@ -183,7 +184,7 @@ final class TunnelSync
         $routed = [];
 
         foreach ($zones as $host => $zone) {
-            $unclaimed = $this->unclaimed($host, $own);
+            $unclaimed = $this->unclaimed($host, $own) || ($wanted[$host] && $this->dns->coveredByWildcard($token, $zone['id'], $zone['name'], $host));
 
             try {
                 $reason = $this->dns->routeToTunnel($token, $zone['id'], $host, $target, $own, $wanted[$host] && $unclaimed);
@@ -215,6 +216,7 @@ final class TunnelSync
         $this->caddy->trustLoopback($connection, true);
 
         $opened = $tunnel->state !== ServerTunnel::OPEN;
+        $fresh = array_values(array_diff($routed, (array) $tunnel->hosts));
 
         $tunnel->forceFill([
             'state' => self::unlessClosing($tunnel, ServerTunnel::OPEN),
@@ -228,6 +230,10 @@ final class TunnelSync
 
         if ($opened) {
             activity()->performedOn($server)->withProperties(['hosts' => $routed])->log('tunnel_opened');
+        }
+
+        foreach ($this->hosts->owners($server, $fresh) as $application) {
+            CheckDomainReach::dispatch($application);
         }
     }
 

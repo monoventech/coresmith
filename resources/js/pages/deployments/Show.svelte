@@ -217,7 +217,12 @@
     $effect(() => {
         const id = deploymentId
         const href = logHref
-        const initial = untrack(() => deployment)
+
+        return untrack(() => watchDeploy(id, href))
+    })
+
+    function watchDeploy(id: string, href: string): () => void {
+        const initial = deployment
         const current = new LogFeed<Status>({
             href,
             held: initial.log_bytes,
@@ -225,12 +230,10 @@
             onStatus: applyStatus
         })
 
-        untrack(() => {
-            status = null
-            downgraded = false
-            reloaded = false
-            output.reset(initial.log)
-        })
+        status = null
+        downgraded = false
+        reloaded = false
+        output.reset(initial.log)
         feed = current
 
         const echo = streaming && realtimeConfigured() ? realtime() : null
@@ -255,7 +258,7 @@
                 downgrade()
             }
         } else {
-            untrack(startPolling)
+            startPolling()
         }
 
         return () => {
@@ -266,7 +269,7 @@
                 echo.leave(`deployments.${id}`)
             }
         }
-    })
+    }
 
     onMount(() => {
         clock = setInterval(() => (now = Date.now()), 1000)
