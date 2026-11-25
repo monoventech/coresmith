@@ -89,7 +89,7 @@
         <main
             id="main"
             {...{ 'scroll-region': '' }}
-            class="grain relative min-w-0 flex-1 overflow-y-auto"
+            class="grain relative min-w-0 flex-1 overflow-y-auto max-sm:scroll-pb-24"
             data-testid="panel-main"
         >
             <div class="mx-auto flex min-h-full max-w-302 flex-col px-4.5 pt-3 pb-24 sm:px-10 sm:pt-8 sm:pb-8">

@@ -241,7 +241,7 @@ const PAGES: [string, Visit][] = [
     [
         'Releases with a live release whose deploy failed',
         async (page) => {
-            await page.goto('/releases')
+            await page.goto('/releases?q=dev-mode')
             await page
                 .getByTestId('releases-app')
                 .filter({ has: page.getByText('dev-mode', { exact: true }) })
