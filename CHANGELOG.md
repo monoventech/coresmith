@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.37 (2026-11-25)
+
+### Changed
+- A deploy you watch keeps its whole log when it finishes, a name only a wildcard answered for goes through the tunnel, and an app's page has a Visit button (#185)
+- Choosing a quiet log source or Errors shows its lines on a busy server, and the terminal specs from the 0.8.36 browser run (#184)
+
 ## v0.8.36 (2026-11-24)
 
 ### Changed

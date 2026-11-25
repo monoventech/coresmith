@@ -5,7 +5,7 @@
 <script lang="ts">
     import type { RepositoryCheck } from '@/lib/detection'
     import { Form, Link, page, router } from '@inertiajs/svelte'
-    import { ChevronRight, CircleArrowUp, OctagonAlert, TriangleAlert } from '@lucide/svelte'
+    import { ChevronRight, CircleArrowUp, ExternalLink, OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
@@ -151,6 +151,7 @@
             deploy_href: string
             repository_check: RepositoryCheck | null
             logs_href: string
+            visit_href: string | null
             terminal_href: string | null
             recent_log_href: string
             last_failed: boolean
@@ -551,7 +552,7 @@
             </div>
         {/if}
     </div>
-    {#if application.running_href || can.deploy || can.update || can.viewLogs || application.terminal_href}
+    {#if application.running_href || can.deploy || can.update || can.viewLogs || application.terminal_href || application.visit_href}
         <div class="flex flex-wrap gap-2 max-sm:w-full">
             {#if application.running_href}
                 <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
@@ -561,6 +562,20 @@
                     aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
                     onclick={deploy}
                     class="max-sm:w-full sm:hidden">Deploy</Button
+                >
+            {/if}
+            {#if application.visit_href}
+                <Button
+                    variant="outline"
+                    href={application.visit_href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={application.domain}
+                    class="max-sm:w-full"
+                    data-testid="visit-app"
+                    >Visit<span class="sr-only">{` ${application.domain}, opens in a new tab`}</span><ExternalLink
+                        aria-hidden="true"
+                    /></Button
                 >
             {/if}
             {#if can.viewLogs}

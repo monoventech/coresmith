@@ -12,6 +12,7 @@ use App\Listeners\CheckNewDomainsAfterDeploy;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Models\ServerTunnel;
 use App\Models\User;
 use App\Services\Address\AppDomainReach;
 use App\Services\Network\AddressResolver;
@@ -96,6 +97,22 @@ test('a domain on a server whose IPv4 address answers is told to add an A record
 
     expect($report->ready)->toBeFalse()
         ->and($report->problems)->toBe(["notes.example.net doesn't point anywhere yet. Add an A record pointing at 203.0.113.7, then check again."]);
+});
+
+test('a domain the tunnel left alone says why and what to do next, instead of asking for an address the internet can\'t reach', function () {
+    $application = appReachApp(['domain' => 'shop.example.net', 'additional_domains' => []]);
+    ServerTunnel::query()->create(['server_id' => $application->server_id, 'state' => ServerTunnel::OPEN, 'hosts' => [], 'skipped' => [['host' => 'shop.example.net', 'reason' => "shop.example.net points at 203.0.113.9, which isn't this server, so Coresmith left it alone."]]]);
+    appReachDns(['203.0.113.9']);
+    appReachSsh(appReachServerOutput(ipv4Open: false));
+
+    $report = app(AppDomainReach::class)->check($application)['shop.example.net'];
+
+    expect($report->ready)->toBeFalse()
+        ->and($report->problems)->toBe([
+            "shop.example.net points at 203.0.113.9, which isn't this server, so Coresmith left it alone.",
+            "Until shop.example.net goes through this server's Cloudflare tunnel, visitors on IPv4 can't reach it. After you fix that, choose Check again under IPv4 through Cloudflare on the server's Network tab.",
+        ])
+        ->and($report->records)->toBe([]);
 });
 
 test('a domain on a home server nobody reaches over IPv4 is told to turn on IPv4 through Cloudflare, with port forwarding for an address of its own', function () {

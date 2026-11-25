@@ -2,6 +2,7 @@ import type { PanelProps } from '@/lib/panel'
 import { page } from '@inertiajs/svelte'
 import Echo from 'laravel-echo'
 import Pusher from 'pusher-js'
+import { untrack } from 'svelte'
 
 declare global {
     interface Window {
@@ -12,7 +13,7 @@ declare global {
 let connection: Echo<'reverb'> | null = null
 
 function socket(): PanelProps['live']['socket'] {
-    return (page.props.panel as PanelProps | null)?.live.socket ?? null
+    return untrack(() => (page.props.panel as PanelProps | null)?.live.socket ?? null)
 }
 
 export function realtimeConfigured(): boolean {

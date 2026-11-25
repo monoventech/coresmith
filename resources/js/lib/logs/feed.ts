@@ -46,26 +46,24 @@ export class LogFeed<Status> {
 
     behind(bytes: number, wait = GAP_MS): void {
         this.#target = Math.max(this.#target, bytes)
-
-        if (this.held >= this.#target || this.#timer !== null) {
-            return
-        }
-
-        this.#timer = setTimeout(() => {
-            this.#timer = null
-
-            if (this.held < this.#target) {
-                void this.fill()
-            }
-        }, wait)
+        this.#later(wait)
     }
 
     async fill(): Promise<void> {
-        if (this.#fetching || this.#closed || Date.now() < this.#resting) {
+        if (this.#fetching || this.#closed) {
+            return
+        }
+
+        if (Date.now() < this.#resting) {
+            this.#later(0)
+
             return
         }
 
         this.#fetching = true
+
+        const before = this.held
+        const aimed = this.#target
 
         try {
             for (let reads = 0; reads < 20; reads++) {
@@ -100,6 +98,10 @@ export class LogFeed<Status> {
             return
         } finally {
             this.#fetching = false
+
+            if (this.held > before || this.#target > aimed || Date.now() < this.#resting) {
+                this.#later(GAP_MS)
+            }
         }
     }
 
@@ -110,6 +112,23 @@ export class LogFeed<Status> {
             clearTimeout(this.#timer)
             this.#timer = null
         }
+    }
+
+    #later(wait: number): void {
+        if (this.held >= this.#target || this.#timer !== null || this.#closed) {
+            return
+        }
+
+        this.#timer = setTimeout(
+            () => {
+                this.#timer = null
+
+                if (this.held < this.#target) {
+                    void this.fill()
+                }
+            },
+            Math.max(wait, this.#resting - Date.now())
+        )
     }
 
     #accept(offset: number, text: string): boolean {

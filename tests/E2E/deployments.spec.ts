@@ -155,6 +155,50 @@ test.describe('a deploy', () => {
         await expect(page.getByTestId('log-transport')).toHaveText('Streaming live')
     })
 
+    test('a deploy that finishes while you watch reloads its app once and keeps every line it wrote', async ({
+        page
+    }) => {
+        const stream = await streamDeploys(page)
+        let reloads = 0
+
+        page.on('request', (request) => {
+            if (
+                /\/deployments\/[^/]+$/.test(new URL(request.url()).pathname) &&
+                request.headers()['x-inertia-partial-data'] !== undefined
+            ) {
+                reloads++
+            }
+        })
+        await page.route(
+            (url) => /\/deployments\/[^/]+\/log$/.test(url.pathname),
+            async (route) => {
+                const response = await route.fetch()
+                const delta = await response.json()
+
+                await route.fulfill({
+                    response,
+                    json: { ...delta, deployment: { ...delta.deployment, status: 'succeeded' } }
+                })
+            }
+        )
+        await page.goto('/dashboard')
+        await page.getByTestId('live-deploy').click()
+
+        const output = page.getByLabel('Deployment output')
+
+        await stream.append('\n[12:00:00] build: compiling assets')
+        await stream.append('\n[12:00:01] deployed. previous release kept for instant rollback.')
+        await expect(output).toContainText('deployed. previous release kept')
+
+        await stream.push((deployment) => ({ ...deployment, status: 'succeeded', log_bytes: stream.bytes() }))
+        await expect.poll(() => reloads).toBe(1)
+        await page.waitForTimeout(1500)
+
+        expect(reloads).toBe(1)
+        await expect(output).toContainText('build: compiling assets')
+        await expect(output).toContainText('deployed. previous release kept')
+    })
+
     test('a deploy whose live channel is refused follows the log every second instead of freezing', async ({
         page
     }) => {

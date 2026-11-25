@@ -125,11 +125,11 @@ test.describe('a terminal session', () => {
 
         await page.getByTestId('terminal-shell').evaluate((element) => {
             const data = new DataTransfer()
+            const paste = new Event('paste', { bubbles: true, cancelable: true })
 
             data.setData('text/plain', 'echo one\necho two\necho three\n')
-            element
-                .querySelector('textarea')
-                ?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+            Object.defineProperty(paste, 'clipboardData', { value: data })
+            element.querySelector('textarea')?.dispatchEvent(paste)
         })
 
         await expect(dialog(page).getByRole('heading', { name: 'Paste 3 lines into the shell?' })).toBeVisible()
@@ -144,7 +144,7 @@ test.describe('a terminal session', () => {
     test('a warning before the session ends, and Keep it open counts as typing', async ({ page }, testInfo) => {
         const shell = await openSession(page, testInfo)
 
-        shell.warn('idle', 60)
+        shell.warn('idle', 75)
 
         const warning = page.getByTestId('terminal-warning')
 
@@ -256,7 +256,7 @@ test.describe('opening a terminal', () => {
 
         await expect(page.getByTestId('terminal-mode-root')).toContainText('Full control of the server.')
         await page.getByTestId('terminal-mode-app').click()
-        await expect(page.getByLabel('App')).toBeVisible()
+        await expect(page.getByLabel('App', { exact: true })).toBeVisible()
         await expect(page.getByLabel('Your password')).toBeVisible()
         await expect(page.getByTestId('terminal-open')).toBeEnabled()
     })

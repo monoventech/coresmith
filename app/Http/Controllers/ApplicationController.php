@@ -263,6 +263,7 @@ final class ApplicationController extends Controller
                     'apply_href' => route('servers.applications.repository-check.apply', [$server, $application]),
                 ] : null,
                 'logs_href' => route('servers.applications.logs', [$server, $application]),
+                'visit_href' => $application->domain !== null && $application->domain !== '' && $application->current_release !== null ? 'https://' . $application->domain : null,
                 'terminal_href' => $application->current_release !== null && $server->status === ServerStatus::Active && $user->can('openTerminal', $server)
                     ? route('servers.terminal', [$server, 'app' => $application->getRouteKey()])
                     : null,

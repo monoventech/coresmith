@@ -18,7 +18,7 @@ use App\Services\SSH\SSHConnection;
 
 final class AppLogs
 {
-    public const KEEP = 600;
+    public const KEEP = 300;
 
     public const READ_SECONDS = 10;
 
@@ -34,7 +34,7 @@ final class AppLogs
     ) {}
 
     /**
-     * @return array{entries: list<array<string, mixed>>, stats: array<string, mixed>, capped: bool}
+     * @return array{entries: list<array<string, mixed>>, stats: array<string, mixed>, capped: bool, cut: list<array{source: string, level: string}>}
      */
     public function read(SSHConnection $connection, Application $application, LogQuery $query): array
     {
@@ -52,12 +52,13 @@ final class AppLogs
 
         $entries = array_values(array_filter($entries, fn(array $entry): bool => ($since === null || $entry['sort'] >= $since) && ($until === null || $entry['sort'] <= $until + 1)));
         $requests = array_values(array_filter($entries, fn(array $entry): bool => $entry['request'] !== null));
-        $entries = self::ordered($entries);
+        $kept = self::newest(self::ordered($entries));
 
         return [
-            'entries' => array_slice($entries, -self::KEEP),
+            'entries' => $kept['entries'],
             'stats' => LogStats::of(array_column($requests, 'request'), $since === null ? null : (($until ?? now()->getTimestamp()) - $since)),
-            'capped' => count($entries) > self::KEEP,
+            'capped' => $kept['cut'] !== [],
+            'cut' => $kept['cut'],
         ];
     }
 
@@ -144,6 +145,50 @@ final class AppLogs
         usort($keyed, fn(array $a, array $b): int => [$a[0]['sort'], $a[1]] <=> [$b[0]['sort'], $b[1]]);
 
         return array_map(fn(array $pair): array => $pair[0], $keyed);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $ordered
+     * @return array{entries: list<array<string, mixed>>, cut: list<array{source: string, level: string}>}
+     */
+    public static function newest(array $ordered): array
+    {
+        $kept = [];
+        $cut = [];
+        $counts = [];
+
+        foreach (array_reverse($ordered) as $entry) {
+            $source = (string) $entry['source'];
+            $level = (string) $entry['level'];
+            $all = $counts[$source] = ($counts[$source] ?? 0) + 1;
+            $loud = in_array($level, ['warning', 'error'], true) ? ($counts["{$source}\0{$level}"] = ($counts["{$source}\0{$level}"] ?? 0) + 1) : PHP_INT_MAX;
+
+            if ($all <= self::KEEP || $loud <= self::KEEP) {
+                $kept[] = $entry;
+            } else {
+                $cut["{$source}\0{$level}"] = ['source' => $source, 'level' => $level];
+            }
+        }
+
+        return ['entries' => array_reverse($kept), 'cut' => array_values($cut)];
+    }
+
+    /**
+     * @param  array<string, mixed>  $cached
+     */
+    public static function leftOut(array $cached, LogQuery $query): bool
+    {
+        if (!array_key_exists('cut', $cached)) {
+            return (bool) ($cached['capped'] ?? false);
+        }
+
+        foreach ((array) $cached['cut'] as $lost) {
+            if ($query->wants((string) ($lost['source'] ?? '')) && $query->allows((string) ($lost['level'] ?? ''))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function mark(string $boundary, string $name, string $argument = ''): string
