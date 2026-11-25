@@ -29,7 +29,7 @@
     </div>
     <dl class="m-0 grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-6 gap-y-3">
         {#each setup.rows as row (row.label)}
-            <div class="min-w-0">
+            <div class={cn('min-w-0', row.label === 'Repository' && 'col-span-full')}>
                 <dt class="text-[11.5px] font-medium text-muted-foreground">{row.label}</dt>
                 <dd class="m-0 mt-0.5 font-mono text-[13px] wrap-anywhere">{row.value}</dd>
             </div>

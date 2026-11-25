@@ -46,7 +46,7 @@ async function removeJob(page: Page, title: string) {
 }
 
 function schedulerSwitch(page: Page) {
-    return page.getByTestId('smart-toggles').getByRole('switch', { name: 'Scheduler' })
+    return page.getByTestId('processes-card').getByRole('switch', { name: 'Scheduler' })
 }
 
 const PRESETS = [

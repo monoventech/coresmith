@@ -287,6 +287,7 @@ final class ActivityFeed
                 $this->mono($server?->name),
                 $this->text((int) ($properties['apps'] ?? 0) === 1 ? ', 1 app deploying' : ', ' . (int) ($properties['apps'] ?? 0) . ' apps deploying'),
             ],
+            'runtime_removed' => [$this->text(($properties['runtime'] ?? 'A runtime') . ' ' . ($properties['version'] ?? '') . ' removed from '), $this->mono($server?->name)],
             'runtime_update_failed' => [
                 $this->text(($properties['runtime'] ?? 'A runtime') . ' ' . ($properties['to'] ?? '') . " couldn't be installed on "),
                 $this->mono($server?->name),
@@ -344,6 +345,7 @@ final class ActivityFeed
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
             'application_stopped' => [$this->mono($application?->name), $this->text(' stopped, visitors see the maintenance page')],
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
+            'process_restarted' => [$this->text('Restarted ' . ($properties['process'] ?? 'a process') . ' for '), $this->mono($application?->name)],
             'certificate_expiring' => [$this->text('Certificate for '), $this->mono((string) ($properties['domain'] ?? '')), $this->text(' on '), $this->mono($application?->name), $this->text(' ' . CertificateCheck::expiry((int) ($properties['days'] ?? 0)))],
             'app_oom_killed' => [$this->mono($application?->name), $this->text(' ' . ($properties['process'] ?? 'a') . ' process killed for going over its ' . (int) ($properties['limit_mb'] ?? 0) . ' MB memory limit and was started again')],
             'app_not_answering' => [$this->mono($application?->name), $this->text((is_numeric($properties['status'] ?? null) ? ' answered ' . (int) $properties['status'] : ' stopped answering') . ' at ' . ($properties['domain'] ?? 'its domain'))],

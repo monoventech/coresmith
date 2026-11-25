@@ -72,7 +72,7 @@ test.describe('PHP limits on the app page', () => {
     test('an app that does not run PHP has no PHP card', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'storefront')
 
-        await expect(page.getByRole('heading', { name: 'Smart toggles' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Processes', exact: true })).toBeVisible()
         await expect(card(page)).toHaveCount(0)
     })
 
@@ -81,7 +81,7 @@ test.describe('PHP limits on the app page', () => {
 
         await openApp(page, testInfo)
 
-        await expect(page.getByRole('heading', { name: 'Smart toggles' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Processes', exact: true })).toBeVisible()
         await expect(card(page)).toBeHidden()
     })
 

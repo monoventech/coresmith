@@ -96,7 +96,7 @@
                     type="button"
                     {...props}
                     class={cn(
-                        'focus-ring group/tags inline-flex min-h-6 max-w-full cursor-pointer items-center gap-1.5 rounded-sm bg-transparent p-0 text-left',
+                        'focus-ring group/tags relative inline-flex min-h-6 max-w-full cursor-pointer items-center gap-1.5 rounded-sm bg-transparent p-0 text-left pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-2.5',
                         className
                     )}
                     aria-busy={saving}

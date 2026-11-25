@@ -128,68 +128,61 @@ test('the metrics run reads the processes with one more command', function () {
         ->and(AppProcess::query()->sole()->process)->toBe('web');
 });
 
-test('the server page lists processes with trouble first: a failed one, then one that keeps restarting, and an app put to sleep reads asleep', function () {
+test('the server page sums up each app\'s processes with trouble first, and an app put to sleep reads asleep', function () {
     $team = Team::factory()->owned()->create();
     $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active, 'name' => 'web']);
     $shop = Application::factory()->for($team)->for($server)->create(['slug' => 'shop', 'name' => 'shop']);
-    Application::factory()->for($team)->for($server)->create(['slug' => 'blog', 'name' => 'blog', 'power_state' => PowerState::Sleeping]);
+    $blog = Application::factory()->for($team)->for($server)->create(['slug' => 'blog', 'name' => 'blog', 'power_state' => PowerState::Sleeping]);
+    $docs = Application::factory()->for($team)->for($server)->create(['slug' => 'docs', 'name' => 'docs']);
     $states = app(ProcessStates::class);
-
-    $states->record($server, ProcessStates::parse(implode("\n\n", [
+    $blocks = fn(int $restarts): string => implode("\n\n", [
         processStatesBlock('coresmith-app-shop-web', restarts: 0),
-        processStatesBlock('coresmith-app-shop-queue-worker', restarts: 0),
+        processStatesBlock('coresmith-app-shop-queue-worker', restarts: $restarts),
         processStatesBlock('coresmith-app-shop-scheduler', active: 'failed', sub: 'failed', memory: '[not set]'),
         processStatesBlock('coresmith-app-blog-web', active: 'inactive', sub: 'dead', memory: '[not set]'),
-    ])));
+        processStatesBlock('coresmith-app-docs-web'),
+        processStatesBlock('coresmith-app-docs-queue'),
+    ]);
+
+    $states->record($server, ProcessStates::parse($blocks(0)));
     $this->travel(1)->minutes();
-    $states->record($server, ProcessStates::parse(implode("\n\n", [
-        processStatesBlock('coresmith-app-shop-web', restarts: 0),
-        processStatesBlock('coresmith-app-shop-queue-worker', restarts: 14),
-        processStatesBlock('coresmith-app-shop-scheduler', active: 'failed', sub: 'failed', memory: '[not set]'),
-        processStatesBlock('coresmith-app-blog-web', active: 'inactive', sub: 'dead', memory: '[not set]'),
-    ])));
+    $states->record($server, ProcessStates::parse($blocks(14)));
 
-    $rows = app(ServerProcesses::class)->for($server, User::query()->findOrFail($team->owner_id));
-
-    expect(array_map(fn(array $row): string => "{$row['app']} {$row['process']} {$row['state']['label']}", $rows))->toBe([
-        'shop scheduler Failed',
-        'shop queue-worker Restarted 14 times today',
-        'blog web Asleep',
-        'shop web Running',
-    ])
-        ->and($rows[0]['state']['tone'])->toBe('destructive')
-        ->and($rows[1]['state']['tone'])->toBe('warning')
-        ->and($rows[3]['memory'])->toBe("100\u{00A0}MB")
-        ->and($rows[0]['memory'])->toBeNull()
-        ->and($rows[3]['href'])->toBe(route('servers.applications.show', [$server, $shop]));
+    expect(app(ServerProcesses::class)->summaries($server, User::query()->findOrFail($team->owner_id)))->toBe([
+        $blog->id => ['label' => 'Sleeping', 'tone' => 'default'],
+        $docs->id => ['label' => '2 running', 'tone' => 'default'],
+        $shop->id => ['label' => '1 failed, 1 keeps restarting', 'tone' => 'destructive'],
+    ]);
 
     $this->actingAs(User::query()->findOrFail($team->owner_id))->get(route('servers.show', $server))
-        ->assertInertia(fn(AssertableInertia $page) => $page->where('processes.0.process', 'scheduler')->where('processes', fn($processes) => count($processes) === 4));
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('applications.2.name', 'shop')
+            ->where('applications.2.processes', ['label' => '1 failed, 1 keeps restarting', 'tone' => 'destructive'])
+            ->missing('processes'));
 });
 
-test('a process systemd is starting again after a crash reads as restarting before any running one, with no start time, from its first reading', function () {
+test('a process systemd is starting again after a crash reads as restarting, with no start time, from its first reading', function () {
     $team = Team::factory()->owned()->create();
     $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
-    Application::factory()->for($team)->for($server)->create(['slug' => 'blog', 'name' => 'blog']);
-    Application::factory()->for($team)->for($server)->create(['slug' => 'shop', 'name' => 'shop']);
+    $blog = Application::factory()->for($team)->for($server)->create(['slug' => 'blog', 'name' => 'blog']);
+    $shop = Application::factory()->for($team)->for($server)->create(['slug' => 'shop', 'name' => 'shop']);
 
     app(ProcessStates::class)->record($server, ProcessStates::parse(implode("\n\n", [
         processStatesBlock('coresmith-app-blog-web'),
         processStatesBlock('coresmith-app-shop-web', active: 'activating', sub: 'auto-restart', restarts: 44241, memory: '[not set]'),
     ])));
 
-    $rows = app(ServerProcesses::class)->for($server, User::query()->findOrFail($team->owner_id));
+    $shopRow = app(ServerProcesses::class)->ofApplication($shop)[0];
+    $blogRow = app(ServerProcesses::class)->ofApplication($blog)[0];
 
-    expect(array_map(fn(array $row): string => "{$row['app']} {$row['state']['label']}", $rows))->toBe([
-        'shop Crashed, restarting',
-        'blog Running',
-    ])
-        ->and($rows[0]['state']['tone'])->toBe('warning')
-        ->and($rows[0]['since'])->toBeNull()
-        ->and($rows[1]['since'])->not->toBeNull();
+    expect($shopRow['state'])->toBe(['key' => 'restarting', 'label' => 'Crashed, restarting', 'tone' => 'warning'])
+        ->and($shopRow['since'])->toBeNull()
+        ->and($blogRow['state']['label'])->toBe('Running')
+        ->and($blogRow['since'])->not->toBeNull()
+        ->and(app(ServerProcesses::class)->summaries($server, User::query()->findOrFail($team->owner_id))[$shop->id])->toBe(['label' => '1 keeps restarting', 'tone' => 'warning']);
 });
 
-test("someone who sees only some of a server's apps sees only those apps' processes", function () {
+test("someone who sees only some of a server's apps gets only those apps summed up", function () {
     $team = Team::factory()->owned()->create();
     $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
     $shop = Application::factory()->for($team)->for($server)->create(['slug' => 'shop', 'name' => 'shop']);
@@ -203,5 +196,5 @@ test("someone who sees only some of a server's apps sees only those apps' proces
         processStatesBlock('coresmith-app-vault-web'),
     ])));
 
-    expect(array_column(app(ServerProcesses::class)->for($server, $member->fresh()), 'app'))->toBe([$shop->name]);
+    expect(array_keys(app(ServerProcesses::class)->summaries($server, $member->fresh())))->toBe([$shop->id]);
 });

@@ -19,6 +19,7 @@ use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 final class ProcessManager
 {
@@ -194,6 +195,25 @@ final class ProcessManager
 
             throw new ProcessDidNotStart($unit, $state === '' ? 'unknown' : $state, $output, $this->advice->for($application, $output));
         }
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function processNames(Application $application): array
+    {
+        return array_map(fn(string $unit): string => ($process = $this->process($application, $unit)) === 'fpm' ? 'php' : $process, $this->unitNames($application));
+    }
+
+    public function restart(SSHConnection $connection, Application $application, string $process): void
+    {
+        $unit = $process === 'php' ? $this->fpm->unitName($application) : $this->units->unitName($application, $process);
+
+        if (!in_array($unit, $this->unitNames($application), true)) {
+            throw new RuntimeException("{$application->name} runs no {$process} process.");
+        }
+
+        $connection->execute('systemctl restart ' . escapeshellarg($unit), sudo: true)->throw();
     }
 
     public function serves(Application $application, string $unit): bool

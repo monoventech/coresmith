@@ -11,6 +11,7 @@ use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationLogsController;
 use App\Http\Controllers\ApplicationPhpLimitsController;
 use App\Http\Controllers\ApplicationPowerController;
+use App\Http\Controllers\ApplicationProcessController;
 use App\Http\Controllers\ApplicationRuntimeController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
 use App\Http\Controllers\ApplicationSetupController;
@@ -132,9 +133,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.reboot');
     Route::post('servers/{server}/prune-releases', [ServerController::class, 'prune'])
         ->name('servers.prune-releases');
-    Route::post('servers/{server}/runtimes', [ServerRuntimeController::class, 'update'])
+    Route::delete('servers/{server}/runtimes/{runtime}/{version}', [ServerRuntimeController::class, 'destroy'])
+        ->where(['runtime' => '[a-z]+', 'version' => '[0-9A-Za-z._-]+'])
         ->middleware('throttle:10,1,runtime-update')
-        ->name('servers.runtimes.update');
+        ->name('servers.runtimes.destroy');
 
     Route::get('servers/{server}/terminal', [TerminalController::class, 'create'])
         ->name('servers.terminal');
@@ -218,6 +220,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.maintenance');
     Route::put('servers/{server}/applications/{application}/runtime', [ApplicationRuntimeController::class, 'update'])
         ->name('servers.applications.runtime');
+    Route::post('servers/{server}/applications/{application}/runtime/update', [ApplicationRuntimeController::class, 'patch'])
+        ->middleware('throttle:10,1,runtime-update')
+        ->name('servers.applications.runtime.patch');
+    Route::post('servers/{server}/applications/{application}/processes/restart', [ApplicationProcessController::class, 'restartAll'])
+        ->middleware('throttle:20,1,process-restart')
+        ->name('servers.applications.processes.restart-all');
+    Route::post('servers/{server}/applications/{application}/processes/{process}/restart', [ApplicationProcessController::class, 'restart'])
+        ->where('process', '[a-z0-9-]+')
+        ->middleware('throttle:20,1,process-restart')
+        ->name('servers.applications.processes.restart');
     Route::post('servers/{server}/applications/{application}/domains/check', ApplicationDomainCheckController::class)
         ->middleware('throttle:6,1,domain-check')
         ->name('servers.applications.domains.check');

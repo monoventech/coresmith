@@ -8,64 +8,75 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
+use App\Jobs\RemoveServerRuntime;
 use App\Jobs\UpdateServerRuntime;
 use App\Models\Application;
+use App\Models\Deployment;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\ServerRuntimes;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 final class ServerRuntimeController extends Controller
 {
-    public function update(Request $request, Server $server, ServerRuntimes $runtimes, Catalog $catalog): RedirectResponse
+    public function destroy(Request $request, Server $server, string $runtime, string $version, ServerRuntimes $runtimes, Catalog $catalog, TeamAccess $access): RedirectResponse
     {
         $this->authorize('update', $server);
+        abort_unless(in_array($runtime, Catalog::RUNTIMES, true), 404);
+        abort_unless(in_array($version, array_map('strval', (array) (((array) $server->installed_runtimes)[$runtime] ?? [])), true), 404);
 
-        $validated = $request->validate([
-            'runtime' => ['required', 'string', Rule::in(Catalog::RUNTIMES)],
-            'version' => ['required', 'string', 'max:32', 'regex:/^[0-9A-Za-z._-]+$/'],
-            'applications' => ['required', 'array', 'min:1'],
-            'applications.*' => ['required', 'string'],
-        ], [
-            'applications.required' => 'Pick at least one app to deploy on the new version.',
-            'applications.min' => 'Pick at least one app to deploy on the new version.',
-        ]);
-
-        $label = $catalog->label($validated['runtime']);
-        $to = $runtimes->newestPatch($validated['runtime'], $validated['version']);
-
-        if ($to === null) {
-            return back()->with('error', "{$label} {$validated['version']} is already the newest patch Coresmith knows of.");
-        }
+        $label = $catalog->label($runtime) . " {$version}";
+        $use = $runtimes->usage($server)["{$runtime}@{$version}"] ?? ['runs' => [], 'kept' => []];
+        $visible = $access->applicationsOn($request->user(), $server)->pluck('id')->map(fn(mixed $id): string => (string) $id)->all();
 
         $refusal = match (true) {
-            $server->status !== ServerStatus::Active => 'This server is not ready yet, so nothing was installed.',
-            (UpdateServerRuntime::state($server)['state'] ?? null) === 'installing' => 'Coresmith is already installing a runtime on this server. Try again once it finishes.',
-            default => CloudTask::refusal($server, 'Update'),
+            $use['runs'] !== [] => $this->who($use['runs'], $visible, opens: true) . (count($use['runs']) === 1 ? ' runs' : ' run') . " on {$label}, so it stays.",
+            $use['kept'] !== [] => (count($use['kept']) === 1 ? 'A kept release of ' : 'Kept releases of ') . $this->who($use['kept'], $visible) . (count($use['kept']) === 1 ? ' was' : ' were') . " built on {$label}, so it stays until " . (count($use['kept']) === 1 ? 'that release is' : 'those releases are') . ' gone.',
+            $server->status !== ServerStatus::Active => 'This server is not ready yet, so nothing was removed.',
+            (UpdateServerRuntime::state($server)['state'] ?? null) === 'installing' => 'Coresmith is installing a runtime on this server. Try again once it finishes.',
+            $this->deploying($server) => "A deploy is running on {$server->name}. Try again once it finishes.",
+            default => CloudTask::refusal($server, 'Remove'),
         };
 
         if ($refusal !== null) {
             return back()->with('error', $refusal);
         }
 
-        $applications = $runtimes->movable($server, $request->user(), $validated['runtime'], $validated['version'])
-            ->whereIn('id', $validated['applications'])
-            ->map(fn(Application $application): string => $application->id)
-            ->values()
-            ->all();
+        RemoveServerRuntime::dispatch($server, $runtime, $version, $request->user() instanceof User ? $request->user() : null);
 
-        if ($applications === []) {
-            return back()->with('error', "None of those apps can move to {$label} {$to}.");
+        return back()->with('success', "Removing {$label} from {$server->name}.");
+    }
+
+    /**
+     * @param  list<Application>  $applications
+     * @param  list<string>  $visible
+     */
+    private function who(array $applications, array $visible, bool $opens = false): string
+    {
+        $names = array_values(array_map(fn(Application $application): string => $application->name, array_filter($applications, fn(Application $application): bool => in_array((string) $application->getKey(), $visible, true))));
+        $hidden = count($applications) - count($names);
+
+        if ($hidden > 0) {
+            $names[] = $hidden === 1 ? "an app you can't see" : "{$hidden} apps you can't see";
         }
 
-        $job = new UpdateServerRuntime($server, $validated['runtime'], $validated['version'], $to, $applications, $request->user());
-        $job->remember('installing');
-        dispatch($job);
+        $last = (string) array_pop($names);
+        $said = $names === [] ? $last : implode(', ', $names) . " and {$last}";
 
-        return back()->with('success', "Installing {$label} {$to}. The apps deploy once it's in.");
+        return $opens && count($applications) === $hidden ? ucfirst($said) : $said;
+    }
+
+    private function deploying(Server $server): bool
+    {
+        return Deployment::query()
+            ->whereIn('application_id', $server->applications()->select('id'))
+            ->whereIn('status', [DeploymentStatus::Pending, DeploymentStatus::Running])
+            ->exists();
     }
 }
