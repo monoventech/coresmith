@@ -3,6 +3,7 @@
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
     import { Link, router } from '@inertiajs/svelte'
+    import SectionCard from '@/components/SectionCard.svelte'
     import { Button, buttonVariants } from '@/components/ui/button'
     import { Switch } from '@/components/ui/switch'
     import type { ProcessRow, Switchable } from '@/lib/app-page'
@@ -74,27 +75,28 @@
     }
 </script>
 
-<div class="min-w-0 overflow-hidden rounded-xl border border-border bg-card" data-testid="processes-card">
-    <div class="flex flex-wrap items-end justify-between gap-3 px-5.5 pt-5 pb-3.5 max-sm:px-4 max-sm:pt-4">
-        <div class="min-w-0 flex-1 basis-80">
-            <h2 id="processes-title" class="type-h3 m-0 max-sm:text-[16px]">Processes</h2>
-            <p class="m-0 mt-1 text-[12.5px] text-muted-foreground">
-                What runs for <span class="font-mono">{app}</span> on <span class="font-mono">{server}</span>, read
-                every minute. Switches take effect at once, without a deploy.
-            </p>
-        </div>
-        {#if restartAllHref}
-            <Button
-                variant="ghost"
-                size="sm"
-                class="max-sm:min-h-11"
-                disabled={restarting !== null}
-                onclick={() => restart(restartAllHref, '*')}
-                >{restarting === '*' ? 'Restarting…' : 'Restart all'}</Button
-            >
-        {/if}
-    </div>
+{#snippet description()}
+    What runs for <span class="font-mono">{app}</span> on <span class="font-mono">{server}</span>, read every minute.
+    Switches take effect at once, without a deploy.
+{/snippet}
 
+{#snippet restartAll()}
+    {#if restartAllHref}
+        {@const href = restartAllHref}
+        <Button variant="outline" size="sm" disabled={restarting !== null} onclick={() => restart(href, '*')}
+            >{restarting === '*' ? 'Restarting…' : 'Restart all'}</Button
+        >
+    {/if}
+{/snippet}
+
+<SectionCard
+    title="Processes"
+    titleId="processes-title"
+    level={2}
+    {description}
+    actions={restartAllHref ? restartAll : undefined}
+    testid="processes-card"
+>
     {#if processes.length === 0}
         <p class="m-0 border-t border-border px-5.5 py-4 text-[13px] text-muted-foreground max-sm:px-4">
             Nothing runs until the first deploy, and a static site's files are served as they are.
@@ -205,4 +207,4 @@
             </tbody>
         </table>
     {/if}
-</div>
+</SectionCard>

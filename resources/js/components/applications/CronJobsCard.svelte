@@ -6,6 +6,7 @@
     import { TriangleAlert, X } from '@lucide/svelte'
     import { untrack } from 'svelte'
     import CronJobDialog from '@/components/applications/CronJobDialog.svelte'
+    import SectionCard from '@/components/SectionCard.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import type { CronCard, CronJob, CronSend } from '@/lib/cron'
@@ -131,29 +132,19 @@
     }
 </script>
 
-<div
-    class={cn('flex flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden', className)}
-    data-testid="cron-jobs"
->
-    <h3 class="type-h3 m-0 mb-1">Cron jobs</h3>
-    <p class="mb-3 text-[12.5px] text-muted-foreground">
+{#snippet description()}
+    <p class="m-0">
         {`Each job runs in the current release with the app's permissions and environment. Saving changes what runs on ${server} straight away, without a deploy.`}
     </p>
-
     {#if cron.note}
-        <p class="mb-3 text-[12.5px] text-muted-foreground" data-testid="cron-note">
+        <p class="m-0 mt-1.5" data-testid="cron-note">
             {cron.note === 'paused'
                 ? 'Paused while the app is stopped. The jobs run again when you start it.'
                 : 'Nothing is live yet, so these jobs start with the first deploy.'}
         </p>
     {/if}
-
     {#if cron.state}
-        <p
-            class="mb-3 flex items-center gap-2 text-[12.5px] text-muted-foreground"
-            role="status"
-            data-testid="cron-status"
-        >
+        <p class="m-0 mt-1.5 flex items-center gap-2" role="status" data-testid="cron-status">
             {#if cron.state === 'applying'}
                 <span class="status-dot-working size-2 shrink-0 rounded-full bg-primary" aria-hidden="true"></span>
                 <span>{`Writing the cron file on ${server}…`}</span>
@@ -165,9 +156,44 @@
             {/if}
         </p>
     {/if}
+{/snippet}
 
+{#snippet cronActions()}
+    {#if canViewLogs && cron.live}
+        <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={open ? 'scheduler-log' : undefined}
+            onclick={() => (open = !open)}>{open ? 'Hide output' : 'Show output'}</Button
+        >
+    {/if}
+    {#if canUpdate}
+        <Button variant="outline" size="sm" disabled={cron.jobs.length >= cron.limit} onclick={add}>Add cron job</Button
+        >
+    {/if}
+{/snippet}
+
+{#snippet notes()}
+    {#if canUpdate && cron.jobs.length >= cron.limit}
+        <p class="m-0">{`${cron.jobs.length} of ${cron.limit} jobs. Remove one to add another.`}</p>
+    {/if}
+    <p class="m-0">
+        Times are {cron.zone}, the server's clock. Every job writes to
+        <span class="font-mono">shared/logs/scheduler.log</span>.
+    </p>
+{/snippet}
+
+<SectionCard
+    title="Cron jobs"
+    {description}
+    actions={canUpdate || (canViewLogs && cron.live) ? cronActions : undefined}
+    footer={notes}
+    class={cn('max-sm:hidden', className)}
+    testid="cron-jobs"
+>
     {#each cron.jobs as job, index (`${index}:${job.id}`)}
-        <div class="flex min-h-14 items-center gap-3 border-t border-border py-2" data-testid="cron-job">
+        <div class="flex min-h-14 items-center gap-3 border-t border-border px-5.5 py-2" data-testid="cron-job">
             {#if job.run}
                 <span class={cn('size-2 shrink-0 rounded-full', dots[job.run.state])} aria-hidden="true"></span>
             {/if}
@@ -216,67 +242,44 @@
             {/if}
         </div>
     {:else}
-        <p class="border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+        <p class="m-0 border-t border-border px-5.5 py-3.5 text-[12.5px] text-muted-foreground">
             No cron jobs yet. Add one to run a command on a schedule.
         </p>
     {/each}
 
-    {#if canUpdate && cron.jobs.length >= cron.limit}
-        <p class="border-t border-border pt-2.5 text-[12.5px] text-muted-foreground">
-            {`${cron.jobs.length} of ${cron.limit} jobs. Remove one to add another.`}
-        </p>
-    {/if}
-
-    <p class="mt-2 text-[12px] text-muted-foreground">
-        Times are {cron.zone}, the server's clock. Every job writes to
-        <span class="font-mono">shared/logs/scheduler.log</span>.
-    </p>
-    {#if canUpdate || (canViewLogs && cron.live)}
-        <div class="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 pt-3">
-            {#if canUpdate}
-                <Button variant="link" class="min-h-6" disabled={cron.jobs.length >= cron.limit} onclick={add}
-                    >Add cron job</Button
-                >
-            {/if}
-            {#if canViewLogs && cron.live}
-                <Button
-                    variant="link"
-                    class="min-h-6"
-                    aria-expanded={open}
-                    aria-controls={open ? 'scheduler-log' : undefined}
-                    onclick={() => (open = !open)}>{open ? 'Hide output' : 'Show output'}</Button
-                >
-            {/if}
-        </div>
-    {/if}
-
     {#if open}
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <div
-            bind:this={panel}
-            id="scheduler-log"
-            class="terminal focus-ring mt-2 h-40 overflow-y-auto px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
-            tabindex="0"
-            role="log"
-            aria-live="polite"
-            aria-label="Scheduler log"
-            data-testid="scheduler-log"
-        >
-            {#if output.error}
-                <div class="opacity-70">{output.error}</div>
-            {:else if output.loading}
-                <div class="opacity-60">reading the scheduler log…</div>
-            {:else if output.lines.length === 0}
-                <div class="opacity-60">Nothing in the scheduler log yet. Output appears here after a job runs.</div>
-            {:else}
-                {#each output.lines as line, index (index)}
-                    <div class="break-all whitespace-pre-wrap">{line}</div>
-                {/each}
-            {/if}
+        <div class="border-t border-border px-5.5 py-4">
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+            <div
+                bind:this={panel}
+                id="scheduler-log"
+                class="terminal focus-ring h-40 overflow-y-auto px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
+                tabindex="0"
+                role="log"
+                aria-live="polite"
+                aria-label="Scheduler log"
+                data-testid="scheduler-log"
+            >
+                {#if output.error}
+                    <div class="opacity-70">{output.error}</div>
+                {:else if output.loading}
+                    <div class="opacity-60">reading the scheduler log…</div>
+                {:else if output.lines.length === 0}
+                    <div class="opacity-60">
+                        Nothing in the scheduler log yet. Output appears here after a job runs.
+                    </div>
+                {:else}
+                    {#each output.lines as line, index (index)}
+                        <div class="break-all whitespace-pre-wrap">{line}</div>
+                    {/each}
+                {/if}
+            </div>
+            <p class="mt-1.5 text-[12px] text-muted-foreground">
+                The last 50 lines from every job, newest at the bottom.
+            </p>
         </div>
-        <p class="mt-1.5 text-[12px] text-muted-foreground">The last 50 lines from every job, newest at the bottom.</p>
     {/if}
-</div>
+</SectionCard>
 
 {#if canUpdate}
     <CronJobDialog

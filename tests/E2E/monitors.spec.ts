@@ -7,7 +7,6 @@ import {
     gotoApplication,
     gotoServerTab,
     gotoSettings,
-    isMobile,
     test,
     toast,
     useTheme,
@@ -275,24 +274,17 @@ test.describe('Alerts on a server', () => {
 test.describe('Uptime on the app page', () => {
     test('an app checked for 25 days shows its uptime, with the days before the first check in grey', async ({
         page
-    }, testInfo) => {
+    }) => {
         await gotoApplication(page, 'forge-01', 'storefront')
 
         const uptime = page.getByTestId('app-uptime')
 
-        if (isMobile(testInfo)) {
-            await expect(page.getByTestId('domains-card')).toBeHidden()
-
-            return
-        }
-
-        await expect(uptime).toContainText('99.97%')
-        await expect(uptime).toContainText('answering over 30 days')
+        await expect(uptime).toContainText(/Uptime, 30 days\s*99\.97%/)
         await expect(uptime.getByRole('img')).toHaveAttribute(
             'aria-label',
             'Answering on each of the last 30 days: 24 with every check answered, 1 with some failed checks, 5 not checked'
         )
-        await expect(uptime).toContainText(
+        await expect(page.getByTestId('health-card')).toContainText(
             /Coresmith checks it every 5 minutes\. Last failed check on [A-Z][a-z]{2} \d{1,2} at 01:40\./
         )
     })
