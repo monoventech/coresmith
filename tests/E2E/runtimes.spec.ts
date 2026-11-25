@@ -73,9 +73,9 @@ test.describe("an app's runtime", () => {
 
         await expect(row).toContainText('PHP 8.4.1')
         await expect(row).toContainText('From composer.json, which asks for ^8.4')
-        await expect(row.getByTestId('runtime-newer')).toContainText(/PHP 8\.4\.\d+ is the newest in this line/)
+        await expect(row.getByTestId('runtime-newer')).toContainText(/PHP\s+8\.4\.\d+\s+is the newest in this line/)
         await expect(row.getByTestId('runtime-newer')).toContainText(
-            new RegExp(`Updating installs 8\\.4\\.\\d+ beside 8\\.4\\.1 and redeploys ${app}\\.`)
+            new RegExp(`Updating installs 8\\.4\\.\\d+ beside 8\\.4\\.1 and redeploys\\s+${app}\\.`)
         )
 
         await row.getByRole('button', { name: /^Update to 8\.4\.\d+$/ }).click()
@@ -112,9 +112,11 @@ test.describe("an app's runtime", () => {
         expect(await blockingViolations(page)).toEqual([])
         await dialog(page).getByRole('button', { name: 'Update and deploy' }).click()
 
-        await expect(toast(page)).toContainText(new RegExp(`Installing PHP 8\\.4\\.\\d+\\. ${app} deploys once it's in\\.`))
+        await expect(toast(page)).toContainText(
+            new RegExp(`Installing PHP 8\\.4\\.\\d+\\. ${app} deploys once it's in\\.`)
+        )
         await expect(row.getByRole('status')).toContainText(
-            new RegExp(`Installing PHP 8\\.4\\.\\d+\\. ${app} deploys on it once it's in\\.`)
+            new RegExp(`Installing PHP 8\\.4\\.\\d+\\.\\s+${app}\\s+deploys on it\\s+once it's in\\.`)
         )
         await expect(row.getByRole('button', { name: /^Update to/ })).toHaveCount(0)
         expect(await blockingViolations(page)).toEqual([])
