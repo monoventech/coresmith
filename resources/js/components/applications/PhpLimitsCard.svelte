@@ -14,7 +14,10 @@
 
 <script lang="ts">
     import { router } from '@inertiajs/svelte'
+    import CardFact from '@/components/CardFact.svelte'
+    import CardFacts from '@/components/CardFacts.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import SectionCard from '@/components/SectionCard.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Label } from '@/components/ui/label'
@@ -67,54 +70,36 @@
     }
 </script>
 
-<section
-    aria-labelledby="php-limits-title"
-    class={cn(
-        'flex min-w-0 flex-col gap-3.5 rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden',
-        className
-    )}
-    data-testid="php-limits"
->
-    <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div class="min-w-0 flex-1 basis-105">
-            <h3 id="php-limits-title" class="type-h3 m-0 mb-1">PHP</h3>
-            <p class="m-0 text-[12.5px] text-muted-foreground">
-                Limits for this app's PHP, the same for the website, queue workers, cron jobs and deploys. Saving
-                reloads PHP without a deploy.
-            </p>
-        </div>
-        <Button variant="outline" size="sm" disabled={!canUpdate} onclick={edit}>Change</Button>
-    </div>
+{#snippet change()}
+    <Button variant="outline" size="sm" disabled={!canUpdate} onclick={edit}>Change</Button>
+{/snippet}
 
-    <dl class="m-0 grid grid-cols-4 border-t border-border">
-        {#each php.cells as cell, index (cell.label)}
-            <div
-                class={cn(
-                    'min-w-0 px-4 pt-3.5 pb-0.5',
-                    index === 0 && 'pl-0',
-                    index > 0 && 'border-l border-border',
-                    index === php.cells.length - 1 && 'pr-0'
-                )}
-                data-testid="php-limit"
-            >
-                <dt class="mb-1 text-[12px] text-muted-foreground">{cell.label}</dt>
-                <dd class="m-0 text-[15px] font-medium">{cell.value}</dd>
-            </div>
-        {/each}
-    </dl>
-
+{#snippet notes()}
     {#if php.held}
-        <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="php-held">
-            Memory is held at {php.cap}, the most the {php.size} size allows.
-        </p>
+        <p class="m-0" data-testid="php-held">Memory is held at {php.cap}, the most the {php.size} size allows.</p>
     {/if}
-
     {#if php.failure}
-        <p class="m-0 text-[12.5px] text-destructive-strong" role="status" data-testid="php-failure">
+        <p class="m-0 text-destructive-strong" role="status" data-testid="php-failure">
             Couldn't apply the last change. {php.failure}
         </p>
     {/if}
-</section>
+{/snippet}
+
+<SectionCard
+    title="PHP limits"
+    titleId="php-limits-title"
+    description="Limits for this app's PHP, the same for the website, queue workers, cron jobs and deploys. Saving reloads PHP without a deploy."
+    actions={change}
+    footer={php.held || php.failure ? notes : undefined}
+    class={cn('max-sm:hidden', className)}
+    testid="php-limits"
+>
+    <CardFacts>
+        {#each php.cells as cell (cell.label)}
+            <CardFact label={cell.label} testid="php-limit">{cell.value}</CardFact>
+        {/each}
+    </CardFacts>
+</SectionCard>
 
 <Dialog.Root bind:open>
     <Dialog.Content>

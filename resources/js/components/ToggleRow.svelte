@@ -11,6 +11,7 @@
         disabled = false,
         onchange,
         bordered = 'top',
+        class: className,
         testid
     }: {
         label: string
@@ -21,6 +22,7 @@
         disabled?: boolean
         onchange: (on: boolean) => void
         bordered?: 'top' | 'bottom' | 'none'
+        class?: string
         testid?: string
     } = $props()
 
@@ -31,7 +33,8 @@
     class={cn(
         'flex min-h-14 items-center gap-4 py-2 max-sm:min-h-13 max-sm:gap-3',
         bordered === 'top' && 'border-t border-border',
-        bordered === 'bottom' && 'border-b border-border'
+        bordered === 'bottom' && 'border-b border-border',
+        className
     )}
     data-testid={testid}
 >
