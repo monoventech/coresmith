@@ -191,6 +191,31 @@ test.describe('page scrolling', () => {
     })
 })
 
+test.describe('the bottom tabs', () => {
+    test.skip(({ isMobile }) => !isMobile, 'The bottom tabs show below 640px; wider screens have no bar over the page')
+
+    test('a control focused at the bottom edge scrolls clear of them', async ({ page }) => {
+        await page.goto('/deployments')
+
+        const row = page.getByTestId('deployment-row').nth(10)
+
+        await expect(row).toBeVisible()
+        await row.evaluate((el) => {
+            const scroller = el.closest('main') as HTMLElement
+
+            scroller.scrollTop += el.getBoundingClientRect().top - (window.innerHeight - 12)
+        })
+        await row.focus()
+
+        const control = await row.boundingBox()
+        const tabs = await nav(page).boundingBox()
+
+        expect(control).not.toBeNull()
+        expect(tabs).not.toBeNull()
+        expect(control!.y + control!.height).toBeLessThanOrEqual(tabs!.y)
+    })
+})
+
 test.describe('the account dialog', () => {
     test('it says who is signed in and where they belong', async ({ page }) => {
         await page.goto('/dashboard')

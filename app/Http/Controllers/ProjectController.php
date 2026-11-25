@@ -14,6 +14,7 @@ use App\Models\Application;
 use App\Models\Project;
 use App\Models\Server;
 use App\Services\Panel\FleetSnapshot;
+use App\Services\Panel\Paging;
 use App\Services\Panel\ProjectPresenter;
 use App\Services\Projects\Projects;
 use App\Services\Teams\RouteKeys;
@@ -25,6 +26,8 @@ use Inertia\Response;
 
 final class ProjectController extends Controller
 {
+    public const UNFILED_PER_PAGE = 50;
+
     public function index(Request $request, ProjectPresenter $presenter, TeamAccess $access): Response|RedirectResponse
     {
         $team = $this->currentTeam();
@@ -34,6 +37,19 @@ final class ProjectController extends Controller
         }
 
         $user = $request->user();
+        $unfiled = $access->applications($user, $team)
+            ->whereNull('project_id')
+            ->with('server')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->paginate(self::UNFILED_PER_PAGE)
+            ->withQueryString()
+            ->fragment('no-project');
+
+        if ($unfiled->isEmpty() && $unfiled->currentPage() > 1) {
+            return redirect()->to($unfiled->url($unfiled->lastPage()));
+        }
+
         $fleet = new FleetSnapshot($team, $user);
         $servers = $fleet->servers();
 
@@ -43,12 +59,13 @@ final class ProjectController extends Controller
                 'applications' => $servers->sum(fn(Server $server): int => $server->applications->count()) + $fleet->sharedApplications()->count(),
             ],
             'projects' => $access->projects($user, $team)->orderBy('name')->get()->map(fn(Project $project): array => $presenter->card($project, $user))->values(),
-            'unfiled' => $access->applications($user, $team)->whereNull('project_id')->with('server')->orderBy('name')->get()->map(fn(Application $application): array => [
+            'unfiled' => collect($unfiled->items())->map(fn(Application $application): array => [
                 'id' => $application->getKey(),
                 'name' => $application->name,
                 'server' => $application->server?->name,
                 'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
             ])->values(),
+            'unfiled_pages' => Paging::present($unfiled),
             'narrowed' => !$access->seesEverything($user, $team),
             'can' => ['create' => $user->can('create', [Project::class, $team])],
         ]);
