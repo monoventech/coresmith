@@ -367,11 +367,11 @@ test.describe('the explorer', () => {
 
         expect(total).toBeGreaterThan(5)
         await expect(attention.getByRole('button', { name: /^Needs attention/ })).toBeVisible()
-        await expect(attention.getByRole('link', { name: /^outpost-01, / })).toBeVisible()
         await expect(attention.getByRole('link')).toHaveCount(5)
 
         await attention.getByRole('button', { name: `Show ${total - 5} more` }).click()
         await expect(attention.getByRole('link')).toHaveCount(total)
+        await expect(attention.getByRole('link', { name: /^outpost-01, / })).toBeVisible()
         await expect(attention.getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true')
     })
 
