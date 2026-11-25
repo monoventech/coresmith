@@ -10,7 +10,6 @@ use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\ProtectionRows;
-use Illuminate\Support\Collection;
 
 function serverTabMember(Team $team, TeamRole $role = TeamRole::Member): User
 {
@@ -141,17 +140,6 @@ test('firewall changes are this servers own, newest first', function () {
             ->where('firewall.changes.1.from', '203.0.113.5'));
 });
 
-test('at most twenty five firewall changes are listed', function () {
-    $team = Team::factory()->create();
-    $server = serverTabServer($team);
-
-    Collection::times(27, fn(int $port) => activity()->performedOn($server)->withProperties(['action' => 'allow', 'port' => $port])->log('firewall_rule_changed'));
-
-    $this->actingAs(serverTabMember($team))
-        ->get(route('servers.hardening', $server))
-        ->assertInertia(fn($page) => $page->has('firewall.changes', 25)->where('firewall.changes.0.port', 27));
-});
-
 test('the private key never reaches the hardening tab', function () {
     $team = Team::factory()->create();
     $server = serverTabServer($team, ['ssh_private_key' => 'PRIVATE-KEY-MATERIAL']);
@@ -198,3 +186,29 @@ test('the server tabs require authentication', function (string $route) {
 
     $this->get(route($route, $server))->assertRedirect(route('login'));
 })->with(['servers.hardening', 'servers.activity']);
+
+test('firewall changes come ten to a page, newest first, with a link to the older ones', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team);
+
+    foreach (range(1, 12) as $port) {
+        activity()->performedOn($server)->withProperties(['action' => 'allow', 'port' => 8000 + $port])->log('firewall_rule_changed');
+    }
+
+    $member = serverTabMember($team);
+
+    $this->actingAs($member)
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page
+            ->has('firewall.changes', 10)
+            ->where('firewall.changes.0.port', 8012)
+            ->where('firewall.pages.total', 12)
+            ->where('firewall.pages.older', route('servers.hardening', [$server, 'firewall_page' => 2])));
+
+    $this->actingAs($member)
+        ->get(route('servers.hardening', [$server, 'firewall_page' => 2]))
+        ->assertInertia(fn($page) => $page
+            ->has('firewall.changes', 2)
+            ->where('firewall.changes.1.port', 8001)
+            ->where('firewall.pages.older', null));
+});

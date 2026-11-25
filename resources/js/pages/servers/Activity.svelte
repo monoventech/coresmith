@@ -6,16 +6,24 @@
     import { Link } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import ActivityRow from '@/components/fleet/ActivityRow.svelte'
+    import Pager from '@/components/Pager.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import type { ActivityItem } from '@/lib/fleet'
+    import type { Pages } from '@/lib/paging'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
 
     let {
         server,
         activity = [],
+        pages = null,
         show = 'everything'
-    }: { server: ServerHeader; activity: ActivityItem[]; show?: 'everything' | 'alerts' } = $props()
+    }: {
+        server: ServerHeader
+        activity: ActivityItem[]
+        pages?: Pages | null
+        show?: 'everything' | 'alerts'
+    } = $props()
 
     const filters = $derived([
         { key: 'everything', label: 'Everything', href: route('servers.activity', { server: server.key }) },
@@ -60,6 +68,14 @@
             {/if}
         </p>
     {/each}
+    {#if pages}
+        <Pager
+            {pages}
+            label="Activity pages"
+            noun="events"
+            class="-mx-5.5 mt-2 border-t border-border px-5.5 pt-3 pb-1"
+        />
+    {/if}
 </div>
 
 {#if show === 'alerts'}

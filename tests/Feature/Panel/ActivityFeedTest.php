@@ -349,6 +349,34 @@ test('a server feed shows up to twenty five entries by default', function () {
     expect((new ActivityFeed)->forServer($server))->toHaveCount(25);
 });
 
+test('a server feed pages back in time across its events and deploys, with nothing on two pages and nothing skipped', function () {
+    [, $server, $application] = feedFixture();
+
+    foreach (range(1, 30) as $minute) {
+        $this->travelTo(CarbonImmutable::parse('2026-09-13 10:00:00')->addMinutes($minute));
+
+        if ($minute % 10 === 0) {
+            Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'started_at' => now(), 'finished_at' => now()]);
+        } else {
+            feedLog($server, 'server_rebooted');
+        }
+    }
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-13 14:05:09'));
+
+    $first = (new ActivityFeed)->serverPage($server, 1);
+    $second = (new ActivityFeed)->serverPage($server, 2);
+    $newer = array_column($first['rows'], 'at');
+    $older = array_column($second['rows'], 'at');
+
+    expect($first['rows'])->toHaveCount(25)
+        ->and($first['more'])->toBeTrue()
+        ->and($second['rows'])->toHaveCount(5)
+        ->and($second['more'])->toBeFalse()
+        ->and(min($newer) > max($older))->toBeTrue()
+        ->and(array_unique([...$newer, ...$older]))->toHaveCount(30);
+});
+
 test('cloud account events are described and link to the Cloud providers tab', function (string $description, string $sentence) {
     [$team] = feedFixture();
     $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
