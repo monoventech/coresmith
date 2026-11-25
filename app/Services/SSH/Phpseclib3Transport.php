@@ -170,11 +170,16 @@ final class Phpseclib3Transport implements ShellTransport, SSHTransport
         $ssh->setTimeout($seconds);
         $data = $ssh->read('', SSH2::READ_NEXT);
 
-        if (is_string($data)) {
-            return $data;
-        }
+        return self::shellRead($data, $ssh->isTimeout(), $ssh->interactive(), $ssh->isConnected());
+    }
 
-        return $data === true || !$ssh->isConnected() ? null : '';
+    public static function shellRead(string|bool $data, bool $timedOut, bool $interactive, bool $connected): ?string
+    {
+        return match (true) {
+            is_string($data) => $data,
+            $data === true => $timedOut && $interactive ? '' : null,
+            default => $connected ? '' : null,
+        };
     }
 
     public function writeShell(string $bytes): void
