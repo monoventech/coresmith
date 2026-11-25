@@ -864,7 +864,7 @@
                     {#if release.commit}
                         <CardFact label="Commit" mono
                             >{release.commit}{#if release.branch}<span class="font-sans text-muted-foreground"
-                                    >{' on '}</span
+                                    >&nbsp;on&nbsp;</span
                                 >{release.branch}{/if}</CardFact
                         >
                     {:else if release.branch}
