@@ -212,3 +212,19 @@ test('firewall changes come ten to a page, newest first, with a link to the olde
             ->where('firewall.changes.1.port', 8001)
             ->where('firewall.pages.older', null));
 });
+
+test('a firewall changes page past the end shows the last page instead of claiming nothing changed', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team);
+
+    foreach (range(1, 12) as $port) {
+        activity()->performedOn($server)->withProperties(['action' => 'allow', 'port' => 8000 + $port])->log('firewall_rule_changed');
+    }
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', [$server, 'firewall_page' => 9]))
+        ->assertInertia(fn($page) => $page
+            ->has('firewall.changes', 2)
+            ->where('firewall.pages.current', 2)
+            ->where('firewall.pages.older', null));
+});
