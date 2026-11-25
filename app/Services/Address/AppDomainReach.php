@@ -57,6 +57,14 @@ final class AppDomainReach
 
             $host = strtolower(trim($domain, '.'));
             $twin = $twins[$domain] ?? null;
+            $skipped = $tunnel?->skipReason($host);
+
+            if ($skipped !== null) {
+                $report = new ReachReport(false, [$skipped, "Until {$domain} goes through this server's Cloudflare tunnel, visitors on IPv4 can't reach it. After you fix that, choose Check again under IPv4 through Cloudflare on the server's Network tab."], [], []);
+                $reports[$domain] = $twin === null ? $report : self::optional($report, $domain, $twin);
+
+                continue;
+            }
 
             if ($frontDoor?->state === ServerFrontDoor::OPEN && TunnelHosts::routable($host)) {
                 $report = self::throughDoor($frontDoor, $server, $host, $twin !== null);
