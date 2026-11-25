@@ -73,7 +73,11 @@
 
     const ended = $derived(link.ended ?? terminal.ended)
     const who = $derived(terminal.mode === 'root' ? 'root' : `${terminal.application}'s user`)
-    const startedAt = $derived(terminal.started_at === null ? null : terminal.started_at * 1000)
+    const startedAt = $derived.by(() => {
+        const at = link.startedAt ?? terminal.started_at
+
+        return at === null ? null : at * 1000
+    })
     const elapsed = $derived(startedAt === null ? null : Math.max(0, Math.floor((now - startedAt) / 1000)))
     const status = $derived.by((): { tone: StateTone; text: string } => {
         if (link.state === 'reconnecting') {

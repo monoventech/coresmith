@@ -223,6 +223,7 @@ final class E2ESeeder extends Seeder
             $this->application("copied-{$code}", 9850 + $index * 10, ['env_variables' => "APP_ENV=production\nDB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=forge\nDB_USERNAME=forge\nDB_PASSWORD=" . bin2hex(random_bytes(8))]);
             $this->application("migrate-{$code}", 9750 + $index * 10);
             $runtimes = $this->server("runtimes-{$code}", '198.51.100.' . (70 + $index), ServerStatus::Active);
+            $runtimes->forceFill(['installed_runtimes' => ['php' => ['8.4.1', '8.3.33']]])->save();
             $this->application("rt-{$code}", 8000, MonovenTenant::stack(['php' => ['8.4.1', 'composer.json', '^8.4']], ['name' => 'laravel', 'major' => 13]), $runtimes);
             $this->application("rt-pin-{$code}", 8010, MonovenTenant::stack(['php' => ['8.4.1', '.tool-versions', '8.4.1']], ['name' => 'laravel', 'major' => 13]), $runtimes);
 
@@ -463,14 +464,18 @@ final class E2ESeeder extends Seeder
     private function processFixtures(): void
     {
         $server = $this->server('busy-01', '203.0.113.176', ServerStatus::Active);
-        $this->application('busy-shop', 9700, [], $server);
+        $queue = [['name' => 'queue', 'command' => SmartToggles::QUEUE_COMMAND]];
+        $this->application('busy-shop', 9700, ['processes' => $queue, 'toggles' => ['reverb' => true]], $server);
+        $this->application('busy-api', 9720, ['processes' => $queue], $server);
         $this->application('busy-blog', 9710, ['power_state' => PowerState::Sleeping], $server);
         $started = '@' . now()->subHours(3)->getTimestamp();
         $reading = fn(int $restarts): array => ProcessStates::parse(implode("\n\n", [
-            "Id=coresmith-app-busy-shop-web.service\nActiveState=active\nSubState=running\nNRestarts=0\nMemoryCurrent=104857600\nActiveEnterTimestamp={$started}",
-            "Id=coresmith-app-busy-shop-queue-worker.service\nActiveState=active\nSubState=running\nNRestarts={$restarts}\nMemoryCurrent=62914560\nActiveEnterTimestamp={$started}",
-            "Id=coresmith-app-busy-shop-scheduler.service\nActiveState=failed\nSubState=failed\nNRestarts=0\nMemoryCurrent=[not set]\nActiveEnterTimestamp=",
-            "Id=coresmith-app-busy-blog-web.service\nActiveState=inactive\nSubState=dead\nNRestarts=0\nMemoryCurrent=[not set]\nActiveEnterTimestamp=",
+            "Id=coresmith-app-busy-shop-fpm.service\nActiveState=active\nSubState=running\nNRestarts=0\nMemoryCurrent=104857600\nActiveEnterTimestamp={$started}",
+            "Id=coresmith-app-busy-shop-queue.service\nActiveState=active\nSubState=running\nNRestarts={$restarts}\nMemoryCurrent=62914560\nActiveEnterTimestamp={$started}",
+            "Id=coresmith-app-busy-shop-reverb.service\nActiveState=failed\nSubState=failed\nNRestarts=0\nMemoryCurrent=[not set]\nActiveEnterTimestamp=",
+            "Id=coresmith-app-busy-api-fpm.service\nActiveState=active\nSubState=running\nNRestarts=0\nMemoryCurrent=83886080\nActiveEnterTimestamp={$started}",
+            "Id=coresmith-app-busy-api-queue.service\nActiveState=active\nSubState=running\nNRestarts=0\nMemoryCurrent=52428800\nActiveEnterTimestamp={$started}",
+            "Id=coresmith-app-busy-blog-fpm.service\nActiveState=inactive\nSubState=dead\nNRestarts=0\nMemoryCurrent=[not set]\nActiveEnterTimestamp=",
         ]));
 
         app(ProcessStates::class)->record($server, $reading(0));

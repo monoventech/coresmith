@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.40 (2026-11-25)
+
+### Changed
+- An app's processes and runtime live on its page, a server keeps an inventory of its runtimes, and the explorer filters, pins and lists what needs attention (#193)
+
 ## v0.8.39 (2026-11-25)
 
 ### Fixed

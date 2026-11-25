@@ -23,7 +23,7 @@ import {
 } from './support/fixtures'
 
 function toggle(page: Page, name: string) {
-    return page.getByTestId('smart-toggles').getByRole('switch', { name })
+    return page.getByRole('main').getByRole('switch', { name, exact: true })
 }
 
 function toggleRow(page: Page, key: string) {
@@ -302,33 +302,35 @@ test.describe('an application', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'atlas_production', exact: true })).toBeVisible()
     })
 
-    test('on a phone the app page keeps deploy, the toggles and the current release', async ({ page }, testInfo) => {
+    test('on a phone the app page leads with deploy and the current release, then its processes', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'The compact app page only renders below 640px')
 
         await gotoApplication(page, 'forge-01', 'atlas')
 
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
-        await expect(page.getByTestId('smart-toggles')).toBeVisible()
-        await expect(page.getByTestId('smart-toggles')).toContainText(
-            'Turning on Auto deploy deploys the branch if the live release is behind.'
-        )
+        await expect(page.getByTestId('section-index').getByRole('link', { name: 'Processes', exact: true })).toBeVisible()
         await expect(page.getByRole('heading', { name: 'Current release' })).toBeVisible()
 
         const release = await page.getByTestId('release-card').boundingBox()
-        const toggles = await page.getByTestId('smart-toggles').boundingBox()
+        const processes = await page.getByTestId('processes-card').boundingBox()
 
-        expect(release?.y ?? Infinity).toBeLessThan(toggles?.y ?? 0)
-
-        for (const hidden of [
-            'Now',
-            'Settings',
-            'Environment',
+        expect(release?.y ?? Infinity).toBeLessThan(processes?.y ?? 0)
+        await expect(page.getByTestId('section-index').getByRole('link')).toHaveText([
+            'Overview',
+            'Processes',
+            'Runtime',
             'Domains',
-            'Source',
-            'Live log',
-            'Cron jobs',
+            'Deploys',
             'Danger zone'
-        ]) {
+        ])
+
+        for (const card of ['domains-card', 'source-card']) {
+            await expect(page.getByTestId(card)).toBeVisible()
+        }
+
+        await expect(page.getByRole('heading', { name: 'Danger zone', exact: true })).toBeVisible()
+
+        for (const hidden of ['Environment', 'Cron jobs', 'Live log']) {
             await expect(page.getByRole('heading', { name: hidden, exact: true })).toHaveCount(0)
         }
 
@@ -527,7 +529,11 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · atlas' })).toBeVisible()
     })
 
-    test('what changes sits in one row and the settings in rows that line up', async ({ page }) => {
+    test('the overview pairs the release with its health, and the sections follow the index in order', async ({
+        page
+    }, testInfo) => {
+        test.skip(isMobile(testInfo), 'Below 640px every card stacks in one column')
+
         await gotoApplication(page, 'forge-01', 'atlas')
 
         const box = async (id: string) => {
@@ -537,23 +543,40 @@ test.describe('what the full app page adds on a wider screen', () => {
 
             return found ?? { x: 0, y: 0, width: 0, height: 0 }
         }
-        const [release, domains, source] = await Promise.all(['release-card', 'domains-card', 'source-card'].map(box))
-        const [toggles, environment, cron] = await Promise.all(
-            ['smart-toggles', 'environment-card', 'cron-jobs'].map(box)
+        const [release, health, processes, domains, visitors, source] = await Promise.all(
+            ['release-card', 'health-card', 'processes-card', 'domains-card', 'visitors-card', 'source-card'].map(box)
         )
 
-        for (const card of [domains, source]) {
-            expect(card.y).toBeCloseTo(release.y, 0)
-            expect(card.height).toBeCloseTo(release.height, 0)
-        }
+        expect(health.y).toBeCloseTo(release.y, 0)
+        expect(health.height).toBeCloseTo(release.height, 0)
+        expect(health.x).toBeGreaterThan(release.x + release.width)
+        expect(processes.y).toBeGreaterThan(release.y + release.height)
+        expect(visitors.y).toBeCloseTo(domains.y, 0)
+        expect(visitors.height).toBeCloseTo(domains.height, 0)
+        expect(source.y).toBeGreaterThan(domains.y + domains.height)
 
-        expect(domains.x).toBeGreaterThan(release.x + release.width)
-        expect(source.x).toBeGreaterThan(domains.x + domains.width)
-        expect(environment.y).toBeCloseTo(toggles.y, 0)
-        expect(environment.height).toBeCloseTo(toggles.height, 0)
-        expect(cron.x).toBeCloseTo(toggles.x, 0)
-        expect(cron.x + cron.width).toBeCloseTo(environment.x + environment.width, 0)
-        expect(cron.y).toBeGreaterThan(toggles.y + toggles.height)
+        const index = page.getByTestId('section-index')
+
+        await expect(index.getByRole('link')).toHaveText([
+            'Overview',
+            'Processes',
+            'Runtime',
+            'Domains',
+            'Deploys',
+            'Environment',
+            'Schedule',
+            'Danger zone'
+        ])
+        await index.getByRole('link', { name: 'Environment', exact: true }).click()
+        await expect(index.getByRole('link', { name: 'Environment', exact: true })).toHaveAttribute(
+            'aria-current',
+            'location'
+        )
+
+        const pinned = await index.boundingBox()
+        const main = await page.getByTestId('panel-main').boundingBox()
+
+        expect(Math.abs((pinned?.y ?? 0) - (main?.y ?? 0))).toBeLessThan(2)
     })
 
     test("long advice for several domains sits under the row at full width, and each card's links follow its content", async ({
@@ -1986,7 +2009,7 @@ test.describe('what the repository installs', () => {
 
         await gotoApplication(page, 'bench-01', own(testInfo, 'realtime'))
 
-        await expect(page.getByTestId('smart-toggles').locator('[data-testid^="toggle-"]').first()).toHaveAttribute(
+        await expect(page.getByTestId('processes-card').locator('[data-testid^="toggle-"]').first()).toHaveAttribute(
             'data-testid',
             'toggle-inertia_ssr'
         )
@@ -2053,7 +2076,7 @@ test.describe('the PHP version on an app page', () => {
 
     test('can be chosen, and handed back to the repository', async ({ page }, testInfo) => {
         await gotoApplication(page, 'bench-01', own(testInfo, 'held'))
-        await page.getByRole('button', { name: 'Change the PHP version' }).click()
+        await page.getByRole('button', { name: 'Change version of PHP' }).click()
 
         const picker = dialog(page).getByRole('radiogroup', { name: 'PHP version' })
 
@@ -2063,7 +2086,7 @@ test.describe('the PHP version on an app page', () => {
         await expect(toast(page)).toContainText('Saved. The next deploy uses PHP 8.4.')
         await expect(dialog(page)).toHaveCount(0)
 
-        await page.getByRole('button', { name: 'Change the PHP version' }).click()
+        await page.getByRole('button', { name: 'Change version of PHP' }).click()
         await expect(picker.getByRole('radio', { name: /^8\.4\.\d+/ })).toBeChecked()
         await picker.getByRole('radio', { name: /^From the repository/ }).click()
         await dialog(page).getByRole('button', { name: 'Save' }).click()

@@ -19,7 +19,7 @@
 	data-slot="switch"
 	aria-busy={busy || undefined}
 	class={cn(
-		"focus-ring relative inline-block h-6 w-10 shrink-0 cursor-pointer rounded-md border border-border p-0 transition-colors duration-(--dur-fast) ease-(--ease-out-soft) data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted data-disabled:cursor-not-allowed data-disabled:opacity-50",
+		"focus-ring relative inline-block h-6 w-10 shrink-0 cursor-pointer rounded-md border border-border p-0 pointer-coarse:after:absolute pointer-coarse:after:-inset-x-1 pointer-coarse:after:-inset-y-2.5 pointer-coarse:after:content-[''] transition-colors duration-(--dur-fast) ease-(--ease-out-soft) data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted data-disabled:cursor-not-allowed data-disabled:opacity-50",
 		busy && "data-[state=checked]:bg-track-busy data-[state=unchecked]:bg-track-busy",
 		className
 	)}

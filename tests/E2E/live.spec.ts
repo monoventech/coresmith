@@ -90,7 +90,7 @@ test.describe('live pages', () => {
         await gotoApplication(page, 'bench-01', own(testInfo, 'busy'))
 
         const seen = partialReloads(page)
-        const scheduler = page.getByTestId('smart-toggles').getByRole('switch', { name: 'Scheduler' })
+        const scheduler = page.getByTestId('processes-card').getByRole('switch', { name: 'Scheduler' })
         const held: Route[] = []
 
         await page.route('**/toggles/**', (route) => {

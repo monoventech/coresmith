@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { blockingViolations, expect, gotoApplication, own, test, useTheme } from './support/fixtures'
 
 function toggle(page: Page, name: string) {
-    return page.getByTestId('smart-toggles').getByRole('switch', { name })
+    return page.getByRole('main').getByRole('switch', { name, exact: true })
 }
 
 test.describe('an app without a domain', () => {

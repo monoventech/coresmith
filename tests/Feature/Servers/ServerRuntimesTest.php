@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Enums\ServerStatus;
-use App\Enums\TeamRole;
 use App\Jobs\DeployApplication;
 use App\Jobs\UpdateServerRuntime;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
-use App\Models\User;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Server\ServerRuntimes;
 use App\Services\SSH\SSHConnectionManager;
@@ -46,23 +44,6 @@ function serverRuntimesApp(Server $server, string $name, string $php, ?array $re
     ]);
 }
 
-test('a server lists each runtime version its apps run, with the apps on it and the newest patch in its line', function () {
-    [$team, $server] = serverRuntimesFleet();
-    serverRuntimesApp($server, 'shop', '8.4.1');
-    serverRuntimesApp($server, 'blog', '8.4.1');
-    serverRuntimesApp($server, 'legacy', '8.1.34');
-
-    $rows = app(ServerRuntimes::class)->rows($server, $team->owner);
-
-    expect(array_column($rows, 'label'))->toBe(['PHP 8.4.1', 'PHP 8.1.34'])
-        ->and(array_column($rows[0]['applications'], 'name'))->toBe(['blog', 'shop'])
-        ->and($rows[0]['newest'])->toBe('8.4.9')
-        ->and($rows[0]['status']['label'])->toBe('Active until Dec 2030')
-        ->and($rows[0]['eol'])->toBeFalse()
-        ->and($rows[1]['newest'])->toBeNull()
-        ->and($rows[1]['eol'])->toBeTrue();
-});
-
 test('an app whose repository asks for an exact patch stays pinned, and one that asks for a line moves', function (array $resolved, ?string $pinned) {
     [, $server] = serverRuntimesFleet();
     $application = serverRuntimesApp($server, 'shop', '8.4.1', $resolved);
@@ -76,57 +57,6 @@ test('an app whose repository asks for an exact patch stays pinned, and one that
     'picked on the app page' => [['source' => 'pin', 'detail' => null], null],
     'the recommended version' => [['source' => 'default', 'detail' => null], null],
 ]);
-
-test('updating a runtime queues the newest patch for the apps that can move, and says it is installing', function () {
-    Queue::fake();
-    [$team, $server] = serverRuntimesFleet();
-    $shop = serverRuntimesApp($server, 'shop', '8.4.1');
-    $pinned = serverRuntimesApp($server, 'pinned', '8.4.1', ['source' => '.tool-versions', 'detail' => '8.4.1']);
-
-    $this->actingAs($team->owner)
-        ->post(route('servers.runtimes.update', $server), ['runtime' => 'php', 'version' => '8.4.1', 'applications' => [$shop->id, $pinned->id]])
-        ->assertRedirect()
-        ->assertSessionHas('success', "Installing PHP 8.4.9. The apps deploy once it's in.");
-
-    Queue::assertPushed(UpdateServerRuntime::class, fn(UpdateServerRuntime $job): bool => $job->server->is($server)
-        && [$job->runtime, $job->from, $job->to, $job->applications] === ['php', '8.4.1', '8.4.9', [$shop->id]]);
-
-    expect(UpdateServerRuntime::state($server))->toMatchArray(['label' => 'PHP 8.4.9', 'state' => 'installing']);
-});
-
-test('an update is refused when there is nothing newer, when one is already installing, or when no app can move', function (string $version, bool $busy, bool $pinnedOnly, string $error) {
-    Queue::fake();
-    [$team, $server] = serverRuntimesFleet();
-    $application = serverRuntimesApp($server, 'shop', $version, $pinnedOnly ? ['source' => '.tool-versions', 'detail' => $version] : null);
-
-    if ($busy) {
-        (new UpdateServerRuntime($server, 'php', '8.4.1', '8.4.9', [$application->id]))->remember('installing');
-    }
-
-    $this->actingAs($team->owner)
-        ->post(route('servers.runtimes.update', $server), ['runtime' => 'php', 'version' => $version, 'applications' => [$application->id]])
-        ->assertSessionHas('error', $error);
-
-    Queue::assertNotPushed(UpdateServerRuntime::class);
-})->with([
-    'already the newest' => ['8.4.9', false, false, 'PHP 8.4.9 is already the newest patch Coresmith knows of.'],
-    'another update installing' => ['8.4.1', true, false, 'Coresmith is already installing a runtime on this server. Try again once it finishes.'],
-    'every app pinned' => ['8.4.1', false, true, 'None of those apps can move to PHP 8.4.9.'],
-]);
-
-test('only people who can change the server can update its runtimes', function () {
-    Queue::fake();
-    [$team, $server] = serverRuntimesFleet();
-    $application = serverRuntimesApp($server, 'shop', '8.4.1');
-    $member = User::factory()->create();
-    $team->members()->attach($member, ['role' => TeamRole::Member->value]);
-
-    $this->actingAs($member)
-        ->post(route('servers.runtimes.update', $server), ['runtime' => 'php', 'version' => '8.4.1', 'applications' => [$application->id]])
-        ->assertForbidden();
-
-    Queue::assertNotPushed(UpdateServerRuntime::class);
-});
 
 test('the job installs the patch, then deploys each chosen app still on the old version, and logs it', function () {
     Queue::fake();
@@ -173,19 +103,6 @@ test('the activity feed describes runtime updates in plain words', function () {
 
     expect($sentences)->toContain('PHP 8.4.1 updated to 8.4.9 on web-1, 2 apps deploying')
         ->toContain("PHP 8.4.9 couldn't be installed on web-1, so no app was deployed");
-});
-
-test('the server page sends its runtimes, the update in progress, and whether the person can update them', function () {
-    [$team, $server] = serverRuntimesFleet();
-    serverRuntimesApp($server, 'shop', '8.4.1');
-
-    $this->actingAs($team->owner)->get(route('servers.show', $server))
-        ->assertInertia(fn($page) => $page
-            ->where('runtimes.rows.0.label', 'PHP 8.4.1')
-            ->where('runtimes.rows.0.newest', '8.4.9')
-            ->where('runtimes.update', null)
-            ->where('runtimes.can_update', true)
-            ->where('runtimes.href', route('servers.runtimes.update', $server)));
 });
 
 function serverRuntimesSentence(array $row): string

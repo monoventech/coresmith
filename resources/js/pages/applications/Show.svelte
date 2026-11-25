@@ -5,11 +5,15 @@
 <script lang="ts">
     import type { RepositoryCheck } from '@/lib/detection'
     import { Form, Link, page, router } from '@inertiajs/svelte'
-    import { ChevronRight, CircleArrowUp, ExternalLink, OctagonAlert, TriangleAlert } from '@lucide/svelte'
+    import { ChevronRight, CircleArrowUp, ExternalLink, OctagonAlert, Pin, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
     import DeployScriptCard from '@/components/applications/DeployScriptCard.svelte'
+    import HealthCard from '@/components/applications/HealthCard.svelte'
+    import ProcessesCard from '@/components/applications/ProcessesCard.svelte'
+    import RuntimeCard from '@/components/applications/RuntimeCard.svelte'
+    import SectionIndex from '@/components/applications/SectionIndex.svelte'
     import SetupCard from '@/components/applications/SetupCard.svelte'
     import type { AppSetup } from '@/components/applications/SetupCard.svelte'
     import type { DeployScript } from '@/components/applications/DeployScriptCard.svelte'
@@ -30,12 +34,14 @@
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { Textarea } from '@/components/ui/textarea'
+    import type { PageSection, ProcessRow, RecentDeploy, RuntimeRow } from '@/lib/app-page'
     import type { CronCard, CronSend } from '@/lib/cron'
     import type { ExpectedDatabase } from '@/lib/databases'
     import type { DnsRecord, DnsTarget } from '@/lib/dns'
     import { namedTargets } from '@/lib/dns'
     import type { EntityState } from '@/lib/fleet'
     import type { RuntimeChoices } from '@/lib/runtimes'
+    import { explorerState, togglePin } from '@/lib/explorer.svelte'
     import { follow } from '@/lib/live.svelte'
     import { cn } from '@/lib/utils'
     import { REFRESH_HEADERS } from '@/lib/visits'
@@ -77,7 +83,10 @@
         php = null,
         can,
         runtime_choice = null,
-        held = null
+        held = null,
+        processes = [],
+        runtimes = [],
+        recent_deploys = []
     }: {
         server: { id: string; name: string; href: string | null }
         place: { label: string; href: string | null } | null
@@ -178,17 +187,36 @@
         setup: AppSetup
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
         held: { current: string; newest: string; packages: string[]; command: string } | null
+        processes?: ProcessRow[]
+        runtimes?: RuntimeRow[]
+        recent_deploys?: RecentDeploy[]
     } = $props()
+
+    const sections = $derived<PageSection[]>([
+        { id: 'overview', label: 'Overview' },
+        { id: 'processes', label: 'Processes' },
+        ...(runtimes.length > 0 || php ? [{ id: 'runtime', label: 'Runtime' }] : []),
+        { id: 'domains', label: 'Domains' },
+        { id: 'deploys', label: 'Deploys' },
+        { id: 'environment', label: 'Environment', phone: false },
+        { id: 'schedule', label: 'Schedule', phone: false },
+        ...(can.update || can.delete ? [{ id: 'danger', label: 'Danger zone' }] : [])
+    ])
+    const explorer = explorerState()
+    const pinned = $derived(explorer.pinned.includes(application.id))
+    const maintenanceToggle = $derived(toggles.find((toggle) => toggle.key === 'maintenance_mode') ?? null)
+    const autoDeployToggle = $derived(toggles.find((toggle) => toggle.key === 'auto_deploy') ?? null)
+    const deployDots: Record<string, string> = {
+        success: 'bg-success',
+        warning: 'bg-warning',
+        destructive: 'bg-destructive',
+        accent: 'bg-primary',
+        default: 'bg-muted-foreground/50'
+    }
 
     const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i
 
     const certificateTones = { valid: 'success', expiring: 'warning', expired: 'destructive', none: 'warning' } as const
-    const uptimeTones = {
-        full: 'bg-success',
-        gaps: 'bg-warning',
-        down: 'bg-destructive',
-        none: 'bg-secondary'
-    } as const
 
     const cardAction = cn(buttonVariants({ variant: 'link' }), 'min-h-6 max-sm:min-h-11')
 
@@ -491,10 +519,29 @@
 
     onMount(() =>
         follow({
-            only: ['application', 'toggles', 'panel', 'app_deploy', ...('cron' in page.props ? ['cron'] : [])],
+            only: [
+                'application',
+                'toggles',
+                'panel',
+                'app_deploy',
+                'processes',
+                'runtimes',
+                'recent_deploys',
+                ...('cron' in page.props ? ['cron'] : [])
+            ],
             paused: () => working || cronBusy || Object.values(busy).some(Boolean)
         })
     )
+
+    onMount(() => {
+        const timer = setInterval(() => {
+            if (document.visibilityState === 'visible' && !working && !Object.values(busy).some(Boolean)) {
+                router.reload({ only: ['processes'] })
+            }
+        }, 30_000)
+
+        return () => clearInterval(timer)
+    })
 
     onDestroy(() => {
         if (poll) {
@@ -516,15 +563,23 @@
             <Badge variant={application.state.tone} dot pulse={application.state.key === 'deploying'}
                 >{application.state.label}</Badge
             >
+            <button
+                type="button"
+                class={cn(
+                    'focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent transition-colors duration-(--dur-fast) hover:bg-muted max-sm:hidden pointer-coarse:size-11',
+                    pinned ? 'text-primary-strong' : 'text-muted-foreground'
+                )}
+                aria-label="Pin to the explorer"
+                aria-pressed={pinned}
+                title={pinned ? 'Unpin from the explorer' : 'Pin to the explorer'}
+                data-testid="pin-app"
+                onclick={() => togglePin(application.id)}
+            >
+                <Pin class={cn('size-4', pinned && 'fill-current')} aria-hidden="true" />
+            </button>
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:text-[12.5px]">
             <span>{application.kind} · {application.runtime}</span>
-            {#if runtime_choice}<button
-                    type="button"
-                    class="focus-ring relative cursor-pointer rounded-sm bg-transparent p-0 text-primary-strong after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']"
-                    aria-label="Change the {runtime_choice.label} version"
-                    onclick={() => (dialog = 'runtime')}>Change</button
-                >{/if}
             <span data-testid="app-server"
                 >· on {#if server.href}<Link
                         href={server.href}
@@ -538,7 +593,9 @@
                         >{:else}{place.label}{/if}</span
                 >{/if}
             {#if application.domain}<span class="sm:hidden"
-                    >· <span class="font-mono text-[12px]">{application.domain}</span></span
+                    >· <span class="inline-block max-w-full truncate align-bottom font-mono text-[12px]"
+                        >{application.domain}</span
+                    ></span
                 >{/if}
         </p>
         {#if application.tags.length > 0 || application.tags_href}
@@ -792,187 +849,101 @@
     </div>
 {/if}
 
+<SectionIndex {sections} />
+
 <div class="@container flex flex-col gap-6 max-sm:gap-3">
-    <section aria-labelledby="app-now">
-        <h2
-            id="app-now"
-            class="mb-2.5 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground max-sm:hidden"
+    <section
+        id="overview"
+        aria-labelledby="app-overview"
+        class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"
+    >
+        <h2 id="app-overview" class="sr-only">Overview</h2>
+        <div
+            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+            data-testid="release-card"
         >
-            Now
-        </h2>
-        <div class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-3">
-            <div
-                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-                data-testid="release-card"
-            >
-                <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Current release</h3>
-                {#if application.release}
-                    {@const release = application.release}
-                    <p class="m-0 font-mono text-[13px] max-sm:text-[12px]">{release.id}</p>
-                    {#if release.message}
-                        <p class="m-0 mt-1.5 text-[13.5px] wrap-anywhere max-sm:text-[12.5px]">{release.message}</p>
-                    {/if}
-                    {#if release.commit || release.branch || release.author || release.when}
-                        <p
-                            class="m-0 mt-1 text-[12.5px] wrap-anywhere text-muted-foreground max-sm:text-[11.5px]"
-                            title={release.full ?? undefined}
-                            data-testid="release-detail"
-                        >
-                            {#if release.commit}<span class="font-mono text-[12px] max-sm:text-[11px]"
-                                    >{release.commit}</span
-                                >{/if}{releaseDetail(release)}
-                        </p>
-                    {/if}
-                {:else}
-                    <p class="m-0 text-[12.5px] text-muted-foreground">
-                        Nothing is live yet. Deploy to create the first release.
-                    </p>
+            <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Current release</h3>
+            {#if application.release}
+                {@const release = application.release}
+                <p class="m-0 font-mono text-[13px] max-sm:text-[12px]">{release.id}</p>
+                {#if release.message}
+                    <p class="m-0 mt-1.5 text-[13.5px] wrap-anywhere max-sm:text-[12.5px]">{release.message}</p>
                 {/if}
-                <div class="flex flex-wrap gap-x-5 gap-y-2 pt-3">
-                    <Link href={application.releases_href} class={cardAction}>All releases</Link>
-                    {#if application.rollback_href}
-                        <Link href={application.rollback_href} class={cardAction}>Roll back</Link>
-                    {/if}
-                </div>
-            </div>
-
-            <div
-                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"
-                data-testid="domains-card"
-            >
-                <h3 class="type-h3 m-0 mb-1.5">Domains</h3>
-                {#each domains as domain, index (domain)}
-                    {@const certificate = application.certificates?.domains[domain]}
-                    <div
-                        class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]"
-                        data-testid="domain-row"
-                    >
-                        <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={domain}>{domain}</span>
-                        {#if certificate}
-                            <Badge variant={certificateTones[certificate.state]} title={certificate.title}
-                                >{certificate.label}</Badge
-                            >
-                        {/if}
-                        <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
-                    </div>
-                {:else}
-                    <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
-                        No domain yet. Add one and its certificate is requested for you.
-                    </p>
-                {/each}
-                {#each application.redirects as redirect (redirect.domain)}
-                    {@const certificate = application.certificates?.domains[redirect.domain]}
-                    <div
-                        class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]"
-                        data-testid="domain-redirect-row"
-                    >
-                        <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={redirect.domain}
-                            >{redirect.domain}</span
-                        >
-                        {#if certificate && !waitingForDns(redirect.domain)}
-                            <Badge variant={certificateTones[certificate.state]} title={certificate.title}
-                                >{certificate.label}</Badge
-                            >
-                        {/if}
-                        <span class="text-[12px] text-muted-foreground" title="Sends visitors to {redirect.to}"
-                            >redirect<span class="sr-only"> to {redirect.to}</span></span
-                        >
-                    </div>
-                {/each}
-                {#if application.uptime}
-                    <div class="mt-3 flex flex-col gap-2 border-t border-border pt-3" data-testid="app-uptime">
-                        <div class="flex flex-wrap items-baseline gap-2">
-                            <span class="font-display text-[26px] leading-none font-semibold"
-                                >{application.uptime.percent}</span
-                            >
-                            <span class="text-[12.5px] text-muted-foreground">answering over 30 days</span>
-                        </div>
-                        <div role="img" aria-label={application.uptime.label} class="flex gap-0.5">
-                            {#each application.uptime.days as day (day.date)}
-                                <span class="h-5.5 flex-1 rounded-xs {uptimeTones[day.state]}" title={day.title}></span>
-                            {/each}
-                        </div>
-                        <p class="m-0 text-[12px] text-muted-foreground">{application.uptime.note}</p>
-                    </div>
-                {/if}
-                {#if domains.length > 0}
-                    <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
-                    <p class="m-0 mt-1 text-[12px] text-muted-foreground" data-testid="domain-reach-summary">
-                        {reachSummary}
-                    </p>
-                {/if}
-                {#if can.update}
-                    <div class="flex flex-wrap gap-x-5 gap-y-2 pt-3">
-                        <Button variant="link" class="min-h-6" onclick={openDomain}>Add domain</Button>
-                        {#if domains.length > 0}
-                            <Button variant="link" class="min-h-6" disabled={checkingReach} onclick={checkReach}
-                                >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
-                            >
-                        {/if}
-                    </div>
-                {/if}
-            </div>
-
-            <div
-                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"
-                data-testid="source-card"
-            >
-                <h3 class="type-h3 m-0 mb-1.5">Source</h3>
-                {#if application.repository}
-                    <p class="m-0 font-mono text-[13px] break-all">{application.repository}</p>
-                    <p class="m-0 mt-1.5 text-[13.5px]">
-                        Branch <span class="font-mono text-[12.5px]">{application.branch}</span>
-                    </p>
-                {:else}
-                    <p class="m-0 text-[13.5px]">No repository is set.</p>
-                {/if}
-                {#if sourceAccess}
-                    <p class="m-0 mt-1.5 text-[12.5px] text-muted-foreground">{sourceAccess}</p>
-                {/if}
-                {#if application.deploy_key}
+                {#if release.commit || release.branch || release.author || release.when}
                     <p
-                        class="m-0 mt-1.5 font-mono text-[12px] break-all text-muted-foreground"
-                        title={application.deploy_key.fingerprint ?? undefined}
+                        class="m-0 mt-1 text-[12.5px] wrap-anywhere text-muted-foreground max-sm:text-[11.5px]"
+                        title={release.full ?? undefined}
+                        data-testid="release-detail"
                     >
-                        {application.deploy_key.short}
+                        {#if release.commit}<span class="font-mono text-[12px] max-sm:text-[11px]"
+                                >{release.commit}</span
+                            >{/if}{releaseDetail(release)}
                     </p>
-                    <div class="pt-3">
-                        <Button variant="link" class="min-h-6" onclick={copyKey}
-                            >{copied ? 'Copied' : 'Copy public key'}</Button
-                        >
-                    </div>
+                {/if}
+            {:else}
+                <p class="m-0 text-[12.5px] text-muted-foreground">
+                    Nothing is live yet. Deploy to create the first release.
+                </p>
+            {/if}
+            <div class="flex flex-wrap gap-x-5 gap-y-2 pt-3">
+                <Link href={application.releases_href} class={cardAction}>All releases</Link>
+                {#if application.rollback_href}
+                    <Link href={application.rollback_href} class={cardAction}>Roll back</Link>
                 {/if}
             </div>
-
-            {#if advice.length > 0}
-                <div
-                    class="min-w-0 rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden @3xl:col-span-3"
-                    data-testid="domain-reach"
-                >
-                    <h3 class="type-h3 m-0 mb-1.5">Reaching your domains</h3>
-                    <div class="flex flex-col gap-4">
-                        {#each advice as reading (reading.domain)}
-                            <div
-                                class="grid min-w-0 gap-x-8 gap-y-2 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]"
-                                data-testid="domain-advice"
-                            >
-                                <div class="flex min-w-0 flex-col gap-1.5">
-                                    {#each reading.problems as line (line)}
-                                        <p class="m-0 max-w-[75ch] text-[12.5px] text-warning-strong">{line}</p>
-                                    {/each}
-                                    {#each reading.notes as line (line)}
-                                        <p class="m-0 max-w-[75ch] text-[12.5px] text-muted-foreground">{line}</p>
-                                    {/each}
-                                </div>
-                                {#if reading.records.length > 0}
-                                    <DnsRecords records={reading.records} testid="domain-records" />
-                                {/if}
-                            </div>
+            {#if recent_deploys.length > 0}
+                <div class="mt-4 border-t border-border pt-3" data-testid="recent-deploys">
+                    <h4 class="m-0 mb-1.5 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">
+                        Recent deploys
+                    </h4>
+                    <ul class="m-0 flex list-none flex-col p-0">
+                        {#each recent_deploys as deploy (deploy.id)}
+                            <li>
+                                <Link
+                                    href={deploy.href}
+                                    class="focus-ring -mx-2 grid min-h-9 grid-cols-[0.5rem_minmax(0,1fr)_6.5rem_3.5rem] items-center gap-3 rounded-md px-2 text-[13px] text-foreground no-underline transition-colors duration-(--dur-fast) hover:bg-muted max-sm:min-h-11 max-sm:grid-cols-[0.5rem_minmax(0,1fr)_auto]"
+                                >
+                                    <span
+                                        class="size-2 rounded-full {deployDots[deploy.state.tone] ??
+                                            deployDots.default}"
+                                        aria-hidden="true"
+                                    ></span>
+                                    <span class="truncate"
+                                        >{deploy.state.label}{#if deploy.release}<span
+                                                class="font-mono text-[12.5px] text-muted-foreground"
+                                                >{` · ${deploy.release}`}</span
+                                            >{/if}</span
+                                    >
+                                    <span
+                                        class="text-right text-[12.5px] text-muted-foreground"
+                                        title={deploy.full ?? undefined}>{deploy.when ?? ''}</span
+                                    >
+                                    <span class="text-right font-mono text-[12px] text-muted-foreground max-sm:hidden"
+                                        >{deploy.duration ?? ''}</span
+                                    >
+                                </Link>
+                            </li>
                         {/each}
-                    </div>
+                    </ul>
                 </div>
             {/if}
         </div>
+        <HealthCard uptime={application.uptime} {processes} domain={application.domain} />
+    </section>
+
+    <section id="processes" aria-labelledby="processes-title">
+        <ProcessesCard
+            {processes}
+            {toggles}
+            {busy}
+            onflip={flip}
+            canUpdate={can.update}
+            restartAllHref={can.update && processes.some((row) => row.restart_href !== null)
+                ? route('servers.applications.processes.restart-all', [server.id, application.id])
+                : null}
+            app={application.name}
+            server={server.name}
+        />
     </section>
 
     <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="live-log-card">
@@ -1014,118 +985,20 @@
         </div>
     </div>
 
-    <section aria-labelledby="app-settings">
-        <h2
-            id="app-settings"
-            class="mb-2.5 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground max-sm:hidden"
-        >
-            Settings
-        </h2>
-        <div class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-2">
-            <div
-                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-                data-testid="smart-toggles"
-            >
-                <h3 class="type-h3 m-0 mb-1 max-sm:mb-0.5 max-sm:text-[15px]">Smart toggles</h3>
-                <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
-                    Based on what {application.kind} apps run.
-                    <span class="max-sm:hidden"
-                        >Flipping a switch changes what runs on {server.name}, no deployment needed. Turning on Auto
-                        deploy deploys the branch if the live release is behind.</span
-                    ><span class="sm:hidden">No deployment needed, except Auto deploy.</span>
-                </p>
-                <div class="flex flex-col">
-                    {#each toggles as toggle (toggle.key)}
-                        <ToggleRow
-                            label={toggle.label}
-                            description={toggle.description}
-                            checked={toggle.on}
-                            busy={busy[toggle.key]}
-                            busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
-                            disabled={!can.update || toggle.disabled}
-                            onchange={(on) => flip(toggle, on)}
-                            testid="toggle-{toggle.key}"
-                        />
-                    {/each}
-                    <ToggleRow
-                        label="Reachable on your tailnet"
-                        description={addresses.problem ??
-                            (addresses.tailnet_url
-                                ? `At ${addresses.tailnet_url}, once ${server.name}'s firewall lets your tailnet in.`
-                                : `Serves the app at ${server.name}'s Tailscale address, without a domain.`)}
-                        checked={addresses.tailnet}
-                        busy={addressBusy === 'tailnet'}
-                        disabled={!can.update}
-                        onchange={(on) => setAddress('tailnet', on)}
-                        testid="toggle-tailnet"
-                    />
-                    <ToggleRow
-                        label="Preview without a domain"
-                        description={addresses.preview_url
-                            ? `Plain HTTP at ${addresses.preview_url}. Anyone who has the address can open it. Add a domain for HTTPS.`
-                            : "Plain HTTP on the server's own address. Anyone who has the address can open it. Add a domain for HTTPS."}
-                        checked={addresses.preview}
-                        busy={addressBusy === 'preview'}
-                        disabled={!can.update}
-                        onchange={(on) => setAddress('preview', on)}
-                        testid="toggle-preview"
-                    />
-                </div>
-            </div>
-
-            <div
-                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"
-                data-testid="environment-card"
-            >
-                <h3 class="type-h3 m-0 mb-1">Environment</h3>
-                <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Kept out of the app's reach and handed to it at start. The app can't read its own env file.
-                </p>
-                {#if application.environment.length > 0}
-                    <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
-                        {#each application.environment as line (line.key)}
-                            <div class="truncate">
-                                {line.key}={line.value}{#if line.empty}<span class="text-warning-strong"
-                                        >&nbsp;· not set</span
-                                    >{:else if line.secret}<span>&nbsp;· redacted in logs</span>{/if}
-                            </div>
-                        {/each}
-                    </div>
-                {:else}
-                    <p class="text-[12.5px] text-muted-foreground">No variables yet.</p>
-                {/if}
-                {#if application.databases.length > 0}
-                    <p class="mt-3 text-[12.5px] text-muted-foreground" data-testid="connected-databases">
-                        Connected to {#each application.databases as database, index (database.href)}{index === 0
-                                ? ''
-                                : index === application.databases.length - 1
-                                  ? ' and '
-                                  : ', '}<Link
-                                href={database.href}
-                                class="focus-ring rounded-sm font-mono text-primary-strong underline-offset-4 hover:underline"
-                                >{database.name}</Link
-                            >{database.status === 'creating'
-                                ? ' (being created)'
-                                : database.status === 'failed'
-                                  ? ' (not created)'
-                                  : ''}{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings
-                        here when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
-                    </p>
-                {/if}
-                {#if can.manageEnvironment}
-                    <div class="mt-auto pt-3">
-                        <Button variant="link" class="min-h-6" onclick={openEnv}>Edit variables</Button>
-                    </div>
-                {/if}
-            </div>
-
-            <SetupCard class="@3xl:col-span-2" {setup} />
-
-            <DeployScriptCard class="@3xl:col-span-2" script={deploy_script} name={application.name} />
-
+    {#if runtimes.length > 0 || php}
+        <section id="runtime" aria-labelledby="runtime-title" class="flex flex-col gap-4 max-sm:gap-3">
+            {#if runtimes.length > 0}
+                <RuntimeCard
+                    {runtimes}
+                    app={application.name}
+                    server={server.name}
+                    onchange={runtime_choice ? () => (dialog = 'runtime') : null}
+                />
+            {:else}
+                <h2 id="runtime-title" class="sr-only">Runtime</h2>
+            {/if}
             {#if php}
                 <PhpLimitsCard
-                    class="@3xl:col-span-2"
                     {php}
                     server={server.name}
                     href={route('servers.applications.php-limits.update', {
@@ -1135,44 +1008,295 @@
                     canUpdate={can.update}
                 />
             {/if}
+        </section>
+    {/if}
 
-            <CronJobsCard
-                class="@3xl:col-span-2"
-                {cron}
-                server={server.name}
-                canUpdate={can.update}
-                canViewLogs={can.viewLogs}
-                busy={cronBusy}
-                send={sendCron}
+    <section id="domains" aria-labelledby="app-domains" class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-2">
+        <h2 id="app-domains" class="sr-only">Domains</h2>
+        <div
+            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+            data-testid="domains-card"
+        >
+            <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Domains</h3>
+            {#each domains as domain, index (domain)}
+                {@const certificate = application.certificates?.domains[domain]}
+                <div
+                    class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px] max-sm:min-h-11"
+                    data-testid="domain-row"
+                >
+                    <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={domain}>{domain}</span>
+                    {#if certificate}
+                        <Badge variant={certificateTones[certificate.state]} title={certificate.title}
+                            >{certificate.label}</Badge
+                        >
+                    {/if}
+                    <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
+                </div>
+            {:else}
+                <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+                    No domain yet. Add one and its certificate is requested for you.
+                </p>
+            {/each}
+            {#each application.redirects as redirect (redirect.domain)}
+                {@const certificate = application.certificates?.domains[redirect.domain]}
+                <div
+                    class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px] max-sm:min-h-11"
+                    data-testid="domain-redirect-row"
+                >
+                    <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={redirect.domain}
+                        >{redirect.domain}</span
+                    >
+                    {#if certificate && !waitingForDns(redirect.domain)}
+                        <Badge variant={certificateTones[certificate.state]} title={certificate.title}
+                            >{certificate.label}</Badge
+                        >
+                    {/if}
+                    <span class="text-[12px] text-muted-foreground" title="Sends visitors to {redirect.to}"
+                        >redirect<span class="sr-only"> to {redirect.to}</span></span
+                    >
+                </div>
+            {/each}
+            {#if domains.length > 0}
+                <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
+                <p class="m-0 mt-1 text-[12px] text-muted-foreground" data-testid="domain-reach-summary">
+                    {reachSummary}
+                </p>
+            {/if}
+            {#if can.update}
+                <div class="mt-auto flex flex-wrap gap-x-5 gap-y-2 pt-3">
+                    <Button variant="link" class="min-h-6 max-sm:min-h-11" onclick={openDomain}>Add domain</Button>
+                    {#if domains.length > 0}
+                        <Button
+                            variant="link"
+                            class="min-h-6 max-sm:min-h-11"
+                            disabled={checkingReach}
+                            onclick={checkReach}
+                            >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
+                        >
+                    {/if}
+                </div>
+            {/if}
+        </div>
+
+        <div
+            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+            data-testid="visitors-card"
+        >
+            <h3 class="type-h3 m-0 mb-1 max-sm:text-[15px]">Other ways in</h3>
+            <p class="m-0 mb-1 text-[12.5px] text-muted-foreground">
+                A holding page while you work, and addresses that skip the domain.
+            </p>
+            {#if maintenanceToggle}
+                {@const toggle = maintenanceToggle}
+                <ToggleRow
+                    label={toggle.label}
+                    description={toggle.description}
+                    checked={toggle.on}
+                    busy={busy[toggle.key]}
+                    busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
+                    disabled={!can.update || toggle.disabled}
+                    onchange={(on) => flip(toggle, on)}
+                    testid="toggle-{toggle.key}"
+                />
+            {/if}
+            <ToggleRow
+                label="Reachable on your tailnet"
+                description={addresses.problem ??
+                    (addresses.tailnet_url
+                        ? `At ${addresses.tailnet_url}, once ${server.name}'s firewall lets your tailnet in.`
+                        : `Serves the app at ${server.name}'s Tailscale address, without a domain.`)}
+                checked={addresses.tailnet}
+                busy={addressBusy === 'tailnet'}
+                disabled={!can.update}
+                onchange={(on) => setAddress('tailnet', on)}
+                testid="toggle-tailnet"
             />
+            <ToggleRow
+                label="Preview without a domain"
+                description={addresses.preview_url
+                    ? `Plain HTTP at ${addresses.preview_url}. Anyone who has the address can open it. Add a domain for HTTPS.`
+                    : "Plain HTTP on the server's own address. Anyone who has the address can open it. Add a domain for HTTPS."}
+                checked={addresses.preview}
+                busy={addressBusy === 'preview'}
+                disabled={!can.update}
+                onchange={(on) => setAddress('preview', on)}
+                testid="toggle-preview"
+            />
+        </div>
+
+        {#if advice.length > 0}
+            <div
+                class="min-w-0 rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden @3xl:col-span-2"
+                data-testid="domain-reach"
+            >
+                <h3 class="type-h3 m-0 mb-1.5">Reaching your domains</h3>
+                <div class="flex flex-col gap-4">
+                    {#each advice as reading (reading.domain)}
+                        <div
+                            class="grid min-w-0 gap-x-8 gap-y-2 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]"
+                            data-testid="domain-advice"
+                        >
+                            <div class="flex min-w-0 flex-col gap-1.5">
+                                {#each reading.problems as line (line)}
+                                    <p class="m-0 max-w-[75ch] text-[12.5px] text-warning-strong">{line}</p>
+                                {/each}
+                                {#each reading.notes as line (line)}
+                                    <p class="m-0 max-w-[75ch] text-[12.5px] text-muted-foreground">{line}</p>
+                                {/each}
+                            </div>
+                            {#if reading.records.length > 0}
+                                <DnsRecords records={reading.records} testid="domain-records" />
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+            </div>
+        {/if}
+    </section>
+
+    <section id="deploys" aria-labelledby="app-deploys" class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-2">
+        <h2 id="app-deploys" class="sr-only">Deploys</h2>
+        <div
+            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+            data-testid="source-card"
+        >
+            <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Source</h3>
+            {#if application.repository}
+                <p class="m-0 font-mono text-[13px] break-all">{application.repository}</p>
+                <p class="m-0 mt-1.5 text-[13.5px]">
+                    Branch <span class="font-mono text-[12.5px]">{application.branch}</span>
+                </p>
+            {:else}
+                <p class="m-0 text-[13.5px]">No repository is set.</p>
+            {/if}
+            {#if sourceAccess}
+                <p class="m-0 mt-1.5 text-[12.5px] text-muted-foreground">{sourceAccess}</p>
+            {/if}
+            {#if application.deploy_key}
+                <p
+                    class="m-0 mt-1.5 font-mono text-[12px] break-all text-muted-foreground"
+                    title={application.deploy_key.fingerprint ?? undefined}
+                >
+                    {application.deploy_key.short}
+                </p>
+                <div class="pt-3">
+                    <Button variant="link" class="min-h-6 max-sm:min-h-11" onclick={copyKey}
+                        >{copied ? 'Copied' : 'Copy public key'}</Button
+                    >
+                </div>
+            {/if}
+            {#if autoDeployToggle}
+                {@const toggle = autoDeployToggle}
+                <div class="mt-auto pt-2">
+                    <ToggleRow
+                        label={toggle.label}
+                        description={toggle.description}
+                        checked={toggle.on}
+                        busy={busy[toggle.key]}
+                        busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
+                        disabled={!can.update || toggle.disabled}
+                        onchange={(on) => flip(toggle, on)}
+                        testid="toggle-{toggle.key}"
+                    />
+                </div>
+            {/if}
+        </div>
+
+        <SetupCard {setup} />
+
+        <DeployScriptCard class="@3xl:col-span-2" script={deploy_script} name={application.name} />
+    </section>
+
+    <section id="environment" aria-labelledby="app-environment" class="max-sm:hidden">
+        <h2 id="app-environment" class="sr-only">Environment</h2>
+        <div
+            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5"
+            data-testid="environment-card"
+        >
+            <h3 class="type-h3 m-0 mb-1 max-sm:text-[15px]">Environment</h3>
+            <p class="mb-3 text-[12.5px] text-muted-foreground">
+                Kept out of the app's reach and handed to it at start. The app can't read its own env file.
+            </p>
+            {#if application.environment.length > 0}
+                <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
+                    {#each application.environment as line (line.key)}
+                        <div class="truncate">
+                            {line.key}={line.value}{#if line.empty}<span class="text-warning-strong"
+                                    >&nbsp;· not set</span
+                                >{:else if line.secret}<span>&nbsp;· redacted in logs</span>{/if}
+                        </div>
+                    {/each}
+                </div>
+            {:else}
+                <p class="text-[12.5px] text-muted-foreground">No variables yet.</p>
+            {/if}
+            {#if application.databases.length > 0}
+                <p class="mt-3 text-[12.5px] text-muted-foreground" data-testid="connected-databases">
+                    Connected to {#each application.databases as database, index (database.href)}{index === 0
+                            ? ''
+                            : index === application.databases.length - 1
+                              ? ' and '
+                              : ', '}<Link
+                            href={database.href}
+                            class="focus-ring rounded-sm font-mono text-primary-strong underline-offset-4 hover:underline"
+                            >{database.name}</Link
+                        >{database.status === 'creating'
+                            ? ' (being created)'
+                            : database.status === 'failed'
+                              ? ' (not created)'
+                              : ''}{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings
+                    here when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
+                </p>
+            {/if}
+            {#if can.manageEnvironment}
+                <div class="mt-auto pt-3">
+                    <Button variant="link" class="min-h-6 max-sm:min-h-11" onclick={openEnv}>Edit variables</Button>
+                </div>
+            {/if}
         </div>
     </section>
 
+    <section id="schedule" aria-labelledby="app-schedule" class="max-sm:hidden">
+        <h2 id="app-schedule" class="sr-only">Schedule</h2>
+        <CronJobsCard
+            {cron}
+            server={server.name}
+            canUpdate={can.update}
+            canViewLogs={can.viewLogs}
+            busy={cronBusy}
+            send={sendCron}
+        />
+    </section>
+
     {#if can.update || can.delete}
-        <div
-            class="border-danger flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border bg-card px-5.5 py-4.5 max-sm:hidden"
+        <section
+            id="danger"
+            aria-labelledby="app-danger"
+            class="border-danger flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border bg-card px-5.5 py-4.5 max-sm:p-4"
         >
             <div class="min-w-0 flex-1 basis-80">
-                <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
+                <h2 id="app-danger" class="type-h3 m-0 mb-1 max-sm:text-[15px]">Danger zone</h2>
                 <p class="m-0 text-[12.5px] text-muted-foreground">
                     Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops
                     the app and detaches it from this server. Its releases stay on disk for 7 days.
                 </p>
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap gap-2 max-sm:w-full">
                 {#if can.update && !application.stopped}
-                    <Button variant="outline" size="sm" onclick={power}>Stop the app</Button>
+                    <Button variant="outline" size="sm" class="max-sm:min-h-11 max-sm:flex-1" onclick={power}
+                        >Stop the app</Button
+                    >
                 {/if}
                 {#if can.delete}
                     <Button
                         variant="outline"
                         size="sm"
-                        class="text-destructive-strong"
+                        class="text-destructive-strong max-sm:min-h-11 max-sm:flex-1"
                         onclick={() => (dialog = 'remove')}>Remove this app</Button
                     >
                 {/if}
             </div>
-        </div>
+        </section>
     {/if}
 </div>
 
