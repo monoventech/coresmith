@@ -21,8 +21,12 @@ export async function streamDeploys(page: Page, options: { refuse?: RegExp } = {
             }
 
             const visit = await response.json()
-            shown = visit.props.deployment as Shown
-            bytes = shown.log_bytes
+            const deployment = visit.props.deployment as Shown | undefined
+
+            if (deployment) {
+                shown = deployment
+                bytes = deployment.log_bytes
+            }
 
             await route.fulfill({ response, json: { ...visit, props: { ...visit.props, streaming: true } } })
         }

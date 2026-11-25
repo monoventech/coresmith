@@ -197,11 +197,12 @@ test('backups are listed in the background, and the page shows them once they ar
 
     $this->actingAs($admin)
         ->get(route('servers.databases.show', [$database->server, $database]))
-        ->assertInertia(fn($page) => $page->where('backups', [
-            'rows' => [['stamp' => '20261110023000', 'when' => 'Nov 10, 02:30', 'size' => "2\u{00A0}KB", 'on_server' => true, 'in_s3' => false]],
-            'server_error' => null,
-            's3_error' => null,
-        ]));
+        ->assertInertia(fn($page) => $page
+            ->where('backups.rows', [['stamp' => '20261110023000', 'when' => 'Nov 10, 02:30', 'size' => "2\u{00A0}KB", 'on_server' => true, 'in_s3' => false]])
+            ->where('backups.pages.total', 1)
+            ->where('backups.pages.older', null)
+            ->where('backups.server_error', null)
+            ->where('backups.s3_error', null));
 
     Queue::assertPushed(ListDatabaseBackups::class, 1);
 });

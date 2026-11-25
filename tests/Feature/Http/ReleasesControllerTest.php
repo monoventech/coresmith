@@ -319,17 +319,46 @@ test('an application on its newest release is not rolled back', function (?strin
             ->where('releases.0.current', true));
 })->with(['recorded' => '20260913120000', 'never recorded' => null]);
 
-test('at most twenty releases are listed', function () {
+test('releases come twenty to a page, and an older page still knows which release is live and which are on disk', function () {
     $team = Team::factory()->create();
-    $application = releasesApp($team);
+    $application = releasesApp($team, ['current_release' => '20260912220000']);
 
     foreach (range(1, 22) as $hour) {
         releasesShipped($application, sprintf('20260912%02d0000', $hour), hoursAgo: 30 - $hour);
     }
 
-    $this->actingAs(releasesMember($team))
+    $member = releasesMember($team);
+
+    $this->actingAs($member)
         ->get(releasesUrl($application))
-        ->assertInertia(fn($page) => $page->has('releases', 20)->where('releases.0.release', '20260912220000'));
+        ->assertInertia(fn($page) => $page
+            ->has('releases', 20)
+            ->where('releases.0.release', '20260912220000')
+            ->where('releases.0.current', true)
+            ->where('releases.4.on_disk', true)
+            ->where('releases.5.on_disk', false)
+            ->where('pages.total', 22)
+            ->where('pages.older', releasesUrl($application, ['page' => 2])));
+
+    $this->actingAs($member)
+        ->get(releasesUrl($application, ['page' => 2]))
+        ->assertInertia(fn($page) => $page
+            ->has('releases', 2)
+            ->where('releases.0.release', '20260912020000')
+            ->where('releases.0.current', false)
+            ->where('releases.0.on_disk', false)
+            ->where('pages.newer', releasesUrl($application, ['page' => 1]))
+            ->where('pages.older', null));
+});
+
+test('a releases page past the end goes to the last page', function () {
+    $team = Team::factory()->create();
+    $application = releasesApp($team);
+    releasesShipped($application, '20260912010000', hoursAgo: 3);
+
+    $this->actingAs(releasesMember($team))
+        ->get(releasesUrl($application, ['page' => 4]))
+        ->assertRedirect(releasesUrl($application, ['page' => 1]));
 });
 
 test('the page links the application and lists the team applications to switch between', function () {

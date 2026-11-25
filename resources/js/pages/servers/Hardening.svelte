@@ -7,6 +7,7 @@
     import { onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import Pager from '@/components/Pager.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
@@ -16,6 +17,7 @@
     import type { StateTone } from '@/lib/fleet'
     import { toneText } from '@/lib/fleet'
     import { follow } from '@/lib/live.svelte'
+    import type { Pages } from '@/lib/paging'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
 
@@ -67,7 +69,7 @@
             reload: string
             checked: string | null
         }
-        firewall: { open: number[]; kept_ssh: boolean; ssh_port: number; changes: Change[] }
+        firewall: { open: number[]; kept_ssh: boolean; ssh_port: number; changes: Change[]; pages?: Pages }
         access: {
             ssh: string | null
             fingerprint: string | null
@@ -217,6 +219,16 @@
                 </p>
             {/each}
         </div>
+        {#if firewall.pages}
+            <Pager
+                pages={firewall.pages}
+                label="Firewall change pages"
+                noun="changes"
+                only={['firewall']}
+                preserveScroll
+                class="border-t border-border pt-3"
+            />
+        {/if}
         {#if server.can.manageFirewall}
             <Form
                 method="post"

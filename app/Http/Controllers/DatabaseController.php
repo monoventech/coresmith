@@ -30,6 +30,7 @@ use App\Services\Database\DatabaseUsage;
 use App\Services\Database\OffsiteBackups;
 use App\Services\Database\SharedRedis;
 use App\Services\Panel\Formats;
+use App\Services\Panel\Paging;
 use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
@@ -37,12 +38,15 @@ use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
 
 final class DatabaseController extends Controller
 {
+    public const BACKUPS_PER_PAGE = 10;
+
     public function index(Request $request, Server $server, ServerPresenter $presenter, SharedRedis $sharedRedis, TeamAccess $access): Response|RedirectResponse
     {
         if ($server->trashed()) {
@@ -112,7 +116,7 @@ final class DatabaseController extends Controller
                 'sent' => Formats::when($database->last_offsite_at),
                 'error' => $database->last_offsite_error,
             ],
-            'backups' => $this->listedBackups($database, $backups),
+            'backups' => $this->listedBackups($request, $database, $backups),
             'restore' => $this->restoreState($database),
             'connected' => $database->applications()->orderBy('name')->get()
                 ->filter(fn(Application $application): bool => $access->canSeeApplication($user, $application))
@@ -130,9 +134,9 @@ final class DatabaseController extends Controller
     }
 
     /**
-     * @return array{rows: list<array{stamp: string, when: string, size: string, on_server: bool, in_s3: bool}>, server_error: string|null, s3_error: string|null}|null
+     * @return array{rows: list<array{stamp: string, when: string, size: string, on_server: bool, in_s3: bool}>, pages: array<string, mixed>, server_error: string|null, s3_error: string|null}|null
      */
-    private function listedBackups(ManagedDatabase $database, DatabaseBackups $backups): ?array
+    private function listedBackups(Request $request, ManagedDatabase $database, DatabaseBackups $backups): ?array
     {
         if (!$database->takesBackups()) {
             return null;
@@ -146,22 +150,28 @@ final class DatabaseController extends Controller
             return null;
         }
 
-        return $this->backups($listing);
+        return $this->backups($request, $listing);
     }
 
     /**
-     * @return array{rows: list<array{stamp: string, when: string, size: string, on_server: bool, in_s3: bool}>, server_error: string|null, s3_error: string|null}
+     * @return array{rows: list<array{stamp: string, when: string, size: string, on_server: bool, in_s3: bool}>, pages: array<string, mixed>, server_error: string|null, s3_error: string|null}
      */
-    private function backups(BackupListing $listing): array
+    private function backups(Request $request, BackupListing $listing): array
     {
+        $rows = array_map(fn(Backup $backup): array => [
+            'stamp' => $backup->stamp,
+            'when' => $backup->at->format('M j, H:i'),
+            'size' => Formats::bytes($backup->size),
+            'on_server' => $backup->onServer(),
+            'in_s3' => $backup->inS3(),
+        ], $listing->backups);
+        $last = max(1, (int) ceil(count($rows) / self::BACKUPS_PER_PAGE));
+        $current = min(Paging::page($request->query('backups_page')), $last);
+        $page = new LengthAwarePaginator(array_slice($rows, ($current - 1) * self::BACKUPS_PER_PAGE, self::BACKUPS_PER_PAGE), count($rows), self::BACKUPS_PER_PAGE, $current, ['path' => $request->url(), 'pageName' => 'backups_page']);
+
         return [
-            'rows' => array_map(fn(Backup $backup): array => [
-                'stamp' => $backup->stamp,
-                'when' => $backup->at->format('M j, H:i'),
-                'size' => Formats::bytes($backup->size),
-                'on_server' => $backup->onServer(),
-                'in_s3' => $backup->inS3(),
-            ], $listing->backups),
+            'rows' => array_values($page->items()),
+            'pages' => Paging::present($page->withQueryString()),
             'server_error' => $listing->serverError,
             's3_error' => $listing->s3Error,
         ];

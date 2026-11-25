@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Models\Server;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\Formats;
+use App\Services\Panel\Paging;
 use App\Services\Panel\ProtectionRows;
 use App\Services\Panel\ServerFrontDoorPresenter;
 use App\Services\Panel\ServerNetworkPresenter;
@@ -22,12 +23,15 @@ use App\Services\Server\SecurityHardening;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Activitylog\Models\Activity;
 
 final class ServerTabsController extends Controller
 {
+    public const FIREWALL_CHANGES_PER_PAGE = 10;
+
     public function hardening(Request $request, Server $server, ServerPresenter $presenter, ProtectionRows $protections, SecurityHardening $hardening): Response|RedirectResponse
     {
         if ($server->trashed()) {
@@ -35,6 +39,8 @@ final class ServerTabsController extends Controller
         }
 
         $this->authorize('view', $server);
+
+        $changes = $this->firewallChanges($server, Paging::page($request->query('firewall_page')));
 
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
@@ -49,20 +55,14 @@ final class ServerTabsController extends Controller
                 'open' => (new FirewallConfigurator)->openedPorts($server),
                 'kept_ssh' => FirewallConfigurator::keptSsh($server),
                 'ssh_port' => $server->ssh_port,
-                'changes' => Activity::query()
-                    ->where('subject_type', $server->getMorphClass())
-                    ->where('subject_id', $server->getKey())
-                    ->where('description', 'firewall_rule_changed')
-                    ->latest('id')
-                    ->limit(25)
-                    ->get()
-                    ->map(fn(Activity $activity): array => [
-                        'id' => $activity->id,
-                        'action' => $activity->properties['action'] ?? null,
-                        'port' => $activity->properties['port'] ?? null,
-                        'from' => $activity->properties['from'] ?? null,
-                        'at' => $activity->created_at?->toIso8601String(),
-                    ])->values(),
+                'changes' => $changes->getCollection()->map(fn(Activity $activity): array => [
+                    'id' => $activity->id,
+                    'action' => $activity->properties['action'] ?? null,
+                    'port' => $activity->properties['port'] ?? null,
+                    'from' => $activity->properties['from'] ?? null,
+                    'at' => $activity->created_at?->toIso8601String(),
+                ])->values(),
+                'pages' => Paging::present($changes),
             ],
             'access' => [
                 'ssh' => $server->sshAddress(),
@@ -100,12 +100,38 @@ final class ServerTabsController extends Controller
         $this->authorize('view', $server);
 
         $alerts = $request->query('show') === 'alerts';
+        $page = Paging::page($request->query('page'));
+        $shown = $feed->serverPage($server, $page, viewer: $request->user(), alerts: $alerts);
+        $url = fn(int $number): string => route('servers.activity', [$server, ...($alerts ? ['show' => 'alerts'] : []), 'page' => $number]);
+
+        if ($shown['rows'] === [] && $page > 1) {
+            return redirect()->to($url(1));
+        }
 
         return Inertia::render('servers/Activity', [
             'server' => $presenter->header($server, $request->user()),
-            'activity' => $feed->forServer($server, viewer: $request->user(), alerts: $alerts),
+            'activity' => $shown['rows'],
+            'pages' => Paging::feed($page, $shown['more'], $url),
             'show' => $alerts ? 'alerts' : 'everything',
         ]);
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, Activity>
+     */
+    private function firewallChanges(Server $server, int $page): LengthAwarePaginator
+    {
+        $read = fn(int $page): LengthAwarePaginator => Activity::query()
+            ->where('subject_type', $server->getMorphClass())
+            ->where('subject_id', $server->getKey())
+            ->where('description', 'firewall_rule_changed')
+            ->latest('id')
+            ->paginate(self::FIREWALL_CHANGES_PER_PAGE, pageName: 'firewall_page', page: $page)
+            ->withQueryString();
+
+        $changes = $read($page);
+
+        return $changes->isEmpty() && $page > 1 && $changes->lastPage() < $page ? $read($changes->lastPage()) : $changes;
     }
 
     /**

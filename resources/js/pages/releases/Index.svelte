@@ -3,10 +3,12 @@
     import { Undo2 } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
+    import Pager from '@/components/Pager.svelte'
     import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
     import AppSwitcher from '@/components/releases/AppSwitcher.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
+    import type { Pages } from '@/lib/paging'
     import { cn } from '@/lib/utils'
 
     type Release = {
@@ -39,6 +41,7 @@
         applications = [],
         overview_href = route('releases.index'),
         releases = [],
+        pages = null,
         rollback = null,
         can,
         scope = '',
@@ -55,6 +58,7 @@
         }[]
         overview_href?: string
         releases: Release[]
+        pages?: Pages | null
         rollback?: string | null
         can: { deploy: boolean }
         scope?: string
@@ -211,6 +215,14 @@
                 </span>
             </div>
         {/each}
+        {#if pages}
+            <Pager
+                {pages}
+                label="Release pages"
+                noun="releases"
+                class="border-b border-border px-5.5 py-3 max-sm:px-4"
+            />
+        {/if}
         <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">
             The last five releases stay on disk for instant rollback. Older ones are pruned after each deploy.
         </p>
