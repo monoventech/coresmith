@@ -23,6 +23,7 @@ use App\Services\Server\SecurityHardening;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Activitylog\Models\Activity;
@@ -39,13 +40,7 @@ final class ServerTabsController extends Controller
 
         $this->authorize('view', $server);
 
-        $changes = Activity::query()
-            ->where('subject_type', $server->getMorphClass())
-            ->where('subject_id', $server->getKey())
-            ->where('description', 'firewall_rule_changed')
-            ->latest('id')
-            ->paginate(self::FIREWALL_CHANGES_PER_PAGE, pageName: 'firewall_page')
-            ->withQueryString();
+        $changes = $this->firewallChanges($server, Paging::page($request->query('firewall_page')));
 
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
@@ -119,6 +114,24 @@ final class ServerTabsController extends Controller
             'pages' => Paging::feed($page, $shown['more'], $url),
             'show' => $alerts ? 'alerts' : 'everything',
         ]);
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, Activity>
+     */
+    private function firewallChanges(Server $server, int $page): LengthAwarePaginator
+    {
+        $read = fn(int $page): LengthAwarePaginator => Activity::query()
+            ->where('subject_type', $server->getMorphClass())
+            ->where('subject_id', $server->getKey())
+            ->where('description', 'firewall_rule_changed')
+            ->latest('id')
+            ->paginate(self::FIREWALL_CHANGES_PER_PAGE, pageName: 'firewall_page', page: $page)
+            ->withQueryString();
+
+        $changes = $read($page);
+
+        return $changes->isEmpty() && $page > 1 && $changes->lastPage() < $page ? $read($changes->lastPage()) : $changes;
     }
 
     /**
