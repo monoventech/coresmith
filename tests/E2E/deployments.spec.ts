@@ -114,21 +114,30 @@ test.describe('the deployments list', () => {
         await noSidewaysScroll(page)
     })
 
-    test('older deploys are a page away, fifty at a time, and the filter stays as you page', async ({ page }) => {
+    test('older deploys are a page away, fifty at a time, and the filter stays as you page', async ({ page }, testInfo) => {
         await gotoDeployments(page)
 
         const pager = page.getByRole('navigation', { name: 'Deploy pages' })
+        const current = async (number: number) => {
+            const link = pager.getByRole('link', { name: `Page ${number}` })
+
+            if (isMobile(testInfo)) {
+                await expect(link).toHaveCount(0)
+            } else {
+                await expect(link).toHaveAttribute('aria-current', 'page')
+            }
+        }
 
         await expect(rows(page)).toHaveCount(50)
         await expect(pager.getByTestId('pager-range')).toHaveText(/^1–50 of \d+ deploys$/)
-        await expect(pager.getByRole('link', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
+        await current(1)
         await expect(pager.getByRole('link', { name: 'Newer' })).toHaveCount(0)
 
         await pager.getByRole('link', { name: 'Older' }).click()
         await page.waitForURL(/[?&]page=2(&|$)/)
 
         await expect(pager.getByTestId('pager-range')).toHaveText(/^51–100 of \d+ deploys$/)
-        await expect(pager.getByRole('link', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page')
+        await current(2)
         await expect(pager.getByRole('link', { name: 'Newer' })).toBeVisible()
 
         await filters(page)
@@ -275,17 +284,22 @@ test.describe('a deploy', () => {
 
     test('a finished deploy links to the releases it made', async ({ page }) => {
         await gotoDeployments(page)
+        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront' })
+        await page.waitForURL((url) => url.searchParams.has('project'))
 
         const deployed = filters(page).getByRole('link', { name: /^Deployed\s*\d+$/ })
 
         await deployed.click()
         await expect(deployed).toHaveAttribute('aria-current', 'page')
-        await rows(page).filter({ hasText: 'warehouse' }).first().click()
+        await rows(page)
+            .filter({ has: page.getByText('storefront-staging', { exact: true }) })
+            .first()
+            .click()
 
         await expect(page.getByTestId('deployment-status')).toHaveText('Deployed')
         await page.getByRole('link', { name: 'View releases' }).click()
 
-        await expect(page.getByRole('heading', { level: 1, name: 'Releases · warehouse' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Releases · storefront-staging' })).toBeVisible()
     })
 
     test('the output can be focused so it scrolls from the keyboard', async ({ page }) => {
