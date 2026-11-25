@@ -131,6 +131,7 @@ final class ServerController extends Controller
             ->where('status', DeploymentStatus::Running->value)
             ->get()
             ->keyBy('application_id');
+        $processes = app(ServerProcesses::class)->summaries($server, $request->user());
         $deployed = Deployment::query()
             ->whereIn('application_id', $server->applications()->select('id'))
             ->where('status', DeploymentStatus::Succeeded->value)
@@ -151,15 +152,13 @@ final class ServerController extends Controller
                     ? ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent']
                     : ApplicationPresenter::state($application),
                 'href' => route('servers.applications.show', [$server, $application]),
+                'processes' => $processes[(string) $application->getKey()] ?? null,
             ])->values(),
             'runtimes' => [
-                'rows' => $runtimes->rows($server, $request->user()),
+                'rows' => $runtimes->inventory($server, $request->user()),
                 'update' => UpdateServerRuntime::state($server),
-                'can_update' => $request->user()->can('update', $server),
-                'href' => route('servers.runtimes.update', $server),
             ],
             'network' => app(ServerNetworkPresenter::class)->notice($server, $request->user()),
-            'processes' => app(ServerProcesses::class)->for($server, $request->user()),
         ]);
     }
 

@@ -5,6 +5,7 @@
 const WIDE = '(min-width: 1280px)'
 const HIDDEN_KEY = 'explorer'
 const FOLDED_KEY = 'explorer-folded'
+const PINNED_KEY = 'explorer-pinned'
 
 function read(key: string): string | null {
     try {
@@ -22,9 +23,9 @@ function write(key: string, value: string): void {
     }
 }
 
-function folded(): string[] {
+function ids(key: string): string[] {
     try {
-        const value = JSON.parse(read(FOLDED_KEY) ?? '[]')
+        const value = JSON.parse(read(key) ?? '[]')
 
         return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
     } catch {
@@ -34,11 +35,14 @@ function folded(): string[] {
 
 const browser = typeof window !== 'undefined'
 
-const state = $state<{ wide: boolean; hidden: boolean; open: boolean; folded: string[] }>({
+type ExplorerState = { wide: boolean; hidden: boolean; open: boolean; folded: string[]; pinned: string[] }
+
+const state = $state<ExplorerState>({
     wide: browser ? window.matchMedia(WIDE).matches : true,
     hidden: browser && read(HIDDEN_KEY) === 'hidden',
     open: false,
-    folded: browser ? folded() : []
+    folded: browser ? ids(FOLDED_KEY) : [],
+    pinned: browser ? ids(PINNED_KEY) : []
 })
 
 let query: MediaQueryList | null = null
@@ -55,7 +59,7 @@ export function initializeExplorer(): void {
     })
 }
 
-export function explorerState(): { wide: boolean; hidden: boolean; open: boolean; folded: string[] } {
+export function explorerState(): ExplorerState {
     return state
 }
 
@@ -92,6 +96,11 @@ export function closeExplorer(): void {
 export function toggleProject(id: string): void {
     state.folded = state.folded.includes(id) ? state.folded.filter((each) => each !== id) : [...state.folded, id]
     write(FOLDED_KEY, JSON.stringify(state.folded))
+}
+
+export function togglePin(id: string): void {
+    state.pinned = state.pinned.includes(id) ? state.pinned.filter((each) => each !== id) : [...state.pinned, id]
+    write(PINNED_KEY, JSON.stringify(state.pinned))
 }
 
 export function elapsedSince(iso: string | null, now: number): string | null {

@@ -74,6 +74,25 @@ async function openSession(page: Page, testInfo: TestInfo) {
 }
 
 test.describe('a terminal session', () => {
+    test('a page opened before the shell started says Connected once the shell answers', async ({ page }, testInfo) => {
+        const opened = Math.floor(Date.now() / 1000) - 5
+        const answer = { status: 'open', started_at: opened, ended: null }
+        const reverb = await fakeReverb(page)
+        const channel = `private-terminals.01kv${'0'.repeat(19)}${code(testInfo)}`
+
+        await withProps(page, /\/terminal\/[^/]+$/, (props) => {
+            Object.assign(props.terminal as Record<string, unknown>, { status: 'starting', started_at: null })
+        })
+        await page.route(/\/terminal\/[^/]+\/screen$/, (route) =>
+            route.fulfill({ json: { seq: 1, screen: base64('root@shell:~# '), ...answer } })
+        )
+        await page.route(/\/terminal\/[^/]+\/(check-in|resize|input)$/, (route) => route.fulfill({ json: answer }))
+
+        await page.goto(sessionUrl(testInfo))
+        await expect.poll(() => reverb.channels.includes(channel)).toBe(true)
+        await expect(page.getByTestId('terminal-status')).toContainText(/Connected · \d+:\d\d/)
+    })
+
     test('output appears in order, and typing reaches the shell', async ({ page }, testInfo) => {
         const shell = await openSession(page, testInfo)
 

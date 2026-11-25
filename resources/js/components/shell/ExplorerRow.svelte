@@ -11,6 +11,7 @@
         detail,
         aside = null,
         asideClass = '',
+        state = null,
         tags = [],
         tone = '',
         database = false,
@@ -22,6 +23,7 @@
         detail: string
         aside?: string | null
         asideClass?: string
+        state?: string | null
         tags?: string[]
         tone?: string
         database?: boolean
@@ -47,7 +49,11 @@
         <span class={cn('size-2 shrink-0 rounded-full', statusDot(tone))} aria-hidden="true"></span>
     {/if}
     <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{name}</span>
-    {#if tags.length > 0}
+    {#if state}
+        <span class={cn('shrink-0 truncate text-[11px] text-muted-foreground', asideClass)} aria-hidden="true"
+            >{state}</span
+        >
+    {:else if tags.length > 0}
         <span class="flex min-w-0 shrink-0 justify-end" aria-hidden="true">
             <AppTags {tags} limit={2} class="flex-nowrap" chipClass="max-w-20" />
         </span>

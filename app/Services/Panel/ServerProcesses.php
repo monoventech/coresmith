@@ -22,49 +22,51 @@ final class ServerProcesses
     public function __construct(private readonly TeamAccess $access) {}
 
     /**
-     * @return list<array{app: string, href: string, process: string, state: array{key: string, label: string, tone: string}, memory: string|null, restarts: int, since: string|null}>
+     * @return array<string, array{label: string, tone: string}>
      */
-    public function for(Server $server, User $user): array
+    public function summaries(Server $server, User $user): array
     {
-        $applications = $this->access->applicationsOn($user, $server)->get()->keyBy(fn(Application $application): string => (string) $application->getKey());
+        $applications = $this->access->applicationsOn($user, $server)->orderBy('name')->get();
+        $processes = AppProcess::query()->whereIn('application_id', $applications->modelKeys())->get()->groupBy('application_id');
+        $summaries = [];
 
-        $rows = AppProcess::query()
-            ->whereIn('application_id', $applications->keys()->all())
-            ->get()
-            ->map(function (AppProcess $process) use ($server, $applications): array {
-                $application = $applications->get((string) $process->application_id);
-                $restarts = $process->restartsToday();
-                $state = $this->state($application, $process, $restarts);
+        foreach ($applications as $application) {
+            $states = collect($processes->get($application->getKey(), []))
+                ->map(fn(AppProcess $process): string => $this->state($application, $process, $process->restartsToday())['key']);
 
-                return [
-                    'app' => $application->name,
-                    'href' => route('servers.applications.show', [$server, $application]),
-                    'process' => $process->process,
-                    'state' => $state,
-                    'memory' => $process->memory_bytes === null ? null : Formats::size(intdiv($process->memory_bytes, 1048576)),
-                    'restarts' => $restarts,
-                    'since' => $process->active_state === 'active' ? Formats::when($process->started_at) : null,
-                    'rank' => match ($state['key']) {
-                        'failed' => 0,
-                        'restarting' => 1,
-                        default => 2,
-                    },
-                ];
-            })
-            ->sortBy([
-                fn(array $a, array $b): int => $a['rank'] <=> $b['rank'],
-                fn(array $a, array $b): int => $b['restarts'] <=> $a['restarts'],
-                fn(array $a, array $b): int => $a['app'] <=> $b['app'],
-                fn(array $a, array $b): int => $a['process'] <=> $b['process'],
-            ])
-            ->values();
+            if ($states->isEmpty()) {
+                continue;
+            }
 
-        return $rows->map(fn(array $row): array => array_diff_key($row, ['rank' => true]))->all();
+            $summaries[(string) $application->getKey()] = $this->summary($application, $states->countBy()->all(), $states->count());
+        }
+
+        return $summaries;
     }
 
     /**
-     * @return list<array{process: string, state: array{key: string, label: string, tone: string}, memory: string|null, restarts: int, since: string|null}>
+     * @param  array<string, int>  $counts
+     * @return array{label: string, tone: string}
      */
+    private function summary(Application $application, array $counts, int $total): array
+    {
+        $failed = $counts['failed'] ?? 0;
+        $restarting = $counts['restarting'] ?? 0;
+        $running = $counts['running'] ?? 0;
+        $trouble = array_filter([
+            $failed > 0 ? "{$failed} failed" : null,
+            $restarting > 0 ? $restarting . ($restarting === 1 ? ' keeps restarting' : ' keep restarting') : null,
+        ]);
+
+        return match (true) {
+            $application->power_state === PowerState::Sleeping => ['label' => 'Sleeping', 'tone' => 'default'],
+            $application->power_state === PowerState::Stopped => ['label' => 'Stopped', 'tone' => 'default'],
+            $trouble !== [] => ['label' => implode(', ', $trouble), 'tone' => $failed > 0 ? 'destructive' : 'warning'],
+            $running === $total => ['label' => "{$running} running", 'tone' => 'default'],
+            default => ['label' => "{$running} of {$total} running", 'tone' => 'default'],
+        };
+    }
+
     public function ofApplication(Application $application): array
     {
         return AppProcess::query()
@@ -97,7 +99,7 @@ final class ServerProcesses
             $process->sub_state === 'auto-restart' => ['key' => 'restarting', 'label' => 'Crashed, restarting', 'tone' => 'warning'],
             in_array($process->active_state, ['activating', 'reloading'], true) => ['key' => 'starting', 'label' => 'Starting', 'tone' => 'accent'],
             $process->active_state === 'active' => ['key' => 'running', 'label' => 'Running', 'tone' => 'success'],
-            $application->power_state === PowerState::Sleeping => ['key' => 'asleep', 'label' => 'Asleep', 'tone' => 'default'],
+            $application->power_state === PowerState::Sleeping => ['key' => 'asleep', 'label' => 'Sleeping', 'tone' => 'default'],
             $application->power_state === PowerState::Stopped => ['key' => 'stopped', 'label' => 'Stopped', 'tone' => 'default'],
             default => ['key' => 'stopped', 'label' => 'Stopped', 'tone' => 'warning'],
         };

@@ -47,6 +47,8 @@ use App\Services\Monitors\AppUptime;
 use App\Services\Network\ServerAddresses;
 use App\Services\Panel\AddAppForm;
 use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\AppProcesses;
+use App\Services\Panel\AppRuntimes;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
@@ -320,6 +322,13 @@ final class ApplicationController extends Controller
                 'migrations_href' => $user->can('update', $application) ? route('servers.applications.update', [$server, $application]) : null,
             ],
             'held' => $this->held($application, $live),
+            'processes' => app(AppProcesses::class)->rows($application, $user),
+            'runtimes' => app(AppRuntimes::class)->rows($application, $user),
+            'recent_deploys' => $application->deployments()->latest('created_at')->latest('id')->limit(3)->get()
+                ->map(fn(Deployment $deployment): array => [
+                    ...DeploymentPresenter::row($deployment->setRelation('application', $application->setRelation('server', $server))),
+                    'href' => route('servers.applications.deployments.show', [$server, $application, $deployment, 'from' => 'app']),
+                ])->values()->all(),
         ]);
     }
 

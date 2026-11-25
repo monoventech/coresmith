@@ -116,12 +116,12 @@ final class TerminalSessionController extends Controller
     }
 
     /**
-     * @return array{status: string, ended: array<string, mixed>|null}
+     * @return array{status: string, started_at: int|null, ended: array<string, mixed>|null}
      */
     private function body(TerminalSession $terminal): array
     {
         $present = TerminalController::present($terminal);
 
-        return ['status' => $present['status'], 'ended' => $present['ended']];
+        return ['status' => $present['status'], 'started_at' => $present['started_at'], 'ended' => $present['ended']];
     }
 }

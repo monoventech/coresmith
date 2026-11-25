@@ -98,6 +98,26 @@ test('a page that comes back asks the job for the screen and gets the latest one
     expect(app(TerminalInbox::class)->drain($session))->toBe([['type' => 'attach']]);
 });
 
+test('every answer says when the shell opened, so a page loaded before it opened can show the session is connected', function () {
+    $this->travelTo(now()->startOfSecond());
+    $session = terminalRequestsSession(TerminalStatus::Starting);
+    $session->forceFill(['started_at' => null])->save();
+
+    $this->actingAs($session->user)
+        ->postJson(terminalRequestsUrl('servers.terminal.check-in', $session))
+        ->assertOk()
+        ->assertJson(['status' => 'starting', 'started_at' => null]);
+
+    $session->forceFill(['status' => TerminalStatus::Open, 'started_at' => now()])->save();
+
+    foreach ([['postJson', 'servers.terminal.check-in'], ['getJson', 'servers.terminal.screen'], ['postJson', 'servers.terminal.resize']] as [$method, $name]) {
+        $this->actingAs($session->user)
+            ->{$method}(terminalRequestsUrl($name, $session), $name === 'servers.terminal.resize' ? ['cols' => 80, 'rows' => 24] : [])
+            ->assertOk()
+            ->assertJson(['status' => 'open', 'started_at' => now()->getTimestamp()]);
+    }
+});
+
 test('a finished session answers with how it ended and takes no more input', function () {
     $session = terminalRequestsSession(TerminalStatus::Closed);
     $session->forceFill(['end_reason' => TerminalEndReason::Idle, 'ended_at' => now()->addMinutes(12)])->save();
