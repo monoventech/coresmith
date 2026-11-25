@@ -104,6 +104,18 @@ test.describe('an application', () => {
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
     })
 
+    test('Visit opens the app at its address in a new tab', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const visit = page.getByTestId('visit-app')
+
+        await expect(visit).toBeVisible()
+        await expect(visit).toHaveAccessibleName('Visit atlas.monoven.io, opens in a new tab')
+        await expect(visit).toHaveAttribute('href', 'https://atlas.monoven.io')
+        await expect(visit).toHaveAttribute('target', '_blank')
+        await expect(visit).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
     test('a laravel app gets the toggles laravel apps need', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 

@@ -249,6 +249,30 @@ final class CloudflareDns
         }
     }
 
+    public function coveredByWildcard(#[SensitiveParameter] string $token, string $zone, string $apex, string $host): bool
+    {
+        $host = strtolower(trim($host, '.'));
+        $apex = strtolower(trim($apex, '.'));
+
+        if (!str_ends_with($host, ".{$apex}") || $this->records($token, $zone, $host) !== []) {
+            return false;
+        }
+
+        for ($parent = $host; $parent !== $apex;) {
+            $parent = substr($parent, (int) strpos($parent, '.') + 1);
+
+            if ($this->records($token, $zone, "*.{$parent}") !== []) {
+                return true;
+            }
+
+            if ($parent !== $apex && $this->records($token, $zone, $parent) !== []) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

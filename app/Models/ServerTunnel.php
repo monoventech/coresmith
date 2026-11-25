@@ -47,6 +47,21 @@ class ServerTunnel extends Model
         return $this->state === self::OPEN && in_array(strtolower($host), (array) $this->hosts, true);
     }
 
+    public function skipReason(string $host): ?string
+    {
+        if ($this->state !== self::OPEN) {
+            return null;
+        }
+
+        foreach ((array) $this->skipped as $row) {
+            if (is_array($row) && ($row['host'] ?? null) === strtolower($host) && is_string($row['reason'] ?? null)) {
+                return $row['reason'];
+            }
+        }
+
+        return null;
+    }
+
     public static function forThisMachine(): ?self
     {
         return self::query()

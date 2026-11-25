@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Jobs\CheckDomainReach;
 use App\Jobs\SyncServerTunnel;
 use App\Models\Application;
 use App\Models\Server;
@@ -14,6 +15,7 @@ use App\Services\Tunnel\CloudflareTunnels;
 use App\Services\Tunnel\TunnelSync;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
@@ -256,4 +258,59 @@ test('a domain that already answers from somewhere Coresmith cannot see in Cloud
         ->and($tunnel->hosts)->toBe(['beelink.coresmith.io'])
         ->and($tunnel->skipped)->toBe([['host' => 'pencil.example', 'reason' => "pencil.example already answers from somewhere Coresmith can't see in Cloudflare, so Coresmith left it alone."]]);
     Http::assertNotSent(fn(Request $request): bool => $request->method() === 'POST' && ($request->data()['name'] ?? null) === 'pencil.example');
+});
+
+test('a name only its zone\'s wildcard answers for goes through the tunnel, and the wildcard stays for every other name', function () {
+    CloudflareConnection::connect('cf-token');
+    $server = tunnelSyncServer();
+    Application::factory()->for($server->team)->for($server)->create(['domain' => 'shop.pencil.example', 'additional_domains' => []]);
+    $tunnel = ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPENING]);
+    tunnelSyncTransport();
+    tunnelSyncResolves(['shop.pencil.example' => ['88.99.12.121']]);
+    tunnelSyncCloudflare(['%2A.pencil.example' => [['id' => 'w1', 'type' => 'A', 'name' => '*.pencil.example', 'content' => '88.99.12.121', 'proxied' => false]]]);
+
+    app()->call([new SyncServerTunnel($server), 'handle']);
+
+    $tunnel->refresh();
+
+    expect($tunnel->hosts)->toContain('shop.pencil.example')
+        ->and($tunnel->skipped)->toBe([]);
+    Http::assertSent(fn(Request $request): bool => $request->method() === 'POST' && ($request->data()['name'] ?? null) === 'shop.pencil.example' && ($request->data()['type'] ?? null) === 'CNAME');
+    Http::assertNotSent(fn(Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/dns_records/w1'));
+});
+
+test('a name the tunnel routes for the first time gets its app\'s domains checked again, so a missing certificate is asked for', function () {
+    Queue::fake([CheckDomainReach::class]);
+    CloudflareConnection::connect('cf-token');
+    $server = tunnelSyncServer();
+    $shop = Application::factory()->for($server->team)->for($server)->create(['domain' => 'pencil.example', 'additional_domains' => []]);
+    $notes = Application::factory()->for($server->team)->for($server)->create(['domain' => 'notes.coresmith.io', 'additional_domains' => []]);
+    ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPEN, 'hosts' => ['beelink.coresmith.io', 'notes.coresmith.io']]);
+    tunnelSyncTransport();
+    tunnelSyncCloudflare();
+
+    app()->call([new SyncServerTunnel($server), 'handle']);
+
+    Queue::assertPushed(CheckDomainReach::class, fn(CheckDomainReach $job): bool => $job->application->is($shop));
+    Queue::assertNotPushed(CheckDomainReach::class, fn(CheckDomainReach $job): bool => $job->application->is($notes));
+});
+
+test('a wildcard above a name that has records of its own on the way down does not count, since that branch answers for itself', function () {
+    CloudflareConnection::connect('cf-token');
+    $server = tunnelSyncServer();
+    Application::factory()->for($server->team)->for($server)->create(['domain' => 'shop.eu.pencil.example', 'additional_domains' => []]);
+    $tunnel = ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPENING]);
+    tunnelSyncTransport();
+    tunnelSyncResolves(['shop.eu.pencil.example' => ['203.0.113.9']]);
+    tunnelSyncCloudflare([
+        '%2A.pencil.example' => [['id' => 'w1', 'type' => 'A', 'name' => '*.pencil.example', 'content' => '88.99.12.121', 'proxied' => false]],
+        'eu.pencil.example' => [['id' => 'n1', 'type' => 'NS', 'name' => 'eu.pencil.example', 'content' => 'ns1.elsewhere.example', 'proxied' => false]],
+    ]);
+
+    app()->call([new SyncServerTunnel($server), 'handle']);
+
+    $tunnel->refresh();
+
+    expect($tunnel->hosts)->not->toContain('shop.eu.pencil.example')
+        ->and($tunnel->skipped)->toBe([['host' => 'shop.eu.pencil.example', 'reason' => "shop.eu.pencil.example already answers from somewhere Coresmith can't see in Cloudflare, so Coresmith left it alone."]]);
 });
