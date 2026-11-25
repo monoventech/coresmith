@@ -18,7 +18,7 @@ export type LinkState = 'connecting' | 'connected' | 'reconnecting' | 'ended' | 
 export type Warning = { reason: 'idle' | 'hour'; endsAt: number }
 export type Screen = { write(bytes: Uint8Array): void; reset(): void }
 
-type Status = { status: string; ended: Ended | null }
+type Status = { status: string; started_at: number | null; ended: Ended | null }
 type Saved = Status & { seq: number; screen: string }
 type Socket = { bind(event: string, handler: (change: { current: string }) => void): void }
 
@@ -74,6 +74,7 @@ function randomId(): string {
 
 export class TerminalLink {
     state = $state<LinkState>('connecting')
+    startedAt = $state<number | null>(null)
     ended = $state<Ended | null>(null)
     warning = $state<Warning | null>(null)
 
@@ -88,6 +89,7 @@ export class TerminalLink {
     private checkTimer: ReturnType<typeof setInterval> | null = null
     private channel: string | null = null
     private closed = false
+    private asked = false
 
     constructor(
         private readonly id: string,
@@ -248,6 +250,11 @@ export class TerminalLink {
             return
         }
 
+        if (this.startedAt === null && !this.asked) {
+            this.asked = true
+            void this.sync()
+        }
+
         this.held[seq] = decode(data)
         this.drain()
         this.watchGap()
@@ -341,6 +348,10 @@ export class TerminalLink {
     }
 
     private apply(status: Status): void {
+        if (typeof status.started_at === 'number') {
+            this.startedAt = status.started_at
+        }
+
         if (status.ended) {
             this.ended = status.ended
             this.warning = null
