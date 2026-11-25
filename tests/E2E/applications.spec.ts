@@ -602,10 +602,14 @@ test.describe('what the full app page adds on a wider screen', () => {
             'location'
         )
 
-        const pinned = await index.boundingBox()
-        const main = await page.getByTestId('panel-main').boundingBox()
+        await expect
+            .poll(async () => {
+                const pinned = await index.boundingBox()
+                const main = await page.getByTestId('panel-main').boundingBox()
 
-        expect(Math.abs((pinned?.y ?? 0) - (main?.y ?? 0))).toBeLessThan(2)
+                return Math.abs((pinned?.y ?? 0) - (main?.y ?? 0))
+            })
+            .toBeLessThan(2)
     })
 
     test('long advice for several domains runs the full width of the Domains card, under its rows', async ({
