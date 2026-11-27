@@ -111,6 +111,26 @@ test('an owner with two-factor on gives a code too, and a recovery code works on
     expect($owner->fresh()->recoveryCodes())->not->toContain('recover-one');
 });
 
+test('a wrong password never spends the two-factor code or recovery code typed with it', function () {
+    $folder = removalFolder();
+    removalHelper($folder);
+    $google = new Google2FA;
+    $secret = $google->generateSecretKey();
+    $owner = removalOwner(['two_factor_secret' => encrypt($secret), 'two_factor_recovery_codes' => encrypt(json_encode(['recover-one'])), 'two_factor_confirmed_at' => now()]);
+    $code = $google->getCurrentOtp($secret);
+
+    foreach ([$code, 'recover-one'] as $given) {
+        removalAsk($owner->fresh(), ['password' => 'wrong', 'code' => $given])
+            ->assertSessionHasErrors(['password' => "That password isn't right."])
+            ->assertSessionDoesntHaveErrors('code');
+    }
+
+    expect($owner->fresh()->recoveryCodes())->toBe(['recover-one'])
+        ->and(file_exists("{$folder}/request"))->toBeFalse();
+
+    removalAsk($owner->fresh(), ['code' => $code])->assertRedirect(route('settings.removal.show'));
+});
+
 test('a wrong address or password is refused next to its field', function (array $payload, array $errors) {
     removalHelper(removalFolder());
 

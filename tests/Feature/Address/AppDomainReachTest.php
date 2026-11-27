@@ -301,6 +301,31 @@ test("Add an app shows the server's addresses to point a domain at, from its las
         ->assertInertia(fn(AssertableInertia $page) => $page->where('server.dns_targets', [['type' => 'A', 'value' => '203.0.113.7', 'closed' => false]]));
 });
 
+test("Add an app says how to bring IPv4 visitors in when the server's IPv4 doesn't answer, and stays quiet once a way in is on", function () {
+    $application = appReachApp();
+    $server = $application->server;
+    $server->forceFill(['public_addresses' => ['ipv4' => '203.0.113.7', 'ipv4_open' => false, 'ipv6' => ['2001:db8::7'], 'checked_at' => '2026-11-13T12:00:00+00:00']])->save();
+    $owner = appReachMember($application, TeamRole::Owner);
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $server))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('server.network', [
+            'text' => "Visitors can't reach this server's IPv4 address from the internet, so people without IPv6 can't open the apps here.",
+            'action' => 'Bring IPv4 visitors in',
+            'href' => route('servers.network', $server),
+        ]));
+
+    ServerTunnel::query()->create(['server_id' => $server->id, 'state' => ServerTunnel::OPEN]);
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $server))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('server.network', null));
+
+    $server->tunnel()->delete();
+    $server->forceFill(['public_addresses' => ['ipv4' => '203.0.113.7', 'ipv4_open' => true, 'ipv6' => [], 'checked_at' => '2026-11-13T12:00:00+00:00']])->save();
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $server))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('server.network', null));
+});
+
 test("the Add a domain dialog shows the server's addresses from its last reading, and nothing before one", function (?array $addresses, array $targets) {
     $application = appReachApp();
     $application->server->forceFill(['public_addresses' => $addresses])->save();
