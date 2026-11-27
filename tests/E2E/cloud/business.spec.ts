@@ -7,12 +7,9 @@ test.describe('business features on coresmith cloud', () => {
     })
 
     test('a business team downloads its audit log', async ({ page }) => {
-        await page.goto('/atelier/settings/team')
+        await page.goto('/atelier/audit-log')
 
-        const [download] = await Promise.all([
-            page.waitForEvent('download'),
-            page.getByTestId('audit-log-card').getByRole('link', { name: 'Export CSV' }).click()
-        ])
+        const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('audit-export').click()])
 
         expect(download.suggestedFilename()).toMatch(/^coresmith-atelier-audit-\d{4}-\d{2}-\d{2}\.csv$/)
 
@@ -24,13 +21,12 @@ test.describe('business features on coresmith cloud', () => {
         expect(lines.some((line) => line.includes('server_provisioned,server,atelier-01'))).toBe(true)
     })
 
-    test('a pro team is told audit export is part of business', async ({ page }) => {
-        await page.goto('/monoven/settings/team')
+    test('a pro team reads its audit log and is told export is part of business', async ({ page }) => {
+        await page.goto('/monoven/audit-log')
 
-        const card = page.getByTestId('audit-log-card')
-
-        await expect(card).toContainText('Audit log export is part of Business.')
-        await expect(card.getByRole('link', { name: 'Export CSV' })).toHaveCount(0)
+        await expect(page.getByRole('heading', { level: 1, name: 'Audit log' })).toBeVisible()
+        await expect(page.getByTestId('plan-note')).toContainText('Audit log export is part of Business.')
+        await expect(page.getByTestId('audit-export')).toHaveCount(0)
     })
 })
 

@@ -1,8 +1,22 @@
 import type { Page } from '@playwright/test'
-import { applicationRow, dialog, expect, gotoServer, main, nav, test } from './support/fixtures'
+import {
+    applicationRow,
+    blockingViolations,
+    dialog,
+    expect,
+    gotoServer,
+    main,
+    nav,
+    test,
+    useTheme
+} from './support/fixtures'
 
 function palette(page: Page) {
     return page.getByRole('dialog', { name: 'Command palette' })
+}
+
+function group(page: Page, name: string) {
+    return palette(page).getByRole('group', { name, exact: true })
 }
 
 async function openPalette(page: Page) {
@@ -19,9 +33,18 @@ test.describe('the shell', () => {
         const sections = [
             ['Deploys', /\/deployments$/],
             ['Releases', /\/releases$/],
+            ['Audit log', /\/audit-log$/],
             ['Settings', /\/settings$/],
             ['Fleet', /\/dashboard$/]
         ] as const
+
+        await expect(nav(page).getByRole('link')).toContainText([
+            'Fleet',
+            'Deploys',
+            'Releases',
+            'Audit log',
+            'Settings'
+        ])
 
         for (const [name, url] of sections) {
             await nav(page).getByRole('link', { name, exact: true }).click()
@@ -91,13 +114,121 @@ test.describe('the command palette', () => {
         await expect(palette(page).getByRole('option')).toHaveCount(0)
     })
 
-    test('it offers the running deploy and every server', async ({ page }) => {
+    test('it opens on a few rows: the running deploy and the actions, never every app', async ({ page }) => {
         await page.goto('/dashboard')
         await openPalette(page)
 
-        await expect(palette(page).getByRole('option', { name: /Watch the running deploy/ })).toBeVisible()
-        await expect(palette(page).getByRole('option', { name: /Open forge-01/ })).toBeVisible()
+        await expect(group(page, 'Actions').getByRole('option').first()).toHaveAccessibleName(
+            /^Watch the running deploy/
+        )
+        await expect.poll(() => palette(page).getByRole('option').count()).toBeLessThanOrEqual(14)
+        await expect(palette(page).getByRole('option', { name: /^forge-01/ })).toHaveCount(0)
+
+        await page.keyboard.type('forge-01')
+        await expect(group(page, 'Servers').getByRole('option').first()).toHaveAccessibleName(/^forge-01\b/)
     })
+
+    test('on a page about one thing it offers that thing first, and remembers what was opened', async ({ page }) => {
+        await gotoServer(page, 'forge-01')
+        await openPalette(page)
+
+        await expect(group(page, 'This server').getByRole('option', { name: /^Hardening/ })).toBeVisible()
+        await expect(group(page, 'This server').getByRole('option', { name: /^Open\b/ })).toHaveCount(0)
+        await page.keyboard.press('Escape')
+
+        await gotoServer(page, 'anvil-01')
+        await openPalette(page)
+
+        await expect(group(page, 'Recent').getByRole('option', { name: /^forge-01\b/ })).toBeVisible()
+        await expect(group(page, 'Recent').getByRole('option', { name: /^anvil-01\b/ })).toHaveCount(0)
+    })
+
+    test('typing ranks names that start with it first, shows five of each kind, and the rest on request', async ({
+        page
+    }) => {
+        await page.goto('/dashboard')
+        await openPalette(page)
+
+        await page.keyboard.type('b')
+
+        const apps = group(page, 'Apps')
+
+        await expect(apps.getByRole('option')).toHaveCount(6)
+        await expect(apps.getByRole('option').first()).toHaveAccessibleName(/^b/)
+        await expect(apps.getByTestId('palette-more')).toHaveAccessibleName(/^Show all \d+ apps$/)
+
+        await apps.getByTestId('palette-more').click()
+
+        await expect.poll(() => apps.getByRole('option').count()).toBeGreaterThan(6)
+        await expect(apps.getByTestId('palette-more')).toHaveCount(0)
+        await expect.poll(() => apps.getByRole('option').count()).toBeLessThanOrEqual(50)
+    })
+
+    test("the right arrow lists a thing's pages, and the left arrow goes back to the results", async ({ page }) => {
+        await page.goto('/dashboard')
+        await openPalette(page)
+
+        await page.keyboard.type('forge-01')
+        await expect(group(page, 'Servers').getByRole('option').first()).toHaveAttribute('aria-selected', 'true')
+        await page.keyboard.press('ArrowRight')
+
+        const pages = group(page, 'forge-01')
+
+        await expect(pages.getByRole('option', { name: /^Open\b/ })).toBeVisible()
+        await expect(pages.getByRole('option', { name: /^Hardening/ })).toBeVisible()
+        await expect(palette(page).getByRole('combobox')).toHaveValue('')
+
+        await page.keyboard.press('ArrowLeft')
+
+        await expect(palette(page).getByRole('combobox')).toHaveValue('forge-01')
+        await expect(group(page, 'Servers').getByRole('option').first()).toHaveAttribute('aria-selected', 'true')
+
+        await page.keyboard.press('ArrowRight')
+        await page.keyboard.type('hard')
+        await page.keyboard.press('Enter')
+
+        await page.waitForURL(/\/hardening$/)
+        await expect(page.getByRole('heading', { level: 1, name: 'forge-01' })).toBeVisible()
+    })
+
+    test("a pointer opens a thing's pages from the chevron at the end of its row", async ({ page }) => {
+        await page.goto('/dashboard')
+        await openPalette(page)
+
+        await page.keyboard.type('atlas')
+
+        const atlas = group(page, 'Apps').getByRole('option', { name: /^atlas production/ })
+
+        await atlas.hover()
+        await atlas.getByTestId('palette-inside').click()
+
+        await expect(group(page, 'atlas').getByRole('option', { name: /^Releases/ })).toBeVisible()
+        await group(page, 'atlas')
+            .getByRole('option', { name: /^Releases/ })
+            .click()
+
+        await expect(page.getByRole('heading', { level: 1, name: /^Releases · atlas/ })).toBeVisible()
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the open palette has no serious or critical accessibility violations in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await gotoServer(page, 'forge-01')
+            await openPalette(page)
+
+            expect(await blockingViolations(page)).toEqual([])
+
+            await page.keyboard.type('b')
+            await expect(group(page, 'Apps')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+
+            await page.keyboard.type('zzzz')
+            await expect(palette(page)).toContainText('Nothing matches “bzzzz”.')
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 
     test('the arrow keys move the selection', async ({ page }) => {
         await page.goto('/dashboard')
@@ -116,12 +247,17 @@ test.describe('the command palette', () => {
         await openPalette(page)
 
         const options = palette(page).getByRole('option')
+
+        await page.keyboard.type('b')
+        await expect(options.nth(8)).toBeAttached()
+
         const third = await options.nth(2).boundingBox()
 
         await page.keyboard.press('Escape')
         await expect(palette(page)).toHaveCount(0)
         await page.mouse.move((third?.x ?? 0) + 40, (third?.y ?? 0) + (third?.height ?? 0) / 2)
         await openPalette(page)
+        await page.keyboard.type('b')
         await expect(options.nth(8)).toBeAttached()
         await palette(page)
             .getByRole('listbox')
@@ -153,7 +289,7 @@ test.describe('the command palette', () => {
         await page.goto('/dashboard')
         await openPalette(page)
 
-        await page.keyboard.type('Open outpost-01')
+        await page.keyboard.type('outpost-01')
         await page.keyboard.press('Enter')
 
         await expect(page.getByRole('heading', { level: 1, name: 'outpost-01' })).toBeVisible()

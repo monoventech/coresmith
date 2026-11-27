@@ -181,7 +181,7 @@ test('the cloud browser seed has a business team with a history', function () {
 
     expect(app(TeamBilling::class)->status($atelier)->plan)->toBe(Plan::Business)
         ->and($atelier->servers()->pluck('name')->all())->toBe(['atelier-01'])
-        ->and(iterator_to_array(app(AuditLog::class)->rows($atelier, null), false))->toHaveCount(3);
+        ->and(iterator_to_array(app(AuditLog::class)->rows($atelier, ['period' => 'all', 'who' => 'anyone', 'what' => 'everything']), false))->toHaveCount(3);
 });
 
 test('the cloud browser seed has a business team sending its databases to s3', function () {

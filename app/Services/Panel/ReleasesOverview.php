@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Panel;
 
+use App\Enums\DeploymentStatus;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Project;
@@ -23,7 +24,7 @@ final readonly class ReleasesOverview
 {
     public const PER_PAGE = 50;
 
-    public function __construct(private TeamAccess $access) {}
+    public function __construct(private TeamAccess $access, private RollbackHistory $history) {}
 
     /**
      * @return array{ids: list<string>, total: int}
@@ -70,6 +71,15 @@ final readonly class ReleasesOverview
 
         $order = array_flip($ids);
         $applications = Application::query()
+            ->select('applications.*')
+            ->addSelect(['newest_release' => Deployment::query()
+                ->select('release')
+                ->whereColumn('application_id', 'applications.id')
+                ->where('status', DeploymentStatus::Succeeded->value)
+                ->whereNotNull('release')
+                ->latest('finished_at')
+                ->latest('id')
+                ->limit(1)])
             ->whereIn('id', $ids)
             ->with(['server', 'project'])
             ->get()
@@ -89,6 +99,34 @@ final readonly class ReleasesOverview
         }
 
         return array_map(fn(array $group): array => ['name' => $group['name'], 'apps' => $group['apps']], $groups);
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return list<array{id: string, name: string, server: string|null, project: string|null, href: string}>
+     */
+    public function picks(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $order = array_flip($ids);
+
+        return Application::query()
+            ->whereIn('id', $ids)
+            ->with(['server', 'project'])
+            ->get()
+            ->sortBy(fn(Application $application): int => $order[(string) $application->getKey()])
+            ->map(fn(Application $application): array => [
+                'id' => (string) $application->getKey(),
+                'name' => $application->name,
+                'server' => $application->server?->name,
+                'project' => $application->project?->name,
+                'href' => route('servers.applications.releases.index', [app(RouteKeys::class)->server($application->server_id), $application]),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -115,6 +153,16 @@ final readonly class ReleasesOverview
             ->keyBy('application_id');
     }
 
+    private function rolledBack(Application $application): bool
+    {
+        $newest = $application->getAttribute('newest_release');
+
+        return $application->current_release !== null
+            && is_string($newest)
+            && $newest !== $application->current_release
+            && $this->history->rolledBack($application);
+    }
+
     /**
      * @param  array<string, string>  $query
      * @return array<string, mixed>
@@ -129,6 +177,9 @@ final readonly class ReleasesOverview
             'href' => route('servers.applications.releases.index', [app(RouteKeys::class)->server($application->server_id), $application, ...$query]),
             'release' => $application->current_release === null ? null : 'releases/' . Formats::release($application->current_release),
             'tag' => $live?->tag,
+            'commit' => $live?->commit_hash === null ? null : substr($live->commit_hash, 0, 7),
+            'subject' => Formats::subject($live?->commit_message),
+            'rolled_back' => $this->rolledBack($application),
             'when' => Formats::when($live?->finished_at),
             'full' => Formats::absolute($live?->finished_at),
         ];

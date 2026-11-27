@@ -6,7 +6,7 @@
     import { themeState } from '@/lib/theme.svelte'
     import { cn } from '@/lib/utils'
     import { Link, page } from '@inertiajs/svelte'
-    import { Layers, LayoutGrid, ListChecks, Moon, Rocket, Settings, Sun } from '@lucide/svelte'
+    import { FileClock, Layers, LayoutGrid, ListChecks, Moon, Rocket, Settings, Sun } from '@lucide/svelte'
 
     let { onAccount }: { onAccount: () => void } = $props()
 
@@ -32,6 +32,9 @@
             { id: 'fleet', label: 'Fleet', href: route('dashboard'), icon: LayoutGrid },
             { id: 'deployments', label: 'Deploys', href: route('deployments.index'), icon: Rocket },
             { id: 'releases', label: 'Releases', href: route('releases.index'), icon: Layers },
+            ...(panel?.can.auditLog
+                ? [{ id: 'audit-log' as const, label: 'Audit log', href: route('audit-log.index'), icon: FileClock }]
+                : []),
             { id: 'settings', label: 'Settings', href: route('settings.general'), icon: Settings }
         ]
 

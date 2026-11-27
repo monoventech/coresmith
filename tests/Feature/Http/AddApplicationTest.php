@@ -75,10 +75,10 @@ test('people who cannot add apps are refused', function () {
 
 test('the command palette offers Add an app and Create a project to people who can do them', function (TeamRole $role, bool $apps, bool $projects) {
     $team = Team::factory()->owned()->create();
-    $commands = collect((new CommandPalette(addAppPerson($team, $role), $team))->commands())->keyBy('label');
+    $commands = collect((new CommandPalette(addAppPerson($team, $role), $team))->items())->keyBy('label');
 
-    expect($commands->get('Add an app'))->toBe($apps ? ['label' => 'Add an app', 'icon' => 'plus', 'hint' => 'from a repository', 'href' => route('applications.new')] : null)
-        ->and($commands->get('Create a project'))->toBe($projects ? ['label' => 'Create a project', 'icon' => 'folder', 'hint' => 'group apps and databases', 'href' => route('projects.index', ['create' => 1])] : null);
+    expect($commands->get('Add an app'))->toBe($apps ? ['id' => 'action:add-app', 'kind' => 'action', 'label' => 'Add an app', 'icon' => 'plus', 'hint' => 'from a repository', 'href' => route('applications.new')] : null)
+        ->and($commands->get('Create a project'))->toBe($projects ? ['id' => 'action:create-project', 'kind' => 'action', 'label' => 'Create a project', 'icon' => 'folder', 'hint' => 'group apps and databases', 'href' => route('projects.index', ['create' => 1])] : null);
 })->with([
     'an admin' => [TeamRole::Admin, true, true],
     'a developer' => [TeamRole::Developer, true, true],

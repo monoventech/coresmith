@@ -30,7 +30,6 @@ final class Breadcrumbs
         'settings.notifications' => 'Notifications',
         'api-tokens.index' => 'API tokens',
         'settings.billing' => 'Billing',
-        'settings.audit-log' => 'Audit log',
     ];
 
     private const ACCOUNT = ['profile.edit' => 'Profile', 'security.edit' => 'Security'];
@@ -75,6 +74,7 @@ final class Breadcrumbs
             $name === 'applications.new' => [$fleet, self::crumb('Add an app')],
             $name === 'deployments.index' => [self::crumb('Deployments')],
             $name === 'releases.index' => [self::crumb('Releases')],
+            $name === 'audit-log.index' => [self::crumb('Audit log')],
             $name === 'setup.show' => [self::crumb('Finish setup')],
             isset(self::SETTINGS[$name]) => [$settings, self::crumb(self::SETTINGS[$name])],
             $name === 'settings.removal.show' => [$settings, self::crumb('General', route('settings.general')), self::crumb('Remove Coresmith')],
@@ -85,6 +85,23 @@ final class Breadcrumbs
             $server instanceof Server => $this->server($server, $name, $fleet),
             default => [],
         }];
+    }
+
+    public function subject(Request $request, ?User $user): ?string
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $route = $request->route();
+
+        return match (true) {
+            ($application = $this->bound($route, Application::class, $user)) instanceof Application => 'app:' . $application->getKey(),
+            ($database = $this->bound($route, ManagedDatabase::class, $user)) instanceof ManagedDatabase => 'database:' . $database->getKey(),
+            ($server = $this->bound($route, Server::class, $user)) instanceof Server => 'server:' . $server->getKey(),
+            ($project = $this->bound($route, Project::class, $user)) instanceof Project => 'project:' . $project->getKey(),
+            default => null,
+        };
     }
 
     /**

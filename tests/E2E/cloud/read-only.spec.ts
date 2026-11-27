@@ -75,14 +75,18 @@ test.describe('read-only teams on coresmith cloud', () => {
 
         const reason = "This team's plan has ended, so it is read-only."
         const offsite = page.getByTestId('offsite-backups-card')
-        const audit = page.getByTestId('audit-log-card')
 
         await expect(offsite.getByTestId('plan-note')).toContainText(reason)
         await expect(offsite.getByTestId('plan-note').getByRole('link', { name: 'Choose a plan' })).toBeVisible()
         await expect(offsite).toContainText('s3://ended-backups/')
         await expect(offsite.getByRole('button', { name: 'Remove' })).toBeVisible()
         await expect(offsite.getByRole('button', { name: 'Change' })).toHaveCount(0)
-        await expect(audit.getByTestId('plan-note')).toContainText(reason)
+        await expect(page.getByRole('main')).not.toContainText('part of Business')
+
+        await page.goto('/ended-business/audit-log')
+
+        await expect(page.getByTestId('plan-note')).toContainText(reason)
+        await expect(page.getByTestId('audit-export')).toHaveCount(0)
         await expect(page.getByRole('main')).not.toContainText('part of Business')
     })
 
