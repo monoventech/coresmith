@@ -30,7 +30,6 @@ final class Breadcrumbs
         'settings.notifications' => 'Notifications',
         'api-tokens.index' => 'API tokens',
         'settings.billing' => 'Billing',
-        'settings.audit-log' => 'Audit log',
     ];
 
     private const ACCOUNT = ['profile.edit' => 'Profile', 'security.edit' => 'Security'];
@@ -75,6 +74,7 @@ final class Breadcrumbs
             $name === 'applications.new' => [$fleet, self::crumb('Add an app')],
             $name === 'deployments.index' => [self::crumb('Deployments')],
             $name === 'releases.index' => [self::crumb('Releases')],
+            $name === 'audit-log.index' => [self::crumb('Audit log')],
             $name === 'setup.show' => [self::crumb('Finish setup')],
             isset(self::SETTINGS[$name]) => [$settings, self::crumb(self::SETTINGS[$name])],
             $name === 'settings.removal.show' => [$settings, self::crumb('General', route('settings.general')), self::crumb('Remove Coresmith')],

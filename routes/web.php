@@ -17,6 +17,7 @@ use App\Http\Controllers\ApplicationSchedulerLogController;
 use App\Http\Controllers\ApplicationSetupController;
 use App\Http\Controllers\ApplicationTagsController;
 use App\Http\Controllers\ApplicationToggleController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\ConfirmEmailController;
 use App\Http\Controllers\CloudServerController;
 use App\Http\Controllers\CurrentTeamController;
@@ -68,6 +69,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'overview'])->name('releases.index');
     Route::get('releases/apps', [ReleasesController::class, 'apps'])->name('releases.apps');
+    Route::get('audit-log', [AuditLogController::class, 'index'])->name('audit-log.index');
+    Route::get('audit-log/export', [AuditLogController::class, 'export'])
+        ->middleware('throttle:6,1,audit-export')
+        ->name('audit-log.export');
 
     Route::get('applications/new', AddApplicationController::class)->name('applications.new');
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');

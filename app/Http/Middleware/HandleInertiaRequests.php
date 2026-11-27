@@ -198,6 +198,7 @@ class HandleInertiaRequests extends Middleware
             'attention' => $fleet === null ? 0 : count($fleet->attention()),
             'can' => [
                 'createServer' => $team !== null && $user->hasTeamAbility($team, Ability::CreateServer),
+                'auditLog' => $team !== null && $user->can('update', $team),
             ],
             'live' => [
                 'streaming' => Realtime::available(),

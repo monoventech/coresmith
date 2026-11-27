@@ -1,11 +1,11 @@
 import type { Locator, Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
 import {
     asMember,
     backToMonoven,
     dialog,
     expect,
     gotoSettings,
+    nav,
     own,
     pageData,
     test,
@@ -168,24 +168,6 @@ test.describe('the team', () => {
         expect(await titles.evaluate((seen) => [...seen])).toEqual(['Remove Rowan Hale?'])
         await expect(member(page, 'rowan@coresmith.test')).toHaveCount(1)
     })
-
-    test('the audit log downloads as a csv', async ({ page }) => {
-        await page.goto('/monoven/settings/team')
-
-        const card = page.getByTestId('audit-log-card')
-
-        await expect(card.getByLabel('Period')).toHaveValue('90')
-
-        const [download] = await Promise.all([
-            page.waitForEvent('download'),
-            card.getByRole('link', { name: 'Export CSV' }).click()
-        ])
-
-        expect(download.suggestedFilename()).toMatch(/^coresmith-monoven-audit-\d{4}-\d{2}-\d{2}\.csv$/)
-        expect(readFileSync(await download.path(), 'utf8').split('\n')[0]).toBe(
-            'time,actor,actor_email,event,subject_type,subject,details'
-        )
-    })
 })
 
 test.describe('database backups to s3', () => {
@@ -289,5 +271,6 @@ asMember.describe('the team as a member', () => {
         await expect(page.getByTestId('team-card').getByRole('combobox')).toHaveCount(0)
         await expect(page.getByTestId('team-card').getByRole('button', { name: /^Remove / })).toHaveCount(0)
         await expect(page.getByTestId('audit-log-card')).toHaveCount(0)
+        await expect(nav(page).getByRole('link', { name: 'Audit log' })).toHaveCount(0)
     })
 })

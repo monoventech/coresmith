@@ -1,4 +1,4 @@
-export type Section = 'fleet' | 'deployments' | 'releases' | 'settings' | 'setup'
+export type Section = 'fleet' | 'deployments' | 'releases' | 'audit-log' | 'settings' | 'setup'
 
 export type PanelTeam = {
     id: string
@@ -17,7 +17,7 @@ export type PanelProps = {
     viaHost: boolean
     setup: { complete: boolean; current: number; total: number } | null
     attention: number
-    can: { createServer: boolean }
+    can: { createServer: boolean; auditLog: boolean }
     live: {
         streaming: boolean
         refresh_seconds: number
@@ -121,6 +121,10 @@ export function sectionFor(path: string): Section | null {
 
     if (path.startsWith('/releases') || /^\/servers\/[^/]+\/applications\/[^/]+\/releases/.test(path)) {
         return 'releases'
+    }
+
+    if (path.startsWith('/audit-log')) {
+        return 'audit-log'
     }
 
     if (path.startsWith('/dashboard') || path.startsWith('/servers') || path.startsWith('/projects')) {

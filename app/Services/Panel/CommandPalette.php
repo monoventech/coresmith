@@ -89,6 +89,7 @@ final class CommandPalette
             self::page('deployments', 'Deployments', 'rocket', 'fleet-wide history', route('deployments.index')),
             $team ? self::page('releases', 'Releases', 'layers', "what's live, and rollbacks", route('releases.index')) : null,
             $team ? self::page('projects', 'Projects', 'folder', 'apps in groups', route('projects.index')) : null,
+            $team && $this->user->can('update', $this->team) ? self::page('audit-log', 'Audit log', 'file-clock', 'who changed what', route('audit-log.index'), ['history', 'changes', 'export']) : null,
             $team ? self::page('settings', 'Settings', 'settings', 'general', route('settings.general'), ['general']) : null,
             $team ? self::page('team', 'Team', 'users', 'settings', route('teams.index'), ['members', 'roles', 'invite', 'access']) : null,
             $team ? self::page('git', 'Git', 'git-branch', 'settings', route('source-providers.index'), ['github', 'gitlab', 'bitbucket', 'repositories']) : null,

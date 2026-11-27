@@ -44,7 +44,7 @@ function auditCsv(TestResponse $response): array
 
 function auditExport(Team $team, ?string $period = null, ?User $user = null): TestResponse
 {
-    return test()->actingAs($user ?? auditOwner($team))->get(route('settings.audit-log', array_filter(['period' => $period])));
+    return test()->actingAs($user ?? auditOwner($team))->get(route('audit-log.export', array_filter(['period' => $period])));
 }
 
 beforeEach(function () {
@@ -190,10 +190,10 @@ test('the period limits the rows', function () {
 test('an unknown period is refused', function (mixed $period) {
     $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
 
-    $this->actingAs(auditOwner($team))->get(route('settings.audit-log') . '?' . http_build_query(['period' => $period]))
+    $this->actingAs(auditOwner($team))->get(route('audit-log.export') . '?' . http_build_query(['period' => $period]))
         ->assertRedirect()
         ->assertSessionHasErrors('period');
-})->with(['a number of days not offered' => ['7'], 'a word' => ['forever'], 'a list' => [['30']]]);
+})->with(['a number of days not offered' => ['14'], 'a word' => ['forever'], 'a list' => [['30']]]);
 
 test('a spreadsheet never runs what a cell says', function (string $name) {
     $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
@@ -221,7 +221,7 @@ test('secrets in details are redacted', function () {
     $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
     activity()->performedOn(Server::factory()->for($team)->create())->withProperties(['command' => 'mysql --password=hunter2hunter2'])->log('ssh_command_executed');
 
-    $details = auditCsv(auditExport($team)->assertOk())[1][6];
+    $details = auditCsv($this->actingAs(auditOwner($team))->get(route('audit-log.export', ['what' => 'commands']))->assertOk())[1][6];
 
     expect($details)->toContain('[REDACTED]')
         ->not->toContain('hunter2hunter2');
@@ -230,7 +230,7 @@ test('secrets in details are redacted', function () {
 test('audit export needs business on cloud', function () {
     $pro = Team::factory()->subscribed(Plan::Pro)->owned()->create();
 
-    $this->actingAs(auditOwner($pro))->from(route('teams.index'))->get(route('settings.audit-log'))
+    $this->actingAs(auditOwner($pro))->from(route('teams.index'))->get(route('audit-log.export'))
         ->assertRedirect(route('teams.index'))
         ->assertSessionHas('error', 'Audit log export is part of Business. Change the plan in Billing settings.');
 
@@ -243,7 +243,7 @@ test('audit export needs business on cloud', function () {
 test('a read-only team cannot export, whatever plan it had', function () {
     $lapsed = Team::factory()->trialEnded()->owned()->create();
 
-    $this->actingAs(auditOwner($lapsed))->from(route('teams.index'))->get(route('settings.audit-log'))
+    $this->actingAs(auditOwner($lapsed))->from(route('teams.index'))->get(route('audit-log.export'))
         ->assertRedirect(route('teams.index'))
         ->assertSessionHas('error', "This team's trial has ended, so it is read-only. Servers and apps keep running. Choose a plan in Billing settings to make changes again.");
 });

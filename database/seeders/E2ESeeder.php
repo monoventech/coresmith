@@ -56,6 +56,7 @@ use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\SSH\SSHConnection;
 use App\Services\Teams\TeamAccess;
 use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\UpdatePaths;
@@ -280,6 +281,7 @@ final class E2ESeeder extends Seeder
         $this->serverWithNoFreePorts();
         $this->auditFixtures();
         $this->invitations($tenant->owner);
+        $this->auditTrail($tenant->owner);
 
         $this->otherTeams($tenant->owner, $password);
         $this->connectionWithoutItsApp($tenant->owner);
@@ -427,6 +429,27 @@ final class E2ESeeder extends Seeder
             'provider_currency' => 'EUR',
             'host_key_fingerprint' => null,
         ]);
+    }
+
+    private function auditTrail(User $owner): void
+    {
+        $developer = User::query()->where('email', self::DEVELOPER_EMAIL)->first();
+
+        foreach (range(1, 55) as $index) {
+            activity()
+                ->performedOn($this->team)
+                ->causedBy($index % 5 === 0 && $developer !== null ? $developer : $owner)
+                ->withProperties(['name' => "deploy-token-{$index}"])
+                ->createdAt(now()->subDays(10)->subHours($index))
+                ->log('api_token_created');
+        }
+
+        activity()->performedOn($this->team)->withProperties(['bucket' => 's3://monoven-backups/'])->createdAt(now()->subDays(9))->log('offsite_backup_copied');
+        activity()
+            ->performedOn(Server::query()->where('name', 'forge-01')->sole())
+            ->withProperties(['command' => 'systemctl reload caddy', 'exit_code' => 0, 'output_length' => 0])
+            ->createdAt(now()->subDays(8))
+            ->log(SSHConnection::COMMAND_ACTIVITY);
     }
 
     private function invitations(User $owner): void

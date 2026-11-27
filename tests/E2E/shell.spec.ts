@@ -33,9 +33,18 @@ test.describe('the shell', () => {
         const sections = [
             ['Deploys', /\/deployments$/],
             ['Releases', /\/releases$/],
+            ['Audit log', /\/audit-log$/],
             ['Settings', /\/settings$/],
             ['Fleet', /\/dashboard$/]
         ] as const
+
+        await expect(nav(page).getByRole('link')).toContainText([
+            'Fleet',
+            'Deploys',
+            'Releases',
+            'Audit log',
+            'Settings'
+        ])
 
         for (const [name, url] of sections) {
             await nav(page).getByRole('link', { name, exact: true }).click()

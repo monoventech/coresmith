@@ -1,9 +1,9 @@
 <?php
 
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Settings\AccountGitController;
 use App\Http\Controllers\Settings\AddressController;
 use App\Http\Controllers\Settings\ApiTokenController;
-use App\Http\Controllers\Settings\AuditLogController;
 use App\Http\Controllers\Settings\BackupCopyController;
 use App\Http\Controllers\Settings\BillingController;
 use App\Http\Controllers\Settings\CloudProviderController;
@@ -91,9 +91,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware(['self-hosted', 'throttle:12,1,domain-verify'])
         ->name('settings.team-domain.verify');
     Route::delete('settings/team/domain', [TeamDomainController::class, 'destroy'])->middleware('self-hosted')->name('settings.team-domain.destroy');
-    Route::get('settings/team/audit-log', AuditLogController::class)
-        ->middleware('throttle:6,1,audit-export')
-        ->name('settings.audit-log');
+    Route::get('settings/team/audit-log', [AuditLogController::class, 'legacy']);
     Route::put('settings/team/offsite-backups', [OffsiteBackupController::class, 'update'])
         ->middleware('throttle:10,1,offsite-backups')
         ->name('settings.offsite-backups.update');
