@@ -95,7 +95,7 @@
 
         terminal = new Terminal({
             allowProposedApi: true,
-            cursorBlink: true,
+            cursorBlink: false,
             cursorStyle: 'block',
             fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: 13,

@@ -108,6 +108,14 @@ test.describe('a terminal session', () => {
         await expect.poll(() => shell.sent.input.join('')).toBe('ls -la\r')
     })
 
+    test('the cursor holds still instead of blinking', async ({ page }, testInfo) => {
+        await openSession(page, testInfo)
+        await page.getByTestId('terminal-shell').click()
+
+        await expect(page.locator('.xterm-cursor-block')).toBeVisible()
+        await expect(page.locator('.xterm-cursor-blink')).toHaveCount(0)
+    })
+
     test('output lost on the way comes back from the saved screen, even when the first read is older', async ({
         page
     }, testInfo) => {
