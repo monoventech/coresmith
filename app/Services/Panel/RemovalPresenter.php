@@ -12,6 +12,7 @@ use App\Enums\Edition;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Rules\TwoFactorCode;
 use App\Services\Address\InstallationAddress;
 use App\Services\Install\Removal;
 use App\Services\Server\ThisMachine;
@@ -42,7 +43,7 @@ final class RemovalPresenter
             'this_machine_apps' => Server::query()->where('runs_coresmith', true)->whereHas('applications')->exists(),
             'database' => $driver,
             'database_name' => $driver === 'sqlite' ? null : (string) config("database.connections.{$connection}.database"),
-            'two_factor' => $user->two_factor_confirmed_at !== null,
+            'two_factor' => TwoFactorCode::required($user),
             'helper' => $this->removal->installed(),
             'installer' => ThisMachine::INSTALLER,
         ];
