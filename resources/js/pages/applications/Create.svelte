@@ -26,6 +26,7 @@
     import { pickerRuntime } from '@/lib/runtimes'
     import { firstTagError } from '@/lib/tags'
     import { Form } from '@inertiajs/svelte'
+    import { TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount, untrack } from 'svelte'
 
     let {
@@ -47,6 +48,7 @@
             name: string
             href: string
             dns_targets: DnsTarget[]
+            network?: { text: string; action: string; href: string } | null
         }
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
@@ -843,6 +845,22 @@
                                         AAAA record for IPv6. Once the app is live, Coresmith checks the domain from
                                         outside, shows the record it needs and asks for its certificate.
                                     </p>
+                                {/if}
+                                {#if server.network}
+                                    <div
+                                        class="tint-warning mt-2.5 flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5"
+                                        data-testid="add-app-network"
+                                    >
+                                        <TriangleAlert class="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+                                        <p class="m-0 min-w-0 flex-1 text-[12.5px]">
+                                            {server.network.text}
+                                            <TextLink href={server.network.href} target="_blank" rel="noopener"
+                                                >{server.network.action}<span class="sr-only">
+                                                    (opens in a new tab)</span
+                                                ></TextLink
+                                            >
+                                        </p>
+                                    </div>
                                 {/if}
                             </div>
                         {/if}

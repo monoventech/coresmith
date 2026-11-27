@@ -830,6 +830,30 @@ test.describe('adding an application', () => {
         expect(await clipboardText(page)).toBe('2001:db8::7')
     })
 
+    test("a server whose IPv4 doesn't answer says how to bring IPv4 visitors in, under the domain records", async ({
+        page
+    }) => {
+        await gotoServer(page, 'forge-01')
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
+
+        const notice = page.getByTestId('add-app-network')
+
+        await expect(notice).toContainText(
+            "Visitors can't reach this server's IPv4 address from the internet, so people without IPv6 can't open the apps here."
+        )
+        expect(await blockingViolations(page)).toEqual([])
+
+        const link = notice.getByRole('link', { name: 'Bring IPv4 visitors in (opens in a new tab)' })
+
+        await expect(link).toHaveAttribute('target', '_blank')
+
+        const [network] = await Promise.all([page.context().waitForEvent('page'), link.click()])
+
+        await network.waitForURL(/\/network$/)
+        await expect(network.getByRole('heading', { level: 2, name: 'Addresses' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+    })
+
     test("a server Coresmith hasn't read yet keeps the general domain advice", async ({ page }) => {
         await openAddApp(page)
 
