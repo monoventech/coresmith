@@ -15,7 +15,6 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\CommandPalette;
 use App\Services\Teams\TeamAccess;
-use Inertia\Testing\AssertableInertia;
 
 function paletteMember(Team $team, TeamRole $role): User
 {

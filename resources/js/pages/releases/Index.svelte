@@ -114,7 +114,7 @@
 <div class="mb-2 flex flex-wrap items-end justify-between gap-6">
     <div class="min-w-0">
         <div class="flex min-w-0 items-start gap-1">
-            <h1 class="type-h1 m-0 min-w-0 break-words">
+            <h1 class="type-h1 m-0 min-w-0 wrap-break-word">
                 {application ? 'Releases · ' : 'Releases'}{#if application}<span class="font-mono font-medium"
                         >{application.name}</span
                     >{/if}
