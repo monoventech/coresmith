@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.41 (2026-11-27)
+
+### Fixed
+- fix: the browser terminal's cursor holds still instead of blinking (#198)
+- fix: a browser terminal's greeting wraps between words to the terminal's width, instead of the terminal breaking words at its edge (#196)
+
+### Changed
+- Search opens on what you're looking at, releases say what changed, and the audit log gets its own page (#200)
+- A root terminal asks for your password every time it opens, and for a code from your authenticator app when you use two-factor sign-in (#199)
+- test: the specs from the 0.8.40 browser run wait for the section index to settle, match runtime text across line breaks, and find a warning in the attention list after Show more (#197)
+- Every card on an app's page shares one layout, takes the full width and keeps its actions in its header (#195)
+
 ## v0.8.40 (2026-11-25)
 
 ### Changed
