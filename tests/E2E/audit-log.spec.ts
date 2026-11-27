@@ -66,10 +66,10 @@ test.describe('the audit log', () => {
     }) => {
         await gotoAuditLog(page)
 
-        await expect(page.getByLabel('What')).toHaveValue('changes')
+        await expect(page.getByLabel('What', { exact: true })).toHaveValue('changes')
         await expect(events(page).filter({ hasText: 'SSH command executed' })).toHaveCount(0)
 
-        await page.getByLabel('What').selectOption('commands')
+        await page.getByLabel('What', { exact: true }).selectOption('commands')
 
         await page.waitForURL((url) => url.searchParams.get('what') === 'commands')
         await expect(events(page).first()).toContainText('SSH command executed')
@@ -91,9 +91,9 @@ test.describe('the audit log', () => {
     test('a filter that matches nothing says so and clears in one press', async ({ page }) => {
         await gotoAuditLog(page)
 
-        await page.getByLabel('What').selectOption('commands')
+        await page.getByLabel('What', { exact: true }).selectOption('commands')
         await page.waitForURL((url) => url.searchParams.get('what') === 'commands')
-        await page.getByLabel('Who').selectOption({ label: 'Lena Brandt' })
+        await page.getByLabel('Who', { exact: true }).selectOption({ label: 'Lena Brandt' })
         await page.waitForURL((url) => url.searchParams.has('who'))
 
         await expect(page.getByText('Nothing matches these filters.')).toBeVisible()
@@ -105,7 +105,7 @@ test.describe('the audit log', () => {
 
     test('export downloads what the filters show', async ({ page }) => {
         await gotoAuditLog(page)
-        await page.getByLabel('What').selectOption('commands')
+        await page.getByLabel('What', { exact: true }).selectOption('commands')
         await page.waitForURL((url) => url.searchParams.get('what') === 'commands')
 
         await expect(page.getByTestId('audit-export')).toHaveAttribute('href', /what=commands/)
