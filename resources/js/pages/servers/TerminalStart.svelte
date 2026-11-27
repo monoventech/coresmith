@@ -11,6 +11,7 @@
     import FieldError from '@/components/FieldError.svelte'
     import PasswordInput from '@/components/PasswordInput.svelte'
     import { Button } from '@/components/ui/button'
+    import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
     import * as RadioGroup from '@/components/ui/radio-group'
@@ -19,13 +20,14 @@
 
     type Mode = { allowed: boolean; reason: string | null }
     type App = { key: string; name: string; user: string }
+    type Asks = { password: boolean; code: boolean }
 
     let {
         server,
         modes,
         applications = [],
         chosen = null,
-        password = true,
+        asks,
         unavailable = null,
         open_href: openHref
     }: {
@@ -33,7 +35,7 @@
         modes: { app: Mode; root: Mode }
         applications?: App[]
         chosen?: string | null
-        password?: boolean
+        asks: { root: Asks; app: Asks }
         unavailable?: string | null
         open_href: string
     } = $props()
@@ -65,6 +67,7 @@
         }
     })
     const ready = $derived(unavailable === null && (mode === 'root' ? modes.root.allowed : appUsable))
+    const ask = $derived(asks[mode])
 </script>
 
 <AppHead title="Terminal · {server.name}" />
@@ -168,17 +171,18 @@
                 {#if mode === 'app' && appUsable}
                     <div class="mt-3 pl-11 max-sm:pl-0">
                         <Label for="terminal-app" class="mb-1.5">App</Label>
-                        <NativeSelect
-                            id="terminal-app"
-                            name="application"
-                            bind:value={application}
-                            class="w-full max-w-80"
-                            aria-invalid={errors.application ? true : undefined}
-                        >
-                            {#each applications as app (app.key)}
-                                <option value={app.key}>{app.name}, as {app.user}</option>
-                            {/each}
-                        </NativeSelect>
+                        <div class="max-w-120">
+                            <NativeSelect
+                                id="terminal-app"
+                                name="application"
+                                bind:value={application}
+                                aria-invalid={errors.application ? true : undefined}
+                            >
+                                {#each applications as app (app.key)}
+                                    <option value={app.key}>{app.name}, as {app.user}</option>
+                                {/each}
+                            </NativeSelect>
+                        </div>
                         <FieldError message={errors.application} />
                     </div>
                 {/if}
@@ -201,7 +205,7 @@
                 </p>
             </section>
 
-            {#if password}
+            {#if ask.password}
                 <div>
                     <Label for="terminal-password" class="mb-1.5">Your password</Label>
                     <div class="max-w-80">
@@ -214,10 +218,31 @@
                             aria-describedby="terminal-password-hint"
                         />
                     </div>
-                    <p id="terminal-password-hint" class="m-0 mt-1.5 text-[12.5px] text-muted-foreground">
-                        Asked once every 15 minutes.
+                    <p
+                        id="terminal-password-hint"
+                        class="m-0 mt-1.5 text-[12.5px] text-muted-foreground"
+                        data-testid="terminal-password-hint"
+                    >
+                        {mode === 'root' ? 'Asked every time you open a root shell.' : 'Asked once every 15 minutes.'}
                     </p>
                     <FieldError message={errors.password} />
+                </div>
+            {/if}
+
+            {#if ask.code}
+                <div>
+                    <Label for="terminal-code" class="mb-1.5">Code from your authenticator app</Label>
+                    <Input
+                        id="terminal-code"
+                        name="code"
+                        required
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        spellcheck={false}
+                        class="max-w-80"
+                        aria-invalid={errors.code ? true : undefined}
+                    />
+                    <FieldError message={errors.code} />
                 </div>
             {/if}
 

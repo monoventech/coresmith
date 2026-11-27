@@ -17,6 +17,7 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\TerminalSession;
 use App\Models\User;
+use App\Rules\TwoFactorCode;
 use App\Services\Panel\Realtime;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Teams\TeamAccess;
@@ -55,7 +56,7 @@ final class TerminalController extends Controller
             ],
             'applications' => $this->applications($access, $user, $server),
             'chosen' => $request->query('app'),
-            'password' => !$this->confirmed($request),
+            'asks' => $this->asks($request, $user),
             'unavailable' => $this->unavailable($server),
             'open_href' => route('servers.terminal.store', $server),
         ]);
@@ -101,12 +102,17 @@ final class TerminalController extends Controller
             }
         }
 
-        if (!$this->confirmed($request)) {
-            if (!is_string($validated['password'] ?? null) || $validated['password'] === '') {
-                throw ValidationException::withMessages(['password' => 'Enter your password to open a terminal.']);
-            }
+        $asks = $this->asks($request, $user)[$mode->value];
+        $request->validate(array_filter([
+            'password' => $asks['password'] ? ['required', 'string', 'current_password'] : null,
+            'code' => $asks['code'] ? ['required', 'string', new TwoFactorCode($user)] : null,
+        ]), [
+            'password.required' => 'Enter your password to open a terminal.',
+            'password.current_password' => "That password isn't right.",
+            'code.required' => 'Enter the code from your authenticator app.',
+        ]);
 
-            $request->validate(['password' => ['current_password']], ['password.current_password' => "That password isn't right."]);
+        if ($asks['password']) {
             $request->session()->put('auth.password_confirmed_at', time());
         }
 
@@ -187,9 +193,17 @@ final class TerminalController extends Controller
         return TerminalSession::query()->live()->where('user_id', $user->id)->where('server_id', $server->id)->latest()->first();
     }
 
-    private function confirmed(Request $request): bool
+    /**
+     * @return array{root: array{password: bool, code: bool}, app: array{password: bool, code: bool}}
+     */
+    private function asks(Request $request, User $user): array
     {
-        return time() - (int) $request->session()->get('auth.password_confirmed_at', 0) < self::CONFIRMED_SECONDS;
+        $confirmed = time() - (int) $request->session()->get('auth.password_confirmed_at', 0) < self::CONFIRMED_SECONDS;
+
+        return [
+            'root' => ['password' => true, 'code' => TwoFactorCode::required($user)],
+            'app' => ['password' => !$confirmed, 'code' => false],
+        ];
     }
 
     private function unavailable(Server $server): ?string
