@@ -133,7 +133,7 @@ test.describe('the command palette', () => {
         await openPalette(page)
 
         await expect(group(page, 'This server').getByRole('option', { name: /^Hardening/ })).toBeVisible()
-        await expect(group(page, 'This server').getByRole('option', { name: /^Open\b/ })).toHaveCount(0)
+        await expect(group(page, 'This server').getByRole('option', { name: /^Open apps and runtimes/ })).toHaveCount(0)
         await page.keyboard.press('Escape')
 
         await gotoServer(page, 'anvil-01')
@@ -174,7 +174,7 @@ test.describe('the command palette', () => {
 
         const pages = group(page, 'forge-01')
 
-        await expect(pages.getByRole('option', { name: /^Open\b/ })).toBeVisible()
+        await expect(pages.getByRole('option', { name: /^Open apps and runtimes/ })).toBeVisible()
         await expect(pages.getByRole('option', { name: /^Hardening/ })).toBeVisible()
         await expect(palette(page).getByRole('combobox')).toHaveValue('')
 

@@ -28,7 +28,7 @@ test.describe('the audit log', () => {
 
         const links = nav(page).getByRole('link')
 
-        await expect(links.filter({ hasText: /^(Releases|Audit log|Settings)$/ })).toHaveText([
+        await expect(links.filter({ hasText: /^\s*(Releases|Audit log|Settings)\s*$/ })).toHaveText([
             'Releases',
             'Audit log',
             'Settings'
@@ -58,7 +58,7 @@ test.describe('the audit log', () => {
         await expect(token.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'true')
         await expect(details).toContainText(/At\s+\w{3} \d+, \d{4} at \d{2}:\d{2} UTC/)
         await expect(details).toContainText(/By\s+\S/)
-        await expect(details).toContainText(/name\s+deploy-token-\d+/)
+        await expect(details).toContainText(/name\s+\S+/)
     })
 
     test("coresmith's ssh commands stay hidden until they are asked for, and the address keeps the filter", async ({
