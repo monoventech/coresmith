@@ -53,13 +53,13 @@ test.describe('an admin who sees only what is shared', () => {
         await expect(palette(page)).toBeVisible()
 
         await page.keyboard.type('forge')
-        await expect(palette(page).getByRole('option', { name: /Open forge-01/ })).toBeVisible()
-        await expect(palette(page).getByRole('option', { name: /Open forge-02/ })).toHaveCount(0)
+        await expect(palette(page).getByRole('option', { name: /^forge-01\b/ })).toBeVisible()
+        await expect(palette(page).getByRole('option', { name: /^forge-02\b/ })).toHaveCount(0)
 
         await page.keyboard.press('ControlOrMeta+A')
         await page.keyboard.type('atlas')
-        await expect(palette(page).getByRole('option', { name: 'Open atlas production · on forge-01' })).toBeVisible()
-        await expect(palette(page).getByRole('option', { name: /Open atlas-staging/ })).toHaveCount(0)
+        await expect(palette(page).getByRole('option', { name: 'atlas production · on forge-01' })).toBeVisible()
+        await expect(palette(page).getByRole('option', { name: /^atlas-staging/ })).toHaveCount(0)
     })
 
     test('on a phone the Apps row opens an app in a project they were not given', async ({ page }, testInfo) => {

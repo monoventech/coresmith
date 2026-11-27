@@ -18,10 +18,9 @@ use App\Services\Panel\Paging;
 use App\Services\Panel\ReleasesOverview;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Projects\ProjectScope;
-use App\Services\Teams\RouteKeys;
-use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -31,6 +30,8 @@ use Inertia\Response;
 final class ReleasesController extends Controller
 {
     public const PER_PAGE = 20;
+
+    public const PICKS = 20;
 
     private const SEARCH_LENGTH = 100;
 
@@ -68,8 +69,6 @@ final class ReleasesController extends Controller
         $this->authorize('view', $application);
         abort_unless($application->server_id === $server->id, 404);
 
-        $team = $application->team;
-        $scope = ProjectScope::from($request, $request->user(), $team);
         $released = fn(): HasMany => $application->deployments()
             ->where(fn(Builder $query) => $query
                 ->where('status', DeploymentStatus::Succeeded->value)
@@ -101,21 +100,14 @@ final class ReleasesController extends Controller
                 'rollback_href' => route('servers.applications.rollback', [$server, $application]),
                 'rolled_back' => $rolledBack ? Formats::release($current) : null,
             ],
-            'applications' => ($team === null ? collect() : $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->with(['server', 'project'])->orderBy('name')->get())->map(fn(Application $each): array => [
-                'id' => $each->id,
-                'name' => $each->name,
-                'server' => $each->server?->name,
-                'project' => $each->project?->name,
-                'tags' => $each->tags,
-                'href' => route('servers.applications.releases.index', [app(RouteKeys::class)->server($each->server_id), $each, ...$scope->query()]),
-                'current' => $each->id === $application->id,
-            ])->values(),
-            'overview_href' => route('releases.index', $scope->query()),
+            'apps_href' => route('releases.apps'),
+            'overview_href' => route('releases.index'),
             'releases' => $deployments->getCollection()->map(fn(Deployment $deployment): array => [
                 'id' => $deployment->id,
                 'release' => $deployment->release,
                 'directory' => 'releases/' . Formats::release($deployment->release),
                 'commit' => $deployment->commit_hash === null ? null : substr($deployment->commit_hash, 0, 7),
+                'subject' => Formats::subject($deployment->commit_message),
                 'author' => $deployment->commit_author ?? $deployment->triggeredBy?->name,
                 'tag' => $deployment->tag,
                 'signed' => $deployment->tag_signed,
@@ -127,9 +119,19 @@ final class ReleasesController extends Controller
             ])->values(),
             'pages' => Paging::present($deployments),
             'rollback' => $request->query('rollback'),
-            'scope' => $scope->value(),
-            'scopes' => $team === null ? [] : ProjectScope::options($request->user(), $team),
             'can' => ['deploy' => $request->user()->can('deploy', $application)],
+        ]);
+    }
+
+    public function apps(Request $request, ReleasesOverview $overview): JsonResponse
+    {
+        $team = $this->currentTeam();
+        $search = mb_substr(trim((string) $request->query('q', '')), 0, self::SEARCH_LENGTH);
+        $listing = $overview->listing($request->user(), $team, ProjectScope::from($request, $request->user(), $team), $search);
+
+        return response()->json([
+            'apps' => $overview->picks(array_slice($listing['ids'], 0, self::PICKS)),
+            'total' => count($listing['ids']),
         ]);
     }
 }

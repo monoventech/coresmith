@@ -67,6 +67,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'overview'])->name('releases.index');
+    Route::get('releases/apps', [ReleasesController::class, 'apps'])->name('releases.apps');
 
     Route::get('applications/new', AddApplicationController::class)->name('applications.new');
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');

@@ -106,14 +106,6 @@ export function appPath(url: string, base = ''): string {
     return pathname
 }
 
-export type PaletteCommand = {
-    label: string
-    icon: string
-    hint: string
-    href?: string
-    action?: 'theme'
-}
-
 export function sectionFor(path: string): Section | null {
     if (path.startsWith('/setup')) {
         return 'setup'

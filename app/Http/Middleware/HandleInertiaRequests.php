@@ -79,11 +79,12 @@ class HandleInertiaRequests extends Middleware
             'panel' => fn(): ?array => $this->panel($request),
             'explorer' => fn(): ?array => $this->explorer($request),
             'crumbs' => fn(): array => $this->crumbs($request),
+            'subject' => fn(): ?string => app(Breadcrumbs::class)->subject($request, $request->user()),
             'app_deploy' => fn(): ?array => app(TopBarDeploy::class)->for($request, $request->user()),
             'billing' => fn(): ?array => $this->billing($request),
             'palette' => Inertia::optional(fn(): array => $request->user() === null
                 ? []
-                : (new CommandPalette($request->user(), app(TeamContext::class)->team()))->commands()),
+                : (new CommandPalette($request->user(), app(TeamContext::class)->team()))->items()),
         ];
     }
 

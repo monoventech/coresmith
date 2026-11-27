@@ -122,12 +122,12 @@ test('every page knows the edition', function () {
 test('the palette offers billing on cloud only', function () {
     $user = User::factory()->create();
 
-    expect(collect((new CommandPalette($user, null))->commands())->firstWhere('label', 'Billing'))->toBeNull();
+    expect(collect((new CommandPalette($user, null))->items())->firstWhere('label', 'Billing'))->toBeNull();
 
     config(['coresmith.edition' => 'cloud']);
 
-    expect(collect((new CommandPalette($user, null))->commands())->firstWhere('label', 'Billing'))
-        ->toBe(['label' => 'Billing', 'icon' => 'credit-card', 'hint' => 'Coresmith Cloud', 'href' => route('settings.billing')]);
+    expect(collect((new CommandPalette($user, null))->items())->firstWhere('label', 'Billing'))
+        ->toBe(['id' => 'page:billing', 'kind' => 'page', 'label' => 'Billing', 'icon' => 'credit-card', 'hint' => 'Coresmith Cloud', 'href' => route('settings.billing'), 'keywords' => ['plan', 'invoices', 'payment']]);
 });
 
 test('only the edition enum reads the edition from config', function () {

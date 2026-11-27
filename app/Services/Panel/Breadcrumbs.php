@@ -87,6 +87,23 @@ final class Breadcrumbs
         }];
     }
 
+    public function subject(Request $request, ?User $user): ?string
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $route = $request->route();
+
+        return match (true) {
+            ($application = $this->bound($route, Application::class, $user)) instanceof Application => 'app:' . $application->getKey(),
+            ($database = $this->bound($route, ManagedDatabase::class, $user)) instanceof ManagedDatabase => 'database:' . $database->getKey(),
+            ($server = $this->bound($route, Server::class, $user)) instanceof Server => 'server:' . $server->getKey(),
+            ($project = $this->bound($route, Project::class, $user)) instanceof Project => 'project:' . $project->getKey(),
+            default => null,
+        };
+    }
+
     /**
      * @template T of object
      *
