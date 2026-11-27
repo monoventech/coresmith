@@ -58,8 +58,14 @@ test.describe('an admin Storefront is shared with, holding back its production a
         await page.keyboard.press('ControlOrMeta+K')
         await expect(palette(page)).toBeVisible()
 
-        await page.keyboard.type('Open')
-        await expect(palette(page).getByRole('option', { name: /Open Storefront/ })).toBeVisible()
-        await expect(palette(page).getByRole('option', { name: /Open Atlas/ })).toHaveCount(0)
+        await page.keyboard.type('storefront')
+        await expect(
+            palette(page)
+                .getByRole('group', { name: 'Projects', exact: true })
+                .getByRole('option', { name: /^Storefront/ })
+        ).toBeVisible()
+
+        await palette(page).getByRole('combobox').fill('atlas')
+        await expect(palette(page).getByRole('group', { name: 'Projects', exact: true })).toHaveCount(0)
     })
 })

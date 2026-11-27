@@ -3,17 +3,21 @@
     import { appPath, sectionFor } from '@/lib/panel'
     import { cn } from '@/lib/utils'
     import { Link, page } from '@inertiajs/svelte'
-    import { Layers, LayoutGrid, Rocket, Settings } from '@lucide/svelte'
+    import { FileClock, Layers, LayoutGrid, Rocket, Settings } from '@lucide/svelte'
 
-    const section = $derived(sectionFor(appPath(page.url, (page.props.panel as PanelProps | null)?.base)))
+    const panel = $derived(page.props.panel as PanelProps | null)
+    const section = $derived(sectionFor(appPath(page.url, panel?.base)))
     const running = $derived((page.props.explorer as ExplorerProps | null)?.running ?? null)
 
-    const items = [
+    const items = $derived([
         { id: 'fleet', label: 'Fleet', href: route('dashboard'), icon: LayoutGrid },
         { id: 'deployments', label: 'Deploys', href: route('deployments.index'), icon: Rocket },
         { id: 'releases', label: 'Releases', href: route('releases.index'), icon: Layers },
+        ...(panel?.can.auditLog
+            ? [{ id: 'audit-log', label: 'Audit log', href: route('audit-log.index'), icon: FileClock }]
+            : []),
         { id: 'settings', label: 'Settings', href: route('settings.general'), icon: Settings }
-    ] as const
+    ])
 </script>
 
 <nav

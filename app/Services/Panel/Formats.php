@@ -170,4 +170,11 @@ final class Formats
 
         return preg_match('/^(\d{8})(\d{6})$/', $release, $matches) === 1 ? $matches[1] . '-' . $matches[2] : $release;
     }
+
+    public static function subject(?string $message): ?string
+    {
+        $line = trim(explode("\n", trim((string) $message), 2)[0]);
+
+        return $line === '' ? null : $line;
+    }
 }

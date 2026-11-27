@@ -5,6 +5,7 @@ import {
     dialog,
     expect,
     expectWayBack,
+    isMobile,
     nav,
     noSidewaysScroll,
     test,
@@ -49,7 +50,9 @@ test.describe('releases', () => {
         await expect(page.getByTestId('releases-count')).toHaveText(/^\d+ apps$/)
     })
 
-    test("searching narrows the list, and a row opens that app's releases", async ({ page }) => {
+    test("searching narrows the list, a row opens that app's releases, and the way back returns to the list", async ({
+        page
+    }, testInfo) => {
         await gotoReleases(page)
 
         await page.getByRole('searchbox', { name: 'Search apps' }).fill('ledg')
@@ -59,8 +62,34 @@ test.describe('releases', () => {
 
         await appRow(page, 'ledger').click()
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · ledger' })).toBeVisible()
-        await page.getByTestId('all-apps-link').click()
+
+        if (isMobile(testInfo)) {
+            await page.getByTestId('back-link').click()
+        } else {
+            await nav(page).getByRole('link', { name: 'Releases', exact: true }).click()
+        }
+
         await expect(page.getByRole('heading', { level: 1, name: 'Releases', exact: true })).toBeVisible()
+    })
+
+    test('the list names its columns, shows what each live release holds, and marks an app that was rolled back', async ({
+        page
+    }, testInfo) => {
+        await gotoReleases(page)
+
+        if (!isMobile(testInfo)) {
+            await expect(page.getByTestId('releases-group').first()).toContainText(
+                /App\s+Server\s+Live release\s+Went live/
+            )
+            await expect(appRow(page, 'atlas').getByTestId('releases-commit')).toHaveText(
+                /^v\d+\.\d+\.\d+\s+·\s+[0-9a-f]{7}\s+\S/
+            )
+        }
+
+        await page.getByRole('searchbox', { name: 'Search apps' }).fill('rolled-back')
+
+        await expect(appRow(page, 'rolled-back').getByTestId('releases-rolled-back')).toHaveText('rolled back')
+        await expect(appRow(page, 'dev-mode')).toHaveCount(0)
     })
 
     test('a search that matches nothing says so and clears in one press', async ({ page }) => {
@@ -101,7 +130,9 @@ test.describe('releases', () => {
         })
     }
 
-    test('each release shows its directory, tag and signature, with the live one marked', async ({ page }) => {
+    test('each release shows its directory, what changed, its tag and signature, with the live one marked', async ({
+        page
+    }, testInfo) => {
         await gotoReleasesOf(page, 'atlas')
 
         await expect(rows(page)).toHaveCount(5)
@@ -111,14 +142,24 @@ test.describe('releases', () => {
         await expect(current).toHaveCount(1)
         await expect(current).toHaveAttribute('data-current', 'true')
         await expect(current).toContainText(/releases\/\d{8}-\d{4}/)
-        await expect(rows(page).filter({ hasText: 'v2.15.0-beta.2' })).toContainText('unsigned')
+        await expect(current.getByTestId('release-subject')).not.toBeEmpty()
+        await expect(current).toContainText(/commit [0-9a-f]{7} by \S/)
+
+        if (isMobile(testInfo)) {
+            await expect(current).toContainText(/v\d+\.\d+\.\d+\s+·\s+main\s+·\s+\S/)
+        } else {
+            await expect(rows(page).filter({ hasText: 'v2.15.0-beta.2' })).toContainText('unsigned')
+        }
     })
 
     test("an app's releases switch to another app from a search box", async ({ page }) => {
         await gotoReleasesOf(page, 'atlas')
 
-        await page.getByRole('button', { name: 'Switch app' }).click()
+        await page.getByRole('button', { name: "Show another app's releases" }).click()
+        await expect(page.getByTestId('app-switcher-more')).toHaveText(/^Showing 20 of \d+\. Type to narrow it down\.$/)
+        await expect(page.getByTestId('app-switcher').getByRole('option')).toHaveCount(20)
         await page.getByRole('combobox', { name: 'Search apps' }).fill('ledger')
+        await expect(page.getByTestId('app-switcher-more')).toHaveCount(0)
         await page
             .getByTestId('app-switcher')
             .getByRole('option', { name: /^ledger\b/ })
@@ -132,8 +173,8 @@ test.describe('releases', () => {
         test(`the open app switcher is accessible in ${theme}`, async ({ page }) => {
             await useTheme(page, theme)
             await gotoReleasesOf(page, 'atlas')
-            await page.getByRole('button', { name: 'Switch app' }).click()
-            await expect(page.getByTestId('app-switcher')).toBeVisible()
+            await page.getByRole('button', { name: "Show another app's releases" }).click()
+            await expect(page.getByTestId('app-switcher').getByRole('option').first()).toBeVisible()
 
             expect(await blockingViolations(page)).toEqual([])
         })

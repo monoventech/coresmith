@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Billing;
 
 use App\Enums\BillingState;
+use App\Enums\Edition;
 use App\Enums\Plan;
 use App\Enums\PlanFeature;
 use App\Enums\ReadOnlyReason;
@@ -51,7 +52,6 @@ final class BillingPresenter
                 'members' => $memberLimit !== null && $team->members()->count() >= $memberLimit ? "{$status->plan?->label()} is for one person." : null,
                 'single_sign_on' => $this->note($status, PlanFeature::SingleSignOn),
                 'offsite_backups' => $this->note($status, PlanFeature::OffsiteBackups),
-                'audit_log_export' => $this->note($status, PlanFeature::AuditLogExport),
             ],
         ];
     }
@@ -342,6 +342,11 @@ final class BillingPresenter
     private function bannerOf(string $tone, string $title, string $body, ?string $action): array
     {
         return ['tone' => $tone, 'title' => $title, 'body' => $body, 'action' => $action];
+    }
+
+    public function featureNote(Team $team, PlanFeature $feature): ?string
+    {
+        return Edition::current()->isSelfHosted() ? null : $this->note($this->billing->status($team), $feature);
     }
 
     private function note(BillingStatus $status, PlanFeature $feature): ?string

@@ -87,16 +87,10 @@ test('a project the member cannot see is ignored, and no filter is offered', fun
             ->where('scopes', []));
 });
 
-test('releases narrow the app list to a project, and switching apps keeps it', function () {
+test("an app's releases find another app by its project's name", function () {
     $fleet = projectFiltersFleet();
-    $id = $fleet['project']->handle;
 
-    $this->actingAs($fleet['owner'])->get(route('servers.applications.releases.index', [$fleet['web'], $fleet['shop'], 'project' => $id]))
-        ->assertInertia(fn(AssertableInertia $page) => $page
-            ->where('applications', fn($rows): bool => projectFiltersNames($rows, 'name') === ['shop', 'shop-staging'])
-            ->where('applications.1.href', route('servers.applications.releases.index', [$fleet['web'], $fleet['shopStaging'], 'project' => $id]))
-            ->where('scope', $id)
-            ->where('scopes.2', ['value' => $id, 'label' => 'Storefront']));
+    expect($this->actingAs($fleet['owner'])->getJson(route('releases.apps', ['q' => 'storefront']))->json('apps.*.name'))->toBe(['shop', 'shop-staging']);
 });
 
 test('search finds the projects a member can see', function () {
@@ -105,10 +99,12 @@ test('search finds the projects a member can see', function () {
     $fleet['team']->members()->attach($member, ['role' => TeamRole::Member->value, 'sees_everything' => false]);
     app(TeamAccess::class)->grant($fleet['team'], $member, $fleet['blog']);
 
-    expect(collect((new CommandPalette($fleet['owner'], $fleet['team']))->commands())->firstWhere('label', 'Open Storefront'))->toBe([
-        'label' => 'Open Storefront',
-        'icon' => 'folder',
+    expect(collect((new CommandPalette($fleet['owner'], $fleet['team']))->items())->firstWhere('id', 'project:' . $fleet['project']->id))->toBe([
+        'id' => 'project:' . $fleet['project']->id,
+        'kind' => 'project',
+        'label' => 'Storefront',
         'hint' => '2 apps',
+        'icon' => 'folder',
         'href' => route('projects.show', $fleet['project']),
-    ])->and(collect((new CommandPalette($member, $fleet['team']))->commands())->firstWhere('label', 'Open Storefront'))->toBeNull();
+    ])->and(collect((new CommandPalette($member, $fleet['team']))->items())->firstWhere('id', 'project:' . $fleet['project']->id))->toBeNull();
 });

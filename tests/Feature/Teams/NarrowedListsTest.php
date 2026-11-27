@@ -65,12 +65,12 @@ test('search finds only shared servers and apps', function () {
     ['team' => $team, 'web' => $web, 'member' => $member] = narrowedListsSetup();
     app(TeamAccess::class)->grant($team, $member, $web);
 
-    $labels = collect((new CommandPalette($member, $team))->commands())->pluck('label');
+    $labels = collect((new CommandPalette($member, $team))->items())->whereIn('kind', ['server', 'app'])->pluck('label');
 
-    expect($labels)->toContain('Open web')
-        ->and($labels)->toContain('Open shop')
-        ->and($labels)->not->toContain('Open db')
-        ->and($labels)->not->toContain('Open api');
+    expect($labels)->toContain('web')
+        ->and($labels)->toContain('shop')
+        ->and($labels)->not->toContain('db')
+        ->and($labels)->not->toContain('api');
 });
 
 test('deployments and releases list only shared apps', function () {
@@ -81,9 +81,7 @@ test('deployments and releases list only shared apps', function () {
         ->get(route('deployments.index'))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('deployments', fn($rows) => collect($rows)->pluck('application')->unique()->values()->all() === ['shop']));
 
-    $this->actingAs($member)
-        ->get(route('servers.applications.releases.index', [$web, $shop]))
-        ->assertInertia(fn(AssertableInertia $page) => $page->where('applications', fn($apps) => collect($apps)->pluck('name')->all() === ['shop']));
+    expect($this->actingAs($member)->getJson(route('releases.apps'))->json('apps.*.name'))->toBe(['shop']);
 });
 
 test('the activity feed leaves out unshared servers and apps', function () {

@@ -3,13 +3,14 @@
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
     import { Link, page, router } from '@inertiajs/svelte'
-    import { Search } from '@lucide/svelte'
+    import { ChevronRight, Search } from '@lucide/svelte'
     import { untrack } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import Pager from '@/components/Pager.svelte'
     import AppTags from '@/components/projects/AppTags.svelte'
     import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
+    import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import type { Pages } from '@/lib/paging'
@@ -23,6 +24,9 @@
         href: string
         release: string | null
         tag: string | null
+        commit: string | null
+        subject: string | null
+        rolled_back: boolean
         when: string | null
         full: string | null
     }
@@ -49,7 +53,7 @@
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const columns =
-        'grid grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1.5fr)_minmax(0,0.8fr)] gap-3 max-[900px]:grid-cols-1 max-[900px]:gap-1.5'
+        'grid grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1.5fr)_minmax(0,0.8fr)_1rem] gap-3 max-[900px]:grid-cols-[minmax(0,1fr)_1rem] max-[900px]:gap-x-3 max-[900px]:gap-y-1.5'
     const shown = $derived(groups.reduce((sum, group) => sum + group.apps.length, 0))
     const noun = $derived(total === 1 ? 'app' : 'apps')
     const count = $derived(search === '' ? `${total} ${noun}` : `${pages?.total ?? shown} of ${total} ${noun}`)
@@ -149,6 +153,13 @@
                 {group.name ?? 'No project'}
             </h2>
             <div class="overflow-hidden rounded-xl border border-border bg-card">
+                <div class={cn(columns, 'border-b border-border px-5.5 py-2.5 max-[900px]:hidden')} aria-hidden="true">
+                    <span class="type-caption text-muted-foreground">App</span>
+                    <span class="type-caption text-muted-foreground">Server</span>
+                    <span class="type-caption text-muted-foreground">Live release</span>
+                    <span class="type-caption text-muted-foreground">Went live</span>
+                    <span></span>
+                </div>
                 {#each group.apps as app (app.id)}
                     <Link
                         href={app.href}
@@ -171,14 +182,29 @@
                             {/if}
                         </span>
                         <span class="truncate text-muted-foreground max-[900px]:hidden">{app.server ?? ''}</span>
-                        <span class="block min-w-0">
+                        <span class="block min-w-0 max-[900px]:col-start-1">
                             {#if app.release}
-                                <span class="block truncate font-mono text-[12.5px]">{app.release}</span>
-                                {#if app.tag}
+                                <span class="flex min-w-0 items-center gap-2">
+                                    <span class="min-w-0 truncate font-mono text-[12.5px]">{app.release}</span>
+                                    {#if app.rolled_back}
+                                        <Badge variant="warning" class="shrink-0" data-testid="releases-rolled-back"
+                                            >rolled back</Badge
+                                        >
+                                    {/if}
+                                </span>
+                                {#if app.tag || app.commit}
                                     <span
-                                        class="mt-0.5 block font-mono text-[11.5px] text-muted-foreground max-[900px]:hidden"
-                                        >{app.tag}</span
+                                        class="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[11.5px] text-muted-foreground max-[900px]:hidden"
+                                        title={app.subject ?? undefined}
+                                        data-testid="releases-commit"
                                     >
+                                        {#if app.tag}<span class="shrink-0 font-mono">{app.tag}</span>{/if}
+                                        {#if app.tag && app.commit}<span aria-hidden="true">·</span>{/if}
+                                        {#if app.commit}<span class="shrink-0 font-mono">{app.commit}</span>{/if}
+                                        {#if app.commit && app.subject}<span class="min-w-0 truncate"
+                                                >{app.subject}</span
+                                            >{/if}
+                                    </span>
                                 {/if}
                             {:else}
                                 <span class="text-[12.5px] text-muted-foreground">Nothing live yet</span>
@@ -192,6 +218,10 @@
                         <span class="text-muted-foreground max-[900px]:hidden" title={app.full ?? undefined}
                             >{app.when ?? ''}</span
                         >
+                        <ChevronRight
+                            class="size-4 text-muted-foreground max-[900px]:col-start-2 max-[900px]:row-span-2 max-[900px]:row-start-1 max-[900px]:self-center"
+                            aria-hidden="true"
+                        />
                     </Link>
                 {/each}
             </div>

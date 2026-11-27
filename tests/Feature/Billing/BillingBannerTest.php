@@ -143,7 +143,6 @@ test('a starter team learns what it is missing', function () {
         'members' => 'Starter is for one person.',
         'single_sign_on' => 'Single sign-on is part of Business.',
         'offsite_backups' => 'Database backups to S3 are part of Business.',
-        'audit_log_export' => 'Audit log export is part of Business.',
     ]);
 });
 
@@ -160,7 +159,6 @@ test('a read-only team\'s notes give the reason, not the plan', function (Closur
         'members' => null,
         'single_sign_on' => $title,
         'offsite_backups' => $title,
-        'audit_log_export' => $title,
     ]);
 })->with([
     'a trial that ended' => [fn() => Team::factory()->trialEnded()->owned()->create(), "This team's trial has ended, so it is read-only."],
