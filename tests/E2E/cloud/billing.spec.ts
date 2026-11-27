@@ -58,9 +58,11 @@ test.describe('the billing tab on coresmith cloud', () => {
         await page.keyboard.press('Escape')
         await expect(dialog(page)).toBeHidden()
         await page.keyboard.press('ControlOrMeta+K')
+        await expect(page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox')).toBeFocused()
+        await page.keyboard.type('Billing')
 
         await expect(
-            page.getByRole('dialog', { name: 'Command palette' }).getByRole('option', { name: /Billing/ })
+            page.getByRole('dialog', { name: 'Command palette' }).getByRole('option', { name: /^Billing/ })
         ).toContainText('Pro · $15 / month')
         await page.keyboard.press('Escape')
     })
@@ -91,10 +93,12 @@ test.describe('the billing tab on coresmith cloud', () => {
         await page.goto('/monoven/dashboard')
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
         await page.keyboard.press('ControlOrMeta+K')
+        await expect(page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox')).toBeFocused()
+        await page.keyboard.type('Billing')
 
         const palette = page.getByRole('dialog', { name: 'Command palette' })
 
-        await expect(palette.getByRole('option', { name: /Billing/ })).toContainText('Pro · $19 / month')
+        await expect(palette.getByRole('option', { name: /^Billing/ })).toContainText('Pro · $19 / month')
         await page.keyboard.press('Escape')
     })
 

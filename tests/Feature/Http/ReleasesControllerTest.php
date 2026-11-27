@@ -66,7 +66,7 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-13 14:05:09'));
 });
 
-function releasesRow(Application $application, ?Deployment $live = null, array $query = []): array
+function releasesRow(Application $application, ?Deployment $live = null, array $query = [], bool $rolledBack = false): array
 {
     return [
         'id' => $application->id,
@@ -76,6 +76,9 @@ function releasesRow(Application $application, ?Deployment $live = null, array $
         'href' => releasesUrl($application, $query),
         'release' => $application->current_release === null ? null : 'releases/' . Formats::release($application->current_release),
         'tag' => $live?->tag,
+        'commit' => $live?->commit_hash === null ? null : substr($live->commit_hash, 0, 7),
+        'subject' => Formats::subject($live?->commit_message),
+        'rolled_back' => $rolledBack,
         'when' => Formats::when($live?->finished_at),
         'full' => Formats::absolute($live?->finished_at),
     ];
@@ -149,6 +152,7 @@ test('releases are the successful deployments with a release, newest first, with
     releasesShipped($application, '20260912090000', hoursAgo: 29, attributes: ['commit_hash' => 'aaaaaaa1111111', 'commit_author' => null, 'triggered_by' => $author->id, 'branch' => null]);
     releasesShipped($application, '20260913120000', hoursAgo: 2, attributes: [
         'commit_hash' => '4f3c2b1a0e9d8c7b6a5f',
+        'commit_message' => "  Ship the 2.4 checkout  \n\nTotals now include tax.",
         'commit_author' => 'Ada Lovelace',
         'tag' => 'v2.4.0',
         'tag_signed' => true,
@@ -166,6 +170,7 @@ test('releases are the successful deployments with a release, newest first, with
                 'release' => '20260913120000',
                 'directory' => 'releases/20260913-120000',
                 'commit' => '4f3c2b1',
+                'subject' => 'Ship the 2.4 checkout',
                 'author' => 'Ada Lovelace',
                 'tag' => 'v2.4.0',
                 'signed' => true,
@@ -361,11 +366,10 @@ test('a releases page past the end goes to the last page', function () {
         ->assertRedirect(releasesUrl($application, ['page' => 1]));
 });
 
-test('the page links the application and lists the team applications to switch between', function () {
+test('the page links the application, the list of every app and the app search, and no longer sends every app', function () {
     $team = Team::factory()->create();
     $application = releasesApp($team, ['name' => 'Shop']);
-    $blog = releasesApp($team, ['name' => 'Blog']);
-    releasesApp(Team::factory()->create(), ['name' => 'Theirs']);
+    releasesApp($team, ['name' => 'Blog']);
 
     $this->actingAs(releasesMember($team))
         ->get(releasesUrl($application, ['rollback' => '20260912090000']))
@@ -375,13 +379,69 @@ test('the page links the application and lists the team applications to switch b
             ->where('application.href', route('servers.applications.show', [$application->server, $application]))
             ->where('application.deploy_href', route('servers.applications.deploy', [$application->server, $application]))
             ->where('application.rollback_href', route('servers.applications.rollback', [$application->server, $application]))
-            ->where('applications', [
-                ['id' => $blog->id, 'name' => 'Blog', 'server' => 'web-1', 'project' => null, 'tags' => [], 'href' => releasesUrl($blog), 'current' => false],
-                ['id' => $application->id, 'name' => 'Shop', 'server' => 'web-1', 'project' => null, 'tags' => [], 'href' => releasesUrl($application), 'current' => true],
-            ])
+            ->missing('applications')
+            ->missing('scopes')
+            ->where('apps_href', route('releases.apps'))
             ->where('overview_href', route('releases.index'))
             ->where('rollback', '20260912090000')
             ->where('can.deploy', true));
+});
+
+test('the app search lists at most twenty apps in the order of the releases list, and says how many match', function () {
+    $team = Team::factory()->create();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $shop = releasesApp($team, ['name' => 'shop', 'project_id' => $project->id, 'tags' => ['production']]);
+
+    foreach (range(1, 24) as $index) {
+        releasesApp($team, ['name' => sprintf('app-%02d', $index)]);
+    }
+
+    releasesApp(Team::factory()->create(), ['name' => 'shop-theirs']);
+    $member = releasesMember($team);
+
+    $all = $this->actingAs($member)->getJson(route('releases.apps'))->assertOk()->json();
+
+    expect($all['total'])->toBe(25)
+        ->and($all['apps'])->toHaveCount(20)
+        ->and($all['apps'][0])->toBe(['id' => $shop->id, 'name' => 'shop', 'server' => 'web-1', 'project' => 'Storefront', 'href' => releasesUrl($shop)])
+        ->and($all['apps'][1]['name'])->toBe('app-01');
+
+    $found = $this->actingAs($member)->getJson(route('releases.apps', ['q' => 'PRODUCTION']))->json();
+
+    expect($found)->toBe(['apps' => [['id' => $shop->id, 'name' => 'shop', 'server' => 'web-1', 'project' => 'Storefront', 'href' => releasesUrl($shop)]], 'total' => 1]);
+});
+
+test("the app search shows a narrowed member only what is shared, and never another team's apps", function () {
+    $team = Team::factory()->create();
+    $blog = releasesApp($team, ['name' => 'blog']);
+    releasesApp($team, ['name' => 'shop']);
+    releasesApp(Team::factory()->create(), ['name' => 'blog-theirs']);
+    $narrowed = releasesMember($team, TeamRole::Admin);
+    $team->members()->updateExistingPivot($narrowed->id, ['sees_everything' => false]);
+    app(TeamAccess::class)->grant($team, $narrowed, $blog);
+
+    expect($this->actingAs($narrowed->fresh())->getJson(route('releases.apps', ['q' => 'b']))->json('apps.*.name'))->toBe(['blog']);
+});
+
+test('an app running an older release says so on the releases list, and one whose newest live release failed does not', function () {
+    $team = Team::factory()->create();
+    $back = releasesApp($team, ['name' => 'back', 'current_release' => '20260912090000']);
+    $backLive = releasesShipped($back, '20260912090000', hoursAgo: 29);
+    releasesShipped($back, '20260913120000', hoursAgo: 2);
+    releasesRollback($back, 'application_rolled_back', minutesAgo: 30);
+    $failed = releasesApp($team, ['name' => 'failed', 'current_release' => '20260913130000']);
+    releasesShipped($failed, '20260912090000', hoursAgo: 29);
+    $failedLive = releasesWentLive($failed, '20260913130000', minutesAgo: 60);
+    $steady = releasesApp($team, ['name' => 'steady', 'current_release' => '20260913120000']);
+    $steadyLive = releasesShipped($steady, '20260913120000', hoursAgo: 2);
+
+    $this->actingAs(releasesMember($team))
+        ->get(route('releases.index'))
+        ->assertInertia(fn($page) => $page->where('groups', [['name' => null, 'apps' => [
+            releasesRow($back, $backLive, rolledBack: true),
+            releasesRow($failed, $failedLive),
+            releasesRow($steady, $steadyLive),
+        ]]]));
 });
 
 test('another team cannot see an applications releases', function () {
@@ -407,4 +467,5 @@ test('the releases pages require authentication', function () {
 
     $this->get(route('releases.index'))->assertRedirect(route('login'));
     $this->get(releasesUrl($application))->assertRedirect(route('login'));
+    $this->get(route('releases.apps'))->assertRedirect(route('login'));
 });

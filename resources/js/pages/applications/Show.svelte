@@ -14,8 +14,6 @@
     import ProcessesCard from '@/components/applications/ProcessesCard.svelte'
     import RuntimeCard from '@/components/applications/RuntimeCard.svelte'
     import SectionIndex from '@/components/applications/SectionIndex.svelte'
-    import SetupCard from '@/components/applications/SetupCard.svelte'
-    import type { AppSetup } from '@/components/applications/SetupCard.svelte'
     import type { DeployScript } from '@/components/applications/DeployScriptCard.svelte'
     import PhpLimitsCard from '@/components/applications/PhpLimitsCard.svelte'
     import type { PhpLimits } from '@/components/applications/PhpLimitsCard.svelte'
@@ -23,18 +21,21 @@
     import RepositoryCheckBanner from '@/components/applications/RepositoryCheckBanner.svelte'
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
+    import CardFact from '@/components/CardFact.svelte'
+    import CardFacts from '@/components/CardFacts.svelte'
     import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import SectionCard, { bandX } from '@/components/SectionCard.svelte'
     import TagEditor from '@/components/projects/TagEditor.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
-    import { Button, buttonVariants } from '@/components/ui/button'
+    import { Button } from '@/components/ui/button'
     import * as Collapsible from '@/components/ui/collapsible'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { Textarea } from '@/components/ui/textarea'
-    import type { PageSection, ProcessRow, RecentDeploy, RuntimeRow } from '@/lib/app-page'
+    import type { AppSetup, PageSection, ProcessRow, RecentDeploy, RuntimeRow } from '@/lib/app-page'
     import type { CronCard, CronSend } from '@/lib/cron'
     import type { ExpectedDatabase } from '@/lib/databases'
     import type { DnsRecord, DnsTarget } from '@/lib/dns'
@@ -218,8 +219,6 @@
 
     const certificateTones = { valid: 'success', expiring: 'warning', expired: 'destructive', none: 'warning' } as const
 
-    const cardAction = cn(buttonVariants({ variant: 'link' }), 'min-h-6 max-sm:min-h-11')
-
     let busy = $state<Record<string, boolean>>({})
     let dialog = $state<'env' | 'domain' | 'remove' | 'runtime' | 'rename' | null>(null)
     let envText = $state('')
@@ -362,16 +361,6 @@
             { on },
             { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) }
         )
-    }
-
-    function releaseDetail(release: Release): string {
-        const where = [release.branch && `on ${release.branch}`, release.author && `by ${release.author}`]
-            .filter(Boolean)
-            .join(' ')
-        const when = release.when ? `${release.commit || where ? ', ' : ''}${release.when}` : ''
-        const text = `${where && release.commit ? ' ' : ''}${where}${when}`
-
-        return release.commit ? text : text.charAt(0).toUpperCase() + text.slice(1)
     }
 
     function deploy() {
@@ -852,56 +841,56 @@
 <SectionIndex {sections} />
 
 <div class="@container flex flex-col gap-6 max-sm:gap-3">
-    <section
-        id="overview"
-        aria-labelledby="app-overview"
-        class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"
-    >
+    <section id="overview" aria-labelledby="app-overview" class="flex flex-col gap-4 max-sm:gap-3">
         <h2 id="app-overview" class="sr-only">Overview</h2>
-        <div
-            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-            data-testid="release-card"
+        {#snippet releaseActions()}
+            <Button href={application.releases_href} variant="ghost" size="sm">All releases</Button>
+            {#if application.rollback_href}
+                <Button href={application.rollback_href} variant="outline" size="sm">Roll back</Button>
+            {/if}
+        {/snippet}
+        <SectionCard
+            title="Current release"
+            description={application.release
+                ? (application.release.message ?? undefined)
+                : 'Nothing is live yet. Deploy to create the first release.'}
+            actions={releaseActions}
+            testid="release-card"
         >
-            <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Current release</h3>
             {#if application.release}
                 {@const release = application.release}
-                <p class="m-0 font-mono text-[13px] max-sm:text-[12px]">{release.id}</p>
-                {#if release.message}
-                    <p class="m-0 mt-1.5 text-[13.5px] wrap-anywhere max-sm:text-[12.5px]">{release.message}</p>
-                {/if}
-                {#if release.commit || release.branch || release.author || release.when}
-                    <p
-                        class="m-0 mt-1 text-[12.5px] wrap-anywhere text-muted-foreground max-sm:text-[11.5px]"
-                        title={release.full ?? undefined}
-                        data-testid="release-detail"
-                    >
-                        {#if release.commit}<span class="font-mono text-[12px] max-sm:text-[11px]"
-                                >{release.commit}</span
-                            >{/if}{releaseDetail(release)}
-                    </p>
-                {/if}
-            {:else}
-                <p class="m-0 text-[12.5px] text-muted-foreground">
-                    Nothing is live yet. Deploy to create the first release.
-                </p>
+                <CardFacts testid="release-facts">
+                    <CardFact label="Release" mono>{release.id}</CardFact>
+                    {#if release.commit}
+                        <CardFact label="Commit" mono
+                            >{release.commit}{#if release.branch}<span class="font-sans text-muted-foreground"
+                                    >&nbsp;on&nbsp;</span
+                                >{release.branch}{/if}</CardFact
+                        >
+                    {:else if release.branch}
+                        <CardFact label="Branch" mono>{release.branch}</CardFact>
+                    {/if}
+                    {#if release.author}
+                        <CardFact label="Shipped by">{release.author}</CardFact>
+                    {/if}
+                    {#if release.when}
+                        <CardFact label="Went live" title={release.full ?? undefined}>{release.when}</CardFact>
+                    {/if}
+                </CardFacts>
             {/if}
-            <div class="flex flex-wrap gap-x-5 gap-y-2 pt-3">
-                <Link href={application.releases_href} class={cardAction}>All releases</Link>
-                {#if application.rollback_href}
-                    <Link href={application.rollback_href} class={cardAction}>Roll back</Link>
-                {/if}
-            </div>
             {#if recent_deploys.length > 0}
-                <div class="mt-4 border-t border-border pt-3" data-testid="recent-deploys">
-                    <h4 class="m-0 mb-1.5 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">
+                <div data-testid="recent-deploys">
+                    <h4
+                        class="m-0 border-t border-border px-5.5 py-2 text-[12px] font-medium text-muted-foreground max-sm:px-4"
+                    >
                         Recent deploys
                     </h4>
-                    <ul class="m-0 flex list-none flex-col p-0">
+                    <ul class="m-0 list-none p-0">
                         {#each recent_deploys as deploy (deploy.id)}
-                            <li>
+                            <li class="border-t border-border">
                                 <Link
                                     href={deploy.href}
-                                    class="focus-ring -mx-2 grid min-h-9 grid-cols-[0.5rem_minmax(0,1fr)_6.5rem_3.5rem] items-center gap-3 rounded-md px-2 text-[13px] text-foreground no-underline transition-colors duration-(--dur-fast) hover:bg-muted max-sm:min-h-11 max-sm:grid-cols-[0.5rem_minmax(0,1fr)_auto]"
+                                    class="focus-ring-inset grid min-h-10 grid-cols-[0.5rem_minmax(0,1fr)_6.5rem_3.5rem] items-center gap-3 px-5.5 text-[13px] text-foreground no-underline transition-colors duration-(--dur-fast) hover:bg-muted max-sm:min-h-11 max-sm:grid-cols-[0.5rem_minmax(0,1fr)_auto] max-sm:px-4"
                                 >
                                     <span
                                         class="size-2 rounded-full {deployDots[deploy.state.tone] ??
@@ -927,11 +916,11 @@
                     </ul>
                 </div>
             {/if}
-        </div>
+        </SectionCard>
         <HealthCard uptime={application.uptime} {processes} domain={application.domain} />
     </section>
 
-    <section id="processes" aria-labelledby="processes-title">
+    <section id="processes" aria-labelledby="processes-title" class="flex flex-col gap-4 max-sm:gap-3">
         <ProcessesCard
             {processes}
             {toggles}
@@ -944,46 +933,46 @@
             app={application.name}
             server={server.name}
         />
-    </section>
 
-    <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="live-log-card">
-        <div class="mb-2.5 flex items-center justify-between gap-3">
-            <h3 class="type-h3 m-0">Live log</h3>
-            <div class="flex items-center gap-3">
-                {#if !log.loading && !log.error}
-                    <span class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <span class="status-dot-pulse size-1.75 rounded-full bg-success" aria-hidden="true"
-                        ></span>Following
-                    </span>
-                {/if}
-                {#if can.viewLogs}
-                    <Link
-                        href={application.logs_href}
-                        class="focus-ring rounded-sm text-[13px] font-medium text-primary underline-offset-2 hover:underline"
-                        data-testid="open-logs">Open logs</Link
-                    >
-                {/if}
-            </div>
-        </div>
-        <div
-            class="terminal h-49 px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
-            data-testid="live-log"
-            role="log"
-            aria-live="polite"
-        >
-            {#if log.loading}
-                <div class="opacity-60">reading the access log…</div>
-            {:else if log.error}
-                <div class="opacity-70">{log.error}</div>
-            {:else if log.lines.length === 0}
-                <div class="opacity-60">No requests in the recent access log.</div>
-            {:else}
-                {#each log.lines as line, index (index)}
-                    <div class="truncate">{line.time} {line.text}</div>
-                {/each}
+        {#snippet following()}
+            {#if !log.loading && !log.error}
+                <span class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                    <span class="status-dot-pulse size-1.75 rounded-full bg-success" aria-hidden="true"></span>Following
+                </span>
             {/if}
-        </div>
-    </div>
+        {/snippet}
+        {#snippet openLogs()}
+            <Button href={application.logs_href} variant="outline" size="sm" data-testid="open-logs">Open logs</Button>
+        {/snippet}
+        <SectionCard
+            title="Live log"
+            badge={following}
+            actions={can.viewLogs ? openLogs : undefined}
+            class="max-sm:hidden"
+            testid="live-log-card"
+        >
+            <div class="border-t border-border px-5.5 py-4">
+                <div
+                    class="terminal h-49 px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
+                    data-testid="live-log"
+                    role="log"
+                    aria-live="polite"
+                >
+                    {#if log.loading}
+                        <div class="opacity-60">reading the access log…</div>
+                    {:else if log.error}
+                        <div class="opacity-70">{log.error}</div>
+                    {:else if log.lines.length === 0}
+                        <div class="opacity-60">No requests in the recent access log.</div>
+                    {:else}
+                        {#each log.lines as line, index (index)}
+                            <div class="truncate">{line.time} {line.text}</div>
+                        {/each}
+                    {/if}
+                </div>
+            </div>
+        </SectionCard>
+    </section>
 
     {#if runtimes.length > 0 || php}
         <section id="runtime" aria-labelledby="runtime-title" class="flex flex-col gap-4 max-sm:gap-3">
@@ -1011,17 +1000,29 @@
         </section>
     {/if}
 
-    <section id="domains" aria-labelledby="app-domains" class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-2">
+    <section id="domains" aria-labelledby="app-domains" class="flex flex-col gap-4 max-sm:gap-3">
         <h2 id="app-domains" class="sr-only">Domains</h2>
-        <div
-            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-            data-testid="domains-card"
+        {#snippet domainsDescription()}
+            Certificates renew themselves. <span data-testid="domain-reach-summary">{reachSummary}</span>
+        {/snippet}
+        {#snippet domainActions()}
+            {#if domains.length > 0}
+                <Button variant="ghost" size="sm" disabled={checkingReach} onclick={checkReach}
+                    >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
+                >
+            {/if}
+            <Button variant="outline" size="sm" onclick={openDomain}>Add domain</Button>
+        {/snippet}
+        <SectionCard
+            title="Domains"
+            description={domains.length > 0 ? domainsDescription : undefined}
+            actions={can.update ? domainActions : undefined}
+            testid="domains-card"
         >
-            <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Domains</h3>
             {#each domains as domain, index (domain)}
                 {@const certificate = application.certificates?.domains[domain]}
                 <div
-                    class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px] max-sm:min-h-11"
+                    class="flex min-h-10 items-center gap-2.5 border-t border-border px-5.5 text-[13px] max-sm:min-h-11 max-sm:px-4"
                     data-testid="domain-row"
                 >
                     <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={domain}>{domain}</span>
@@ -1033,14 +1034,14 @@
                     <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
                 </div>
             {:else}
-                <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+                <p class="m-0 border-t border-border px-5.5 py-3.5 text-[12.5px] text-muted-foreground max-sm:px-4">
                     No domain yet. Add one and its certificate is requested for you.
                 </p>
             {/each}
             {#each application.redirects as redirect (redirect.domain)}
                 {@const certificate = application.certificates?.domains[redirect.domain]}
                 <div
-                    class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px] max-sm:min-h-11"
+                    class="flex min-h-10 items-center gap-2.5 border-t border-border px-5.5 text-[13px] max-sm:min-h-11 max-sm:px-4"
                     data-testid="domain-redirect-row"
                 >
                     <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={redirect.domain}
@@ -1056,36 +1057,38 @@
                     >
                 </div>
             {/each}
-            {#if domains.length > 0}
-                <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
-                <p class="m-0 mt-1 text-[12px] text-muted-foreground" data-testid="domain-reach-summary">
-                    {reachSummary}
-                </p>
-            {/if}
-            {#if can.update}
-                <div class="mt-auto flex flex-wrap gap-x-5 gap-y-2 pt-3">
-                    <Button variant="link" class="min-h-6 max-sm:min-h-11" onclick={openDomain}>Add domain</Button>
-                    {#if domains.length > 0}
-                        <Button
-                            variant="link"
-                            class="min-h-6 max-sm:min-h-11"
-                            disabled={checkingReach}
-                            onclick={checkReach}
-                            >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
-                        >
-                    {/if}
+            {#if advice.length > 0}
+                <div class="border-t border-border px-5.5 py-4 max-sm:hidden" data-testid="domain-reach">
+                    <h4 class="m-0 mb-2 text-[13.5px] font-semibold">Reaching your domains</h4>
+                    <div class="flex flex-col gap-4">
+                        {#each advice as reading (reading.domain)}
+                            <div
+                                class="grid min-w-0 gap-x-8 gap-y-2 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]"
+                                data-testid="domain-advice"
+                            >
+                                <div class="flex min-w-0 flex-col gap-1.5">
+                                    {#each reading.problems as line (line)}
+                                        <p class="m-0 max-w-[75ch] text-[12.5px] text-warning-strong">{line}</p>
+                                    {/each}
+                                    {#each reading.notes as line (line)}
+                                        <p class="m-0 max-w-[75ch] text-[12.5px] text-muted-foreground">{line}</p>
+                                    {/each}
+                                </div>
+                                {#if reading.records.length > 0}
+                                    <DnsRecords records={reading.records} testid="domain-records" />
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
                 </div>
             {/if}
-        </div>
+        </SectionCard>
 
-        <div
-            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-            data-testid="visitors-card"
+        <SectionCard
+            title="Other ways in"
+            description="A holding page while you work, and addresses that skip the domain."
+            testid="visitors-card"
         >
-            <h3 class="type-h3 m-0 mb-1 max-sm:text-[15px]">Other ways in</h3>
-            <p class="m-0 mb-1 text-[12.5px] text-muted-foreground">
-                A holding page while you work, and addresses that skip the domain.
-            </p>
             {#if maintenanceToggle}
                 {@const toggle = maintenanceToggle}
                 <ToggleRow
@@ -1096,6 +1099,7 @@
                     busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
                     disabled={!can.update || toggle.disabled}
                     onchange={(on) => flip(toggle, on)}
+                    class={bandX}
                     testid="toggle-{toggle.key}"
                 />
             {/if}
@@ -1109,6 +1113,7 @@
                 busy={addressBusy === 'tailnet'}
                 disabled={!can.update}
                 onchange={(on) => setAddress('tailnet', on)}
+                class={bandX}
                 testid="toggle-tailnet"
             />
             <ToggleRow
@@ -1120,140 +1125,120 @@
                 busy={addressBusy === 'preview'}
                 disabled={!can.update}
                 onchange={(on) => setAddress('preview', on)}
+                class={bandX}
                 testid="toggle-preview"
             />
-        </div>
-
-        {#if advice.length > 0}
-            <div
-                class="min-w-0 rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden @3xl:col-span-2"
-                data-testid="domain-reach"
-            >
-                <h3 class="type-h3 m-0 mb-1.5">Reaching your domains</h3>
-                <div class="flex flex-col gap-4">
-                    {#each advice as reading (reading.domain)}
-                        <div
-                            class="grid min-w-0 gap-x-8 gap-y-2 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]"
-                            data-testid="domain-advice"
-                        >
-                            <div class="flex min-w-0 flex-col gap-1.5">
-                                {#each reading.problems as line (line)}
-                                    <p class="m-0 max-w-[75ch] text-[12.5px] text-warning-strong">{line}</p>
-                                {/each}
-                                {#each reading.notes as line (line)}
-                                    <p class="m-0 max-w-[75ch] text-[12.5px] text-muted-foreground">{line}</p>
-                                {/each}
-                            </div>
-                            {#if reading.records.length > 0}
-                                <DnsRecords records={reading.records} testid="domain-records" />
-                            {/if}
-                        </div>
-                    {/each}
-                </div>
-            </div>
-        {/if}
+        </SectionCard>
     </section>
 
-    <section id="deploys" aria-labelledby="app-deploys" class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-2">
+    <section id="deploys" aria-labelledby="app-deploys" class="flex flex-col gap-4 max-sm:gap-3">
         <h2 id="app-deploys" class="sr-only">Deploys</h2>
-        <div
-            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-            data-testid="source-card"
+        {#snippet editSetup()}
+            <Button href={setup.href ?? undefined} variant="outline" size="sm">Edit setup</Button>
+        {/snippet}
+        <SectionCard
+            title="Setup"
+            description="What Coresmith deploys and how. Changes apply on the next deploy."
+            actions={setup.href ? editSetup : undefined}
+            testid="setup-card"
         >
-            <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Source</h3>
-            {#if application.repository}
-                <p class="m-0 font-mono text-[13px] break-all">{application.repository}</p>
-                <p class="m-0 mt-1.5 text-[13.5px]">
-                    Branch <span class="font-mono text-[12.5px]">{application.branch}</span>
-                </p>
-            {:else}
-                <p class="m-0 text-[13.5px]">No repository is set.</p>
-            {/if}
-            {#if sourceAccess}
-                <p class="m-0 mt-1.5 text-[12.5px] text-muted-foreground">{sourceAccess}</p>
-            {/if}
-            {#if application.deploy_key}
-                <p
-                    class="m-0 mt-1.5 font-mono text-[12px] break-all text-muted-foreground"
-                    title={application.deploy_key.fingerprint ?? undefined}
-                >
-                    {application.deploy_key.short}
-                </p>
-                <div class="pt-3">
-                    <Button variant="link" class="min-h-6 max-sm:min-h-11" onclick={copyKey}
-                        >{copied ? 'Copied' : 'Copy public key'}</Button
+            <CardFacts>
+                {#each setup.rows as row (row.label)}
+                    <CardFact label={row.label} mono={row.label !== 'Size'} wide={row.label === 'Repository'}
+                        >{row.value === '' ? 'Not set' : row.value}</CardFact
                     >
+                {/each}
+            </CardFacts>
+            {#if sourceAccess}
+                <div
+                    class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-5.5 py-3 max-sm:px-4"
+                    data-testid="source-access"
+                >
+                    <div class="min-w-0 flex-1 basis-72">
+                        <p class="m-0 text-[14px] font-medium max-sm:text-[13.5px]">Repository access</p>
+                        <p class="m-0 mt-0.5 text-[12.5px] text-muted-foreground">{sourceAccess}</p>
+                        {#if application.deploy_key?.short}
+                            <p
+                                class="m-0 mt-1 font-mono text-[12px] break-all text-muted-foreground"
+                                title={application.deploy_key.fingerprint ?? undefined}
+                            >
+                                {application.deploy_key.short}
+                            </p>
+                        {/if}
+                    </div>
+                    {#if application.deploy_key}
+                        <Button variant="outline" size="sm" class="max-sm:min-h-11 max-sm:w-full" onclick={copyKey}
+                            >{copied ? 'Copied' : 'Copy public key'}</Button
+                        >
+                    {/if}
                 </div>
             {/if}
             {#if autoDeployToggle}
                 {@const toggle = autoDeployToggle}
-                <div class="mt-auto pt-2">
-                    <ToggleRow
-                        label={toggle.label}
-                        description={toggle.description}
-                        checked={toggle.on}
-                        busy={busy[toggle.key]}
-                        busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
-                        disabled={!can.update || toggle.disabled}
-                        onchange={(on) => flip(toggle, on)}
-                        testid="toggle-{toggle.key}"
-                    />
-                </div>
+                <ToggleRow
+                    label={toggle.label}
+                    description={toggle.description}
+                    checked={toggle.on}
+                    busy={busy[toggle.key]}
+                    busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
+                    disabled={!can.update || toggle.disabled}
+                    onchange={(on) => flip(toggle, on)}
+                    class={bandX}
+                    testid="toggle-{toggle.key}"
+                />
             {/if}
-        </div>
+        </SectionCard>
 
-        <SetupCard {setup} />
-
-        <DeployScriptCard class="@3xl:col-span-2" script={deploy_script} name={application.name} />
+        <DeployScriptCard script={deploy_script} name={application.name} />
     </section>
 
     <section id="environment" aria-labelledby="app-environment" class="max-sm:hidden">
-        <h2 id="app-environment" class="sr-only">Environment</h2>
-        <div
-            class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5"
-            data-testid="environment-card"
-        >
-            <h3 class="type-h3 m-0 mb-1 max-sm:text-[15px]">Environment</h3>
-            <p class="mb-3 text-[12.5px] text-muted-foreground">
-                Kept out of the app's reach and handed to it at start. The app can't read its own env file.
+        {#snippet editVariables()}
+            <Button variant="outline" size="sm" onclick={openEnv}>Edit variables</Button>
+        {/snippet}
+        {#snippet connected()}
+            <p class="m-0" data-testid="connected-databases">
+                Connected to {#each application.databases as database, index (database.href)}{index === 0
+                        ? ''
+                        : index === application.databases.length - 1
+                          ? ' and '
+                          : ', '}<Link
+                        href={database.href}
+                        class="focus-ring rounded-sm font-mono text-primary-strong underline-offset-4 hover:underline"
+                        >{database.name}</Link
+                    >{database.status === 'creating'
+                        ? ' (being created)'
+                        : database.status === 'failed'
+                          ? ' (not created)'
+                          : ''}{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings
+                here when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
             </p>
-            {#if application.environment.length > 0}
-                <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
-                    {#each application.environment as line (line.key)}
-                        <div class="truncate">
-                            {line.key}={line.value}{#if line.empty}<span class="text-warning-strong"
-                                    >&nbsp;· not set</span
-                                >{:else if line.secret}<span>&nbsp;· redacted in logs</span>{/if}
-                        </div>
-                    {/each}
-                </div>
-            {:else}
-                <p class="text-[12.5px] text-muted-foreground">No variables yet.</p>
-            {/if}
-            {#if application.databases.length > 0}
-                <p class="mt-3 text-[12.5px] text-muted-foreground" data-testid="connected-databases">
-                    Connected to {#each application.databases as database, index (database.href)}{index === 0
-                            ? ''
-                            : index === application.databases.length - 1
-                              ? ' and '
-                              : ', '}<Link
-                            href={database.href}
-                            class="focus-ring rounded-sm font-mono text-primary-strong underline-offset-4 hover:underline"
-                            >{database.name}</Link
-                        >{database.status === 'creating'
-                            ? ' (being created)'
-                            : database.status === 'failed'
-                              ? ' (not created)'
-                              : ''}{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings
-                    here when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
-                </p>
-            {/if}
-            {#if can.manageEnvironment}
-                <div class="mt-auto pt-3">
-                    <Button variant="link" class="min-h-6 max-sm:min-h-11" onclick={openEnv}>Edit variables</Button>
-                </div>
-            {/if}
-        </div>
+        {/snippet}
+        <SectionCard
+            title="Environment"
+            titleId="app-environment"
+            level={2}
+            description="Kept out of the app's reach and handed to it at start. The app can't read its own env file."
+            actions={can.manageEnvironment ? editVariables : undefined}
+            footer={application.databases.length > 0 ? connected : undefined}
+            testid="environment-card"
+        >
+            <div class="border-t border-border px-5.5 py-4">
+                {#if application.environment.length > 0}
+                    <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
+                        {#each application.environment as line (line.key)}
+                            <div class="truncate">
+                                {line.key}={line.value}{#if line.empty}<span class="text-warning-strong"
+                                        >&nbsp;· not set</span
+                                    >{:else if line.secret}<span>&nbsp;· redacted in logs</span>{/if}
+                            </div>
+                        {/each}
+                    </div>
+                {:else}
+                    <p class="m-0 text-[12.5px] text-muted-foreground">No variables yet.</p>
+                {/if}
+            </div>
+        </SectionCard>
     </section>
 
     <section id="schedule" aria-labelledby="app-schedule" class="max-sm:hidden">
@@ -1269,33 +1254,28 @@
     </section>
 
     {#if can.update || can.delete}
-        <section
-            id="danger"
-            aria-labelledby="app-danger"
-            class="border-danger flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border bg-card px-5.5 py-4.5 max-sm:p-4"
-        >
-            <div class="min-w-0 flex-1 basis-80">
-                <h2 id="app-danger" class="type-h3 m-0 mb-1 max-sm:text-[15px]">Danger zone</h2>
-                <p class="m-0 text-[12.5px] text-muted-foreground">
-                    Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops
-                    the app and detaches it from this server. Its releases stay on disk for 7 days.
-                </p>
-            </div>
-            <div class="flex flex-wrap gap-2 max-sm:w-full">
+        <section id="danger" aria-labelledby="app-danger">
+            {#snippet dangerActions()}
                 {#if can.update && !application.stopped}
-                    <Button variant="outline" size="sm" class="max-sm:min-h-11 max-sm:flex-1" onclick={power}
-                        >Stop the app</Button
-                    >
+                    <Button variant="outline" size="sm" onclick={power}>Stop the app</Button>
                 {/if}
                 {#if can.delete}
                     <Button
                         variant="outline"
                         size="sm"
-                        class="text-destructive-strong max-sm:min-h-11 max-sm:flex-1"
+                        class="text-destructive-strong"
                         onclick={() => (dialog = 'remove')}>Remove this app</Button
                     >
                 {/if}
-            </div>
+            {/snippet}
+            <SectionCard
+                title="Danger zone"
+                titleId="app-danger"
+                level={2}
+                danger
+                description="Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops the app and detaches it from this server. Its releases stay on disk for 7 days."
+                actions={dangerActions}
+            />
         </section>
     {/if}
 </div>

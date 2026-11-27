@@ -158,11 +158,19 @@ test.describe('an application', () => {
         const release = page.getByTestId('release-card')
 
         await expect(release.getByRole('heading', { name: 'Current release' })).toBeVisible()
-        await expect(release).toContainText(/\d{8}-\d{6}/)
         await expect(release).toContainText('Ship v2.14.0')
-        await expect(release.getByTestId('release-detail')).toHaveText(
-            /^9f3c2e1 on main by Maya Lindqvist, (today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
-        )
+        await expect(release.getByTestId('release-facts').locator('dt')).toHaveText([
+            'Release',
+            'Commit',
+            'Shipped by',
+            'Went live'
+        ])
+        await expect(release.getByTestId('release-facts').locator('dd')).toHaveText([
+            /^\d{8}-\d{6}$/,
+            '9f3c2e1 on main',
+            'Maya Lindqvist',
+            /^(today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
+        ])
     })
 
     test('roll back opens the releases page ready to confirm the previous release', async ({ page }) => {
@@ -197,7 +205,7 @@ test.describe('an application', () => {
     test('a public https repository is cloned without a deploy key', async ({ page }, testInfo) => {
         await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
 
-        await expect(page.getByTestId('source-card')).toContainText(
+        await expect(page.getByTestId('source-access')).toContainText(
             'Cloned over HTTPS without a key, so the repository has to be public.'
         )
         await expect(page.getByRole('button', { name: 'Copy public key' })).toHaveCount(0)
@@ -302,13 +310,17 @@ test.describe('an application', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'atlas_production', exact: true })).toBeVisible()
     })
 
-    test('on a phone the app page leads with deploy and the current release, then its processes', async ({ page }, testInfo) => {
+    test('on a phone the app page leads with deploy and the current release, then its processes', async ({
+        page
+    }, testInfo) => {
         test.skip(!isMobile(testInfo), 'The compact app page only renders below 640px')
 
         await gotoApplication(page, 'forge-01', 'atlas')
 
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
-        await expect(page.getByTestId('section-index').getByRole('link', { name: 'Processes', exact: true })).toBeVisible()
+        await expect(
+            page.getByTestId('section-index').getByRole('link', { name: 'Processes', exact: true })
+        ).toBeVisible()
         await expect(page.getByRole('heading', { name: 'Current release' })).toBeVisible()
 
         const release = await page.getByTestId('release-card').boundingBox()
@@ -324,7 +336,7 @@ test.describe('an application', () => {
             'Danger zone'
         ])
 
-        for (const card of ['domains-card', 'source-card']) {
+        for (const card of ['domains-card', 'setup-card']) {
             await expect(page.getByTestId(card)).toBeVisible()
         }
 
@@ -413,7 +425,7 @@ test.describe('what the full app page adds on a wider screen', () => {
     test('a repository cloned over ssh shows its read-only deploy key', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        const source = page.getByTestId('source-card')
+        const source = page.getByTestId('setup-card')
 
         await expect(source).toContainText("Cloned with this app's deploy key, Ed25519 and read-only.")
         await expect(source).toContainText('monoventech/atlas')
@@ -429,13 +441,13 @@ test.describe('what the full app page adds on a wider screen', () => {
     test('an app picked from GitHub shows how it clones', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'linked-app')
 
-        const source = page.getByTestId('source-card')
+        const source = page.getByTestId('setup-card')
 
         await expect(source).toContainText(
             'Cloned through the GitHub App with a one-hour, read-only token for this repository. Nothing long-lived is stored on the server.'
         )
         await expect(source).toContainText('monoventech/relay')
-        await expect(source).toContainText('Branch trunk')
+        await expect(source).toContainText(/Branch\s*trunk/)
         await expect(page.getByRole('button', { name: 'Copy public key' })).toHaveCount(0)
         await expect(page.getByTestId('github-banner')).toHaveCount(0)
     })
@@ -529,10 +541,13 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · atlas' })).toBeVisible()
     })
 
-    test('the overview pairs the release with its health, and the sections follow the index in order', async ({
+    test('every card takes the full width in one column, and the sections follow the index in order', async ({
         page
     }, testInfo) => {
-        test.skip(isMobile(testInfo), 'Below 640px every card stacks in one column')
+        test.skip(
+            isMobile(testInfo),
+            'Phones leave Environment and Schedule out of the index, as the phone prototype does'
+        )
 
         await gotoApplication(page, 'forge-01', 'atlas')
 
@@ -543,17 +558,31 @@ test.describe('what the full app page adds on a wider screen', () => {
 
             return found ?? { x: 0, y: 0, width: 0, height: 0 }
         }
-        const [release, health, processes, domains, visitors, source] = await Promise.all(
-            ['release-card', 'health-card', 'processes-card', 'domains-card', 'visitors-card', 'source-card'].map(box)
+        const cards = await Promise.all(
+            [
+                'release-card',
+                'health-card',
+                'processes-card',
+                'live-log-card',
+                'runtime-card',
+                'domains-card',
+                'visitors-card',
+                'setup-card',
+                'deploy-script',
+                'environment-card',
+                'cron-jobs'
+            ].map(box)
         )
+        const [first] = cards
 
-        expect(health.y).toBeCloseTo(release.y, 0)
-        expect(health.height).toBeCloseTo(release.height, 0)
-        expect(health.x).toBeGreaterThan(release.x + release.width)
-        expect(processes.y).toBeGreaterThan(release.y + release.height)
-        expect(visitors.y).toBeCloseTo(domains.y, 0)
-        expect(visitors.height).toBeCloseTo(domains.height, 0)
-        expect(source.y).toBeGreaterThan(domains.y + domains.height)
+        for (const [at, card] of cards.entries()) {
+            expect(Math.abs(card.x - first.x), `card ${at}`).toBeLessThan(1)
+            expect(Math.abs(card.width - first.width), `card ${at}`).toBeLessThan(1)
+
+            if (at > 0) {
+                expect(card.y, `card ${at}`).toBeGreaterThan(cards[at - 1].y + cards[at - 1].height)
+            }
+        }
 
         const index = page.getByTestId('section-index')
 
@@ -573,13 +602,17 @@ test.describe('what the full app page adds on a wider screen', () => {
             'location'
         )
 
-        const pinned = await index.boundingBox()
-        const main = await page.getByTestId('panel-main').boundingBox()
+        await expect
+            .poll(async () => {
+                const pinned = await index.boundingBox()
+                const main = await page.getByTestId('panel-main').boundingBox()
 
-        expect(Math.abs((pinned?.y ?? 0) - (main?.y ?? 0))).toBeLessThan(2)
+                return Math.abs((pinned?.y ?? 0) - (main?.y ?? 0))
+            })
+            .toBeLessThan(2)
     })
 
-    test("long advice for several domains sits under the row at full width, and each card's links follow its content", async ({
+    test('long advice for several domains runs the full width of the Domains card, under its rows', async ({
         page
     }) => {
         const domains = ['atlas.monoven.io', 'www.atlas.monoven.io', 'shop.atlas.monoven.io']
@@ -606,36 +639,46 @@ test.describe('what the full app page adds on a wider screen', () => {
         })
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        const box = async (id: string) => {
-            const found = await page.getByTestId(id).boundingBox()
+        const card = page.getByTestId('domains-card')
+        const rows = card.getByTestId('domain-row')
 
-            expect(found, id).not.toBeNull()
+        await expect(rows).toHaveCount(3)
+        await expect(card.getByTestId('domain-advice')).toHaveCount(3)
+        await expect(card.getByTestId('domain-reach').getByTestId('domain-records')).toHaveCount(3)
 
-            return found ?? { x: 0, y: 0, width: 0, height: 0 }
+        const outer = await card.boundingBox()
+        const advice = await card.getByTestId('domain-reach').boundingBox()
+        const last = await rows.last().boundingBox()
+
+        expect(outer).not.toBeNull()
+        expect(advice).not.toBeNull()
+        expect(last).not.toBeNull()
+        expect(Math.abs((advice?.x ?? 0) - (outer?.x ?? 0))).toBeLessThan(2)
+        expect(Math.abs((advice?.width ?? 0) - (outer?.width ?? 0))).toBeLessThan(3)
+        expect(advice?.y ?? 0).toBeGreaterThanOrEqual((last?.y ?? 0) + (last?.height ?? 0) - 1)
+    })
+
+    test("each card's actions sit in its header, beside the title", async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const actions = [
+            ['release-card', page.getByTestId('release-card').getByRole('link', { name: 'All releases' })],
+            ['domains-card', page.getByTestId('domains-card').getByRole('button', { name: 'Add domain' })],
+            ['setup-card', page.getByTestId('setup-card').getByRole('link', { name: 'Edit setup' })],
+            ['deploy-script', page.getByTestId('deploy-script').getByRole('button', { name: 'Edit script' })],
+            ['environment-card', page.getByTestId('environment-card').getByRole('button', { name: 'Edit variables' })],
+            ['cron-jobs', page.getByTestId('cron-jobs').getByRole('button', { name: 'Add cron job' })]
+        ] as const
+
+        for (const [card, action] of actions) {
+            const title = await page.getByTestId(card).getByRole('heading').first().boundingBox()
+            const control = await action.boundingBox()
+
+            expect(title, card).not.toBeNull()
+            expect(control, card).not.toBeNull()
+            expect(Math.abs((control?.y ?? 0) - (title?.y ?? 0)), card).toBeLessThan(8)
+            expect(control?.x ?? 0, card).toBeGreaterThan((title?.x ?? 0) + (title?.width ?? 0))
         }
-        const [release, domainsCard, source, advice] = await Promise.all(
-            ['release-card', 'domains-card', 'source-card', 'domain-reach'].map(box)
-        )
-
-        await expect(page.getByTestId('domain-advice')).toHaveCount(3)
-        await expect(page.getByTestId('domain-reach').getByTestId('domain-records')).toHaveCount(3)
-        await expect(page.getByTestId('domains-card').getByTestId('domain-records')).toHaveCount(0)
-
-        for (const card of [domainsCard, source]) {
-            expect(card.y).toBeCloseTo(release.y, 0)
-            expect(card.height).toBeCloseTo(release.height, 0)
-        }
-
-        expect(advice.y).toBeGreaterThan(release.y + release.height)
-        expect(advice.x).toBeCloseTo(release.x, 0)
-        expect(advice.x + advice.width).toBeCloseTo(source.x + source.width, 0)
-
-        const detail = await page.getByTestId('release-detail').boundingBox()
-        const link = await page.getByTestId('release-card').getByRole('link', { name: 'All releases' }).boundingBox()
-
-        expect(detail).not.toBeNull()
-        expect(link).not.toBeNull()
-        expect((link?.y ?? 0) - ((detail?.y ?? 0) + (detail?.height ?? 0))).toBeLessThan(24)
     })
 
     for (const theme of ['light', 'dark'] as const) {
@@ -1867,10 +1910,10 @@ test.describe('an app whose GitHub connection is gone', () => {
         await expect(banner).toContainText(
             'Public repositories still deploy. Private ones need GitHub connected again.'
         )
-        await expect(page.getByTestId('source-card')).toContainText(
+        await expect(page.getByTestId('source-access')).toContainText(
             'Cloned through GitHub, which needs connecting again.'
         )
-        await expect(page.getByTestId('source-card')).not.toContainText('one-hour, read-only token')
+        await expect(page.getByTestId('source-access')).not.toContainText('one-hour, read-only token')
 
         await banner.getByRole('link', { name: 'Open Git settings' }).click()
 
@@ -1945,10 +1988,11 @@ test.describe('action banners on a phone', () => {
         })
     }
 
-    test('the source card stays off a phone', async ({ page }) => {
+    test("Setup keeps the repository and how it's cloned on a phone", async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'linked-app')
 
-        await expect(page.getByTestId('source-card')).toBeHidden()
+        await expect(page.getByTestId('setup-card')).toContainText('monoventech/relay')
+        await expect(page.getByTestId('source-access')).toBeVisible()
     })
 })
 

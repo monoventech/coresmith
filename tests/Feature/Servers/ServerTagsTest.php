@@ -118,7 +118,7 @@ test('the explorer, Fleet and the palette show a server tags', function () {
             ->where('explorer.servers.0.tags', ['production', 'eu'])
             ->where('servers.0.tags', ['production', 'eu']));
 
-    $open = collect((new CommandPalette($owner, $team))->commands())->firstWhere('label', 'Open web');
+    $open = collect((new CommandPalette($owner, $team))->items())->firstWhere('id', 'server:' . $server->id);
 
     expect($open['hint'] ?? '')->toStartWith('production · eu · ');
 });

@@ -41,7 +41,7 @@ test('the panel carries the current team, the users role in it and setup progres
             ->where('panel.team', ['id' => $team->id, 'name' => 'Monoven', 'slug' => $team->slug, 'role' => 'Deployer'])
             ->where('panel.setup', ['complete' => false, 'current' => 1, 'total' => 4])
             ->where('panel.attention', 0)
-            ->where('panel.can', ['createServer' => false]));
+            ->where('panel.can', ['createServer' => false, 'auditLog' => false]));
 });
 
 test('every team the user belongs to is listed with its role and size', function () {
@@ -110,7 +110,7 @@ test('a user without a team gets an empty panel', function () {
             'viaHost' => false,
             'setup' => null,
             'attention' => 0,
-            'can' => ['createServer' => false],
+            'can' => ['createServer' => false, 'auditLog' => false],
             'live' => ['streaming' => false, 'refresh_seconds' => 60, 'socket' => null],
         ]));
 });
@@ -142,10 +142,10 @@ test('a partial reload asking for the palette receives the users commands and no
     $labels = array_column($response->json('props.palette'), 'label');
 
     expect($response->json('component'))->toBe('Dashboard')
-        ->and($labels)->toContain('Open web-1')
+        ->and($labels)->toContain('web-1')
         ->and($labels)->toContain('Provision a server')
         ->and($labels)->toContain('Switch theme')
-        ->and($labels)->not->toContain('Open theirs')
+        ->and($labels)->not->toContain('theirs')
         ->and($response->json('props'))->not->toHaveKey('panel')
         ->and($response->json('props'))->not->toHaveKey('servers');
 });
@@ -166,5 +166,5 @@ test('a user without a team still gets the global palette commands', function ()
         ->get(route('dashboard'), panelPropsPartialHeaders('palette'))
         ->assertOk();
 
-    expect(array_column($response->json('props.palette'), 'label'))->toBe(['Switch theme', 'Deployments', 'API tokens']);
+    expect(array_column($response->json('props.palette'), 'label'))->toBe(['Switch theme', 'Deployments', 'API tokens', 'Profile', 'Security']);
 });

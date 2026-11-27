@@ -95,6 +95,17 @@ test('a root shell opens with sudo, says who you are and how it ends, and stream
     Event::assertDispatched(TerminalEnded::class, fn(TerminalEnded $event): bool => $event->broadcastWith()['reason'] === 'ended');
 });
 
+test('the greeting wraps between words to the width of the terminal', function () {
+    $session = runTerminalSession(['cols' => 40]);
+
+    runTerminalHandle(new RunTerminal($session), (new FakeSSHTransport)->shellEndsAfterOutput());
+
+    $lines = explode("\r\n", str_replace(["\e[2m", "\e[0m"], '', explode("\r\n\r\n", runTerminalOutput())[0]));
+
+    expect($lines)->each->toMatch('/^.{1,40}$/')
+        ->and(implode(' ', $lines))->toBe("You're root on web-1. A check runs when you finish and names anything Coresmith looks after that changed. This session ends after 10 minutes without typing, or after an hour, so run long jobs in tmux.");
+});
+
 test('Coresmith signed in as root opens a login shell instead of sudo', function () {
     $transport = (new FakeSSHTransport)->shellEndsAfterOutput();
 

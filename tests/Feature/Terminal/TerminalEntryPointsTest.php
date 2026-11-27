@@ -74,11 +74,11 @@ test("an app's page opens a terminal as that app once it has a live release", fu
 test('the command palette opens terminals for people who can open them', function () {
     $server = terminalEntryServer();
     $owner = terminalEntryMember($server->team, TeamRole::Owner);
-    Application::factory()->for($server)->create(['team_id' => $server->team_id, 'name' => 'shop', 'slug' => 'shop', 'current_release' => '20261124-110000']);
-    $labels = fn(User $user): array => array_column((new CommandPalette($user, $server->team))->commands(), 'hint', 'label');
+    $shop = Application::factory()->for($server)->create(['team_id' => $server->team_id, 'name' => 'shop', 'slug' => 'shop', 'current_release' => '20261124-110000']);
+    $rows = fn(User $user): array => collect((new CommandPalette($user, $server->team))->items())->keyBy('id')->all();
 
-    expect($labels($owner))->toHaveKey('Open a terminal on web-1')
-        ->and($labels($owner)['Open a terminal on web-1'])->toBe("as root or an app's user")
-        ->and($labels($owner))->toHaveKey('Open a terminal as shop')
-        ->and(array_filter(array_keys($labels(terminalEntryMember($server->team, TeamRole::Member))), fn(string $label): bool => str_contains($label, 'terminal')))->toBe([]);
+    expect($rows($owner)['server:' . $server->id]['can'])->toMatchArray(['terminal' => true, 'root' => true])
+        ->and($rows($owner)['app:' . $shop->id]['can']['terminal'])->toBeTrue()
+        ->and($rows(terminalEntryMember($server->team, TeamRole::Member))['server:' . $server->id]['can'])->toMatchArray(['terminal' => false, 'root' => false])
+        ->and($rows(terminalEntryMember($server->team, TeamRole::Member))['app:' . $shop->id]['can']['terminal'])->toBeFalse();
 });

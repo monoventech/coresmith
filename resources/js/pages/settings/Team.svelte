@@ -1,6 +1,5 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
-    import AuditLogCard from '@/components/settings/AuditLogCard.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
     import type { Invitation } from '@/components/settings/InvitationsCard.svelte'
@@ -267,8 +266,7 @@
 </div>
 
 {#if can.update}
-    <div class="mt-4 grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
-        <AuditLogCard planNote={billing?.notes.audit_log_export} />
+    <div class="mt-4">
         <OffsiteBackupsCard {offsite} planNote={billing?.notes.offsite_backups} />
     </div>
 {/if}

@@ -108,6 +108,14 @@ test.describe('a terminal session', () => {
         await expect.poll(() => shell.sent.input.join('')).toBe('ls -la\r')
     })
 
+    test('the cursor holds still instead of blinking', async ({ page }, testInfo) => {
+        await openSession(page, testInfo)
+        await page.getByTestId('terminal-shell').click()
+
+        await expect(page.locator('.xterm-cursor-block')).toBeVisible()
+        await expect(page.locator('.xterm-cursor-blink')).toHaveCount(0)
+    })
+
     test('output lost on the way comes back from the saved screen, even when the first read is older', async ({
         page
     }, testInfo) => {
@@ -260,9 +268,10 @@ test.describe('a terminal session', () => {
 })
 
 test.describe('opening a terminal', () => {
-    async function startPanel(page: Page) {
+    async function startPanel(page: Page, change: (props: Record<string, unknown>) => void = () => undefined) {
         await withProps(page, /\/servers\/[\w.-]+\/terminal$/, (props) => {
             props.unavailable = null
+            change(props)
         })
         await gotoServer(page, 'forge-02')
         await page.getByTestId('server-terminal').click()
@@ -274,10 +283,25 @@ test.describe('opening a terminal', () => {
         await startPanel(page)
 
         await expect(page.getByTestId('terminal-mode-root')).toContainText('Full control of the server.')
+        await expect(page.getByLabel('Your password')).toBeVisible()
+        await expect(page.getByTestId('terminal-password-hint')).toHaveText('Asked every time you open a root shell.')
         await page.getByTestId('terminal-mode-app').click()
         await expect(page.getByLabel('App', { exact: true })).toBeVisible()
         await expect(page.getByLabel('Your password')).toBeVisible()
+        await expect(page.getByTestId('terminal-password-hint')).toHaveText('Asked once every 15 minutes.')
         await expect(page.getByTestId('terminal-open')).toBeEnabled()
+    })
+
+    test('with two-factor on, a root shell asks for a code too, and an app shell does not', async ({ page }) => {
+        await startPanel(page, (props) => {
+            props.asks = { root: { password: true, code: true }, app: { password: false, code: false } }
+        })
+
+        await expect(page.getByLabel('Code from your authenticator app')).toBeVisible()
+        await expect(page.getByLabel('Your password')).toBeVisible()
+        await page.getByTestId('terminal-mode-app').click()
+        await expect(page.getByLabel('Code from your authenticator app')).toHaveCount(0)
+        await expect(page.getByLabel('Your password')).toHaveCount(0)
     })
 
     test("a server's own terminal page sends you back to the session you have open there", async ({
@@ -292,7 +316,9 @@ test.describe('opening a terminal', () => {
     for (const theme of ['light', 'dark'] as const) {
         test(`the start panel has no serious or critical accessibility violations in ${theme}`, async ({ page }) => {
             await useTheme(page, theme)
-            await startPanel(page)
+            await startPanel(page, (props) => {
+                ;(props.asks as { root: { code: boolean } }).root.code = true
+            })
 
             expect(await blockingViolations(page)).toEqual([])
         })

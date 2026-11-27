@@ -29,7 +29,8 @@ test("a narrowed admin can't change or export what covers the whole team", funct
         ->and($admin->hasTeamAbility($team, Ability::ManageProviders))->toBeFalse()
         ->and($admin->hasTeamAbility($team, Ability::CreateServer))->toBeTrue();
 
-    $this->actingAs($admin)->get(route('settings.audit-log'))->assertForbidden();
+    $this->actingAs($admin)->get(route('audit-log.export'))->assertForbidden();
+    $this->actingAs($admin)->get(route('audit-log.index'))->assertForbidden();
     $this->actingAs($admin)->put(route('settings.team-url.update'), ['slug' => 'elsewhere'])->assertForbidden();
     $this->actingAs($admin)->put(route('settings.offsite-backups.update'), [
         'region' => 'eu-central-1',
