@@ -87,7 +87,7 @@ test('an owner reads the audit log newest first: when, who, what happened and to
             'full' => 'Nov 27, 2026 at 11:55 UTC',
             'actor' => ['name' => $owner->name, 'email' => $owner->email],
             'subject' => ['kind' => 'Server', 'name' => 'web-1', 'href' => route('servers.show', $server)],
-            'details' => [['key' => 'mode', 'value' => 'root'], ['key' => 'app', 'value' => '']],
+            'details' => [['key' => 'app', 'value' => ''], ['key' => 'mode', 'value' => 'root']],
         ])
         ->and($events[2]['subject'])->toBe(['kind' => 'App', 'name' => 'shop', 'href' => route('servers.applications.show', [$server, $application])])
         ->and($events[3]['actor'])->toBe(['name' => 'Coresmith', 'email' => null]);

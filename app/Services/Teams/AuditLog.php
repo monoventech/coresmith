@@ -250,6 +250,7 @@ final class AuditLog
     private function present(Activity $activity, string $type, User $viewer): array
     {
         $properties = $activity->properties?->all() ?? [];
+        ksort($properties, SORT_STRING);
 
         return [
             'id' => (int) $activity->getKey(),
